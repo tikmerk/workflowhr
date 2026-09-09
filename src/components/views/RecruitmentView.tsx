@@ -54,6 +54,8 @@ import {
   RECRUITMENT_METADATA_FIELDS,
   RecruitmentMetadataField,
   generateGoogleFormsQuestionsText,
+  autoDetectColumnMapping,
+  mapRowWithCustomMapping,
 } from "../../utils/recruitmentScreeningEngine";
 
 interface RecruitmentViewProps {
@@ -62,6 +64,7 @@ interface RecruitmentViewProps {
   branches: Branch[];
   departments: Department[];
   onAddJob: (job: JobPosting) => void;
+  onDeleteJob?: (jobId: string) => void;
   onUpdateCandidateStage: (candidateId: string, stage: Candidate["stage"]) => void;
   onAddCandidates?: (newCandidates: Candidate[]) => void;
   onBulkUpdateCandidates?: (candidates: Candidate[]) => void;
@@ -74,6 +77,7 @@ export const RecruitmentView: React.FC<RecruitmentViewProps> = ({
   branches,
   departments,
   onAddJob,
+  onDeleteJob,
   onUpdateCandidateStage,
   onAddCandidates,
   onBulkUpdateCandidates,
@@ -87,6 +91,26 @@ export const RecruitmentView: React.FC<RecruitmentViewProps> = ({
   const [searchQuery, setSearchQuery] = useState("");
   const [filterEligibility, setFilterEligibility] = useState<"ALL" | "QUALIFIED" | "DISQUALIFIED">("ALL");
   const [viewLayout, setViewLayout] = useState<"CARDS" | "TABLE">("CARDS");
+  const [sortBy, setSortBy] = useState<
+    | "SCORE"
+    | "HONORS_CGPA"
+    | "SSC_GPA"
+    | "HSC_GPA"
+    | "EXPERIENCE"
+    | "SALARY_ASC"
+    | "SALARY_DESC"
+    | "NAME"
+  >("SCORE");
+
+  // Dynamic Column Mapping & Preview State
+  const [pendingUpload, setPendingUpload] = useState<{
+    fileName?: string;
+    headers: string[];
+    rows: any[];
+    mapping: Record<string, string>;
+    targetJobId: string;
+  } | null>(null);
+  const [showColumnMappingModal, setShowColumnMappingModal] = useState(false);
 
   // Screening Criteria State
   const [criteria, setCriteria] = useState<ScreeningCriteria>({
@@ -155,9 +179,9 @@ export const RecruitmentView: React.FC<RecruitmentViewProps> = ({
     });
   }, [jobCandidates, criteria]);
 
-  // Filtered by Search & Eligibility tab
+  // Filtered and Sorted by Search, Eligibility & Criteria
   const displayedCandidates = useMemo(() => {
-    return evaluatedCandidates.filter((cand) => {
+    const filtered = evaluatedCandidates.filter((cand) => {
       // Eligibility Filter
       if (filterEligibility === "QUALIFIED" && !cand.isScreeningEligible) return false;
       if (filterEligibility === "DISQUALIFIED" && cand.isScreeningEligible) return false;
@@ -177,7 +201,35 @@ export const RecruitmentView: React.FC<RecruitmentViewProps> = ({
       }
       return true;
     });
-  }, [evaluatedCandidates, filterEligibility, searchQuery]);
+
+    return [...filtered].sort((a, b) => {
+      if (sortBy === "SCORE") {
+        return (b.screeningScore || 0) - (a.screeningScore || 0);
+      }
+      if (sortBy === "HONORS_CGPA") {
+        return (b.honorsCgpa || 0) - (a.honorsCgpa || 0);
+      }
+      if (sortBy === "SSC_GPA") {
+        return (b.sscGpa || 0) - (a.sscGpa || 0);
+      }
+      if (sortBy === "HSC_GPA") {
+        return (b.hscGpa || 0) - (a.hscGpa || 0);
+      }
+      if (sortBy === "EXPERIENCE") {
+        return (b.experienceYears || 0) - (a.experienceYears || 0);
+      }
+      if (sortBy === "SALARY_ASC") {
+        return (a.expectedSalary || 0) - (b.expectedSalary || 0);
+      }
+      if (sortBy === "SALARY_DESC") {
+        return (b.expectedSalary || 0) - (a.expectedSalary || 0);
+      }
+      if (sortBy === "NAME") {
+        return a.fullName.localeCompare(b.fullName);
+      }
+      return 0;
+    });
+  }, [evaluatedCandidates, filterEligibility, searchQuery, sortBy]);
 
   // Stats Counters
   const totalCount = evaluatedCandidates.length;
@@ -185,7 +237,7 @@ export const RecruitmentView: React.FC<RecruitmentViewProps> = ({
   const disqualifiedCount = totalCount - qualifiedCount;
   const qualifiedPercentage = totalCount > 0 ? Math.round((qualifiedCount / totalCount) * 100) : 0;
 
-  // 1. File Upload & XLSX Parsing Handler
+  // 1. File Upload & XLSX Parsing Handler with Column Mapper
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -206,30 +258,26 @@ export const RecruitmentView: React.FC<RecruitmentViewProps> = ({
           setUploadFeedback({
             type: "error",
             message: t(
-              "এক্সেল ফাইলে কোনো ডেটা পাওয়া যায়নি। দয়া করে সঠিক টেমপ্লেট ব্যবহার করুন।",
-              "No valid rows found in the uploaded Excel file. Please use the standard template."
+              "এক্সেল ফাইলে কোনো ডেটা পাওয়া যায়নি। দয়া করে সঠিক ফাইল ব্যবহার করুন।",
+              "No valid rows found in the uploaded Excel file. Please use a file with candidate rows."
             ),
           });
           setIsProcessingFile(false);
           return;
         }
 
+        const headers = Object.keys(rawJsonRows[0] || {});
+        const initialMapping = autoDetectColumnMapping(headers);
         const targetJob = currentActiveJob || jobs[0] || { id: "job-01", title: "General Applicant Pool" };
-        const parsedCandidates: Candidate[] = rawJsonRows.map((row, idx) =>
-          mapRowToCandidate(row, targetJob.id, targetJob.title, idx)
-        );
 
-        if (onAddCandidates) {
-          onAddCandidates(parsedCandidates);
-        }
-
-        setUploadFeedback({
-          type: "success",
-          message: t(
-            `সফলভাবে ${parsedCandidates.length} জন প্রার্থীর সিভি ও তথ্য এক্সেল ফাইল থেকে ইমপোর্ট করা হয়েছে!`,
-            `Successfully imported ${parsedCandidates.length} applicant CV profiles from Excel file!`
-          ),
+        setPendingUpload({
+          fileName: file.name,
+          headers,
+          rows: rawJsonRows,
+          mapping: initialMapping,
+          targetJobId: targetJob.id,
         });
+        setShowColumnMappingModal(true);
       } catch (err: any) {
         console.error("Error parsing Excel file", err);
         setUploadFeedback({
@@ -256,7 +304,7 @@ export const RecruitmentView: React.FC<RecruitmentViewProps> = ({
     reader.readAsBinaryString(file);
   };
 
-  // 2. Direct Paste (Google Sheets / TSV / CSV) Handler
+  // 2. Direct Paste (Google Sheets / TSV / CSV) Handler with Column Mapper
   const handleProcessPastedData = (e: React.FormEvent) => {
     e.preventDefault();
     if (!rawPastedText.trim()) return;
@@ -287,30 +335,49 @@ export const RecruitmentView: React.FC<RecruitmentViewProps> = ({
         rows.push(rowObj);
       }
 
+      const initialMapping = autoDetectColumnMapping(headers);
       const targetJob = currentActiveJob || jobs[0] || { id: "job-01", title: "General Applicant Pool" };
-      const parsedCandidates: Candidate[] = rows.map((row, idx) =>
-        mapRowToCandidate(row, targetJob.id, targetJob.title, idx)
-      );
 
-      if (onAddCandidates) {
-        onAddCandidates(parsedCandidates);
-      }
-
+      setPendingUpload({
+        fileName: "Google Sheets Paste",
+        headers,
+        rows,
+        mapping: initialMapping,
+        targetJobId: targetJob.id,
+      });
       setShowPasteModal(false);
       setRawPastedText("");
-      setUploadFeedback({
-        type: "success",
-        message: t(
-          `গুগল শিট / ক্লিপবোর্ড থেকে ${parsedCandidates.length} জন প্রার্থীর সিভি যুক্ত হয়েছে!`,
-          `Successfully loaded ${parsedCandidates.length} candidates from pasted spreadsheet!`
-        ),
-      });
+      setShowColumnMappingModal(true);
     } catch (err) {
-      console.error(err);
-      alert(t("পেস্ট করা ডেটা পড়তে সমস্যা হয়েছে।", "Failed to parse pasted table."));
+      console.error("Error processing pasted text:", err);
     } finally {
       setIsProcessingFile(false);
     }
+  };
+
+  // Confirm Custom Column Mapping & Process Candidates
+  const handleConfirmCustomMapping = (customMapping: Record<string, string>, targetJobId: string) => {
+    if (!pendingUpload) return;
+    const targetJob = jobs.find((j) => j.id === targetJobId) || jobs[0] || { id: "job-01", title: "General Applicant Pool" };
+
+    const parsedCandidates: Candidate[] = pendingUpload.rows.map((row, idx) =>
+      mapRowWithCustomMapping(row, customMapping, targetJob.id, targetJob.title, idx)
+    );
+
+    if (onAddCandidates) {
+      onAddCandidates(parsedCandidates);
+    }
+
+    setUploadFeedback({
+      type: "success",
+      message: t(
+        `সফলভাবে ${parsedCandidates.length} জন প্রার্থীর তথ্য কলাম ম্যাপিং নিশ্চিত করে ইমপোর্ট ও স্ক্রিনিং করা হয়েছে!`,
+        `Successfully imported & screened ${parsedCandidates.length} applicant profiles!`
+      ),
+    });
+
+    setShowColumnMappingModal(false);
+    setPendingUpload(null);
   };
 
   // 3. Load 8+ Demo Realistic Applicants
@@ -1102,6 +1169,25 @@ export const RecruitmentView: React.FC<RecruitmentViewProps> = ({
                   </button>
                 </div>
 
+                {/* Sort Criteria Selector */}
+                <div className="flex items-center gap-1.5 text-xs">
+                  <span className="text-slate-400 font-semibold hidden md:inline">{t("সর্টিং:", "Sort:")}</span>
+                  <select
+                    value={sortBy}
+                    onChange={(e) => setSortBy(e.target.value as any)}
+                    className="px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs font-bold text-slate-800 dark:text-slate-200 focus:outline-none focus:border-teal-500 cursor-pointer"
+                  >
+                    <option value="SCORE">{t("🎯 সর্বোচ্চ ম্যাচ স্কোর", "Highest Match Score")}</option>
+                    <option value="HONORS_CGPA">{t("🎓 অনার্স সিজিপিএ (বেশি থেকে কম)", "Honors CGPA (High to Low)")}</option>
+                    <option value="SSC_GPA">{t("📜 এসএসসি জিপিএ (বেশি থেকে কম)", "SSC GPA (High to Low)")}</option>
+                    <option value="HSC_GPA">{t("📜 এইচএসসি জিপিএ (বেশি থেকে কম)", "HSC GPA (High to Low)")}</option>
+                    <option value="EXPERIENCE">{t("💼 কাজের অভিজ্ঞতা (বেশি থেকে কম)", "Experience (High to Low)")}</option>
+                    <option value="SALARY_ASC">{t("💰 বেতন প্রত্যাশা (কম থেকে বেশি)", "Salary (Low to High)")}</option>
+                    <option value="SALARY_DESC">{t("💰 বেতন প্রত্যাশা (বেশি থেকে কম)", "Salary (High to Low)")}</option>
+                    <option value="NAME">{t("🔤 প্রার্থীর নাম (A-Z)", "Candidate Name (A-Z)")}</option>
+                  </select>
+                </div>
+
                 {/* Layout Toggle */}
                 <div className="flex p-1 bg-slate-100 dark:bg-slate-950 rounded-xl border border-slate-200 dark:border-slate-800">
                   <button
@@ -1617,20 +1703,231 @@ export const RecruitmentView: React.FC<RecruitmentViewProps> = ({
                     {applicantsCount} {t("জন আবেদন করেছেন", "Applicants")}
                   </span>
 
-                  <button
-                    onClick={() => {
-                      setSelectedJobId(job.id);
-                      setActiveTab("SCREENING_ENGINE");
-                    }}
-                    className="px-3 py-1.5 rounded-xl bg-teal-600 text-white text-xs font-bold shadow-xs hover:bg-teal-500 transition cursor-pointer flex items-center gap-1"
-                  >
-                    <span>{t("সিভি স্ক্রিন করুন", "Screen CVs")}</span>
-                    <ChevronRight className="w-3.5 h-3.5" />
-                  </button>
+                  <div className="flex items-center gap-1.5">
+                    {onDeleteJob && (
+                      <button
+                        onClick={() => {
+                          if (
+                            confirm(
+                              t(
+                                `আপনি কি নিশ্চিতভাবে "${job.title}" সার্কুলারটি মুছে ফেলতে চান?`,
+                                `Are you sure you want to delete the circular "${job.title}"?`
+                              )
+                            )
+                          ) {
+                            onDeleteJob(job.id);
+                          }
+                        }}
+                        className="p-1.5 rounded-xl text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition cursor-pointer"
+                        title={t("বিজ্ঞপ্তি ডিলিট করুন", "Delete Circular")}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+
+                    <button
+                      onClick={() => {
+                        setSelectedJobId(job.id);
+                        setActiveTab("SCREENING_ENGINE");
+                      }}
+                      className="px-3 py-1.5 rounded-xl bg-teal-600 text-white text-xs font-bold shadow-xs hover:bg-teal-500 transition cursor-pointer flex items-center gap-1"
+                    >
+                      <span>{t("সিভি স্ক্রিন করুন", "Screen CVs")}</span>
+                      <ChevronRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL: INTERACTIVE COLUMN AUTO-MAPPING & DATA PREVIEW                     */}
+      {/* ========================================================================= */}
+      {showColumnMappingModal && pendingUpload && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-slate-950/80 backdrop-blur-md overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-5 sm:p-7 w-full max-w-4xl text-slate-900 dark:text-slate-100 shadow-2xl space-y-5 my-8">
+            {/* Modal Header */}
+            <div className="flex items-start justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-teal-500/10 text-teal-600 dark:text-teal-400 flex items-center justify-center">
+                  <FileSpreadsheet className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                    <span>{t("স্মার্ট কলাম ম্যাপিং ও এক্সেল রিভিউ", "Smart Column Auto-Mapping & Preview")}</span>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-teal-500/10 text-teal-600 dark:text-teal-400 border border-teal-500/20">
+                      {pendingUpload.rows.length} {t("জন প্রার্থী", "Candidates")}
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    {t(
+                      "আপনার এক্সেল বা গুগল ফর্মের কলামগুলো সিস্টেমের ফিল্ডের সাথে মিলিয়ে নেওয়া হয়েছে। প্রয়োজন অনুযায়ী পরিবর্তন করতে পারেন।",
+                      "Map columns from your Google Form / Excel file to internal system fields before screening."
+                    )}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setShowColumnMappingModal(false);
+                  setPendingUpload(null);
+                }}
+                className="text-slate-400 hover:text-slate-700 dark:hover:text-white transition p-1 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Target Circular Selector */}
+            <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+              <div className="flex items-center gap-2">
+                <BriefcaseBusiness className="w-4 h-4 text-teal-600" />
+                <span className="font-bold text-slate-700 dark:text-slate-300">
+                  {t("আবেদনগুলো কোন সার্কুলারের অধীনে জমা হবে?", "Target Job Circular for these candidates:")}
+                </span>
+              </div>
+              <select
+                value={pendingUpload.targetJobId}
+                onChange={(e) =>
+                  setPendingUpload({
+                    ...pendingUpload,
+                    targetJobId: e.target.value,
+                  })
+                }
+                className="px-3 py-1.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 font-bold text-slate-800 dark:text-slate-200 focus:outline-none focus:border-teal-500"
+              >
+                {jobs.map((j) => (
+                  <option key={j.id} value={j.id}>
+                    {j.title} ({j.departmentName})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Column Mapping Table */}
+            <div className="border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden max-h-[360px] overflow-y-auto text-xs">
+              <table className="w-full text-left">
+                <thead className="bg-slate-100 dark:bg-slate-950 text-slate-600 dark:text-slate-400 font-bold sticky top-0 z-10 border-b border-slate-200 dark:border-slate-800">
+                  <tr>
+                    <th className="p-3">{t("আপনার ফাইলের কলাম", "Uploaded File Column")}</th>
+                    <th className="p-3">{t("সিস্টেমের ফিল্ড (ম্যাপিং)", "Mapped System Field")}</th>
+                    <th className="p-3">{t("নমুনা ডেটা (১ম রো)", "Sample Value (Row 1)")}</th>
+                    <th className="p-3">{t("নমুনা ডেটা (২য় রো)", "Sample Value (Row 2)")}</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
+                  {pendingUpload.headers.map((hdr, hIdx) => {
+                    const currentMappedKey = pendingUpload.mapping[hdr] || "";
+                    const sample1 = pendingUpload.rows[0]?.[hdr];
+                    const sample2 = pendingUpload.rows[1]?.[hdr];
+
+                    return (
+                      <tr key={hIdx} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition">
+                        <td className="p-3 font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                          <span className="font-mono text-xs">{hdr}</span>
+                        </td>
+                        <td className="p-3">
+                          <select
+                            value={currentMappedKey}
+                            onChange={(e) => {
+                              const newMapping = { ...pendingUpload.mapping, [hdr]: e.target.value };
+                              setPendingUpload({ ...pendingUpload, mapping: newMapping });
+                            }}
+                            className={`w-full max-w-xs px-2.5 py-1.5 rounded-xl border text-xs font-semibold focus:outline-none focus:border-teal-500 ${
+                              currentMappedKey && currentMappedKey !== "IGNORE"
+                                ? "bg-teal-50/60 dark:bg-teal-950/40 border-teal-500/40 text-teal-800 dark:text-teal-200"
+                                : "bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-400"
+                            }`}
+                          >
+                            <option value="">{t("-- ফিল্ড নির্বাচন করুন --", "-- Select Field --")}</option>
+                            <option value="fullName">{t("👤 প্রার্থীর পূর্ণ নাম (Full Name)", "Candidate Full Name")}</option>
+                            <option value="phone">{t("📱 মোবাইল নম্বর (Phone Number)", "Phone Number")}</option>
+                            <option value="email">{t("✉️ ইমেইল ঠিকানা (Email Address)", "Email Address")}</option>
+                            <option value="sscGpa">{t("📜 এসএসসি জিপিএ (SSC GPA - 5.00)", "SSC GPA (Scale 5.0)")}</option>
+                            <option value="sscInstitute">{t("🏫 এসএসসি প্রতিষ্ঠান / স্কুল", "SSC School")}</option>
+                            <option value="sscBoard">{t("🏛️ এসএসসি বোর্ড", "SSC Board")}</option>
+                            <option value="sscYear">{t("📅 এসএসসি পাসের সন", "SSC Year")}</option>
+                            <option value="hscGpa">{t("📜 এইচএসসি জিপিএ (HSC GPA - 5.00)", "HSC GPA (Scale 5.0)")}</option>
+                            <option value="hscInstitute">{t("🏫 এইচএসসি প্রতিষ্ঠান / কলেজ", "HSC College")}</option>
+                            <option value="hscBoard">{t("🏛️ এইচএসসি বোর্ড", "HSC Board")}</option>
+                            <option value="hscYear">{t("📅 এইচএসসি পাসের সন", "HSC Year")}</option>
+                            <option value="honorsCgpa">{t("🎓 স্নাতক / অনার্স সিজিপিএ (Honors CGPA - 4.00)", "Honors CGPA (Scale 4.0)")}</option>
+                            <option value="honorsInstitute">{t("🏛️ অনার্স বিশ্ববিদ্যালয় / প্রতিষ্ঠান", "Honors University")}</option>
+                            <option value="honorsDept">{t("📚 অনার্স বিভাগ / মেজর", "Honors Department / Major")}</option>
+                            <option value="honorsDegree">{t("🏅 অর্জিত ডিগ্রি (BSc, BBA, BA)", "Honors Degree")}</option>
+                            <option value="honorsYear">{t("📅 অনার্স পাসের সন", "Honors Year")}</option>
+                            <option value="mastersCgpa">{t("🎓 মাস্টার্স সিজিপিএ (Masters CGPA)", "Masters CGPA")}</option>
+                            <option value="mastersInstitute">{t("🏛️ মাস্টার্স বিশ্ববিদ্যালয়", "Masters University")}</option>
+                            <option value="mastersDept">{t("📚 মাস্টার্স বিষয় / বিভাগ", "Masters Dept")}</option>
+                            <option value="mastersYear">{t("📅 মাস্টার্স পাসের সন", "Masters Year")}</option>
+                            <option value="experienceYears">{t("💼 মোট কাজের অভিজ্ঞতা (বছর)", "Experience (Years)")}</option>
+                            <option value="currentDesignation">{t("🏷️ বর্তমান পদবী / ডেজিগনেশন", "Current Designation")}</option>
+                            <option value="experienceHistory">{t("🏢 পূর্ব কাজের অভিজ্ঞতা বিবরণ", "Work History")}</option>
+                            <option value="expectedSalary">{t("💰 প্রত্যাশিত বেতন (৳ BDT)", "Expected Salary (BDT)")}</option>
+                            <option value="resumeUrl">{t("🔗 সিভি / পোর্টফোলিও লিঙ্ক", "Resume / CV Link")}</option>
+                            <option value="nidNumber">{t("🆔 জাতীয় পরিচয়পত্র (NID)", "NID Number")}</option>
+                            <option value="fatherName">{t("👨 পিতার নাম", "Father's Name")}</option>
+                            <option value="motherName">{t("👩 মাতার নাম", "Mother's Name")}</option>
+                            <option value="address">{t("📍 ঠিকানা / অবস্থান", "Address")}</option>
+                            <option value="IGNORE">{t("⛔ এই কলামটি বাদ দিন", "Skip / Ignore Column")}</option>
+                          </select>
+                        </td>
+                        <td className="p-3 text-slate-500 font-mono text-[11px] truncate max-w-[160px]">
+                          {sample1 !== undefined && sample1 !== null ? String(sample1) : "-"}
+                        </td>
+                        <td className="p-3 text-slate-400 font-mono text-[11px] truncate max-w-[160px]">
+                          {sample2 !== undefined && sample2 !== null ? String(sample2) : "-"}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Modal Actions */}
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-slate-200 dark:border-slate-800">
+              <div className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+                <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+                <span>
+                  {t(
+                    "ইমপোর্ট করার সাথে সাথে সিস্টেম স্বয়ংক্রিয়ভাবে আপনার বেঞ্চমার্ক অনুযায়ী প্রার্থীদের শর্টলিস্ট করবে।",
+                    "Applicants will be evaluated against active GPA, CGPA & Experience benchmarks instantly."
+                  )}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowColumnMappingModal(false);
+                    setPendingUpload(null);
+                  }}
+                  className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer grow sm:grow-0"
+                >
+                  {t("বাতিল", "Cancel")}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleConfirmCustomMapping(pendingUpload.mapping, pendingUpload.targetJobId)}
+                  className="px-5 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-500 text-white text-xs font-bold shadow-lg shadow-teal-500/20 transition cursor-pointer flex items-center justify-center gap-2 grow sm:grow-0"
+                >
+                  <CheckCheck className="w-4 h-4" />
+                  <span>
+                    {t(
+                      `ম্যাপিং নিশ্চিত করে ${pendingUpload.rows.length} জন প্রার্থী স্ক্রিনিং করুন`,
+                      `Confirm Mapping & Screen ${pendingUpload.rows.length} Applicants`
+                    )}
+                  </span>
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 

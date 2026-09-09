@@ -23,6 +23,13 @@ import {
   subscribeToDepartments,
   subscribeToDesignations,
   subscribeToAuditLogs,
+  subscribeToJobs,
+  saveJobToFirestore,
+  deleteJobFromFirestore,
+  subscribeToCandidates,
+  saveCandidateToFirestore,
+  saveBulkCandidatesToFirestore,
+  deleteCandidateFromFirestore,
   updateEmployeeFacePhotoInFirestore,
   saveAttendanceRecordToFirestore,
   saveLeaveApplicationToFirestore,
@@ -207,6 +214,14 @@ function AppContent() {
       setAuditLogs(updatedLogs);
     });
 
+    const unsubJobs = subscribeToJobs((updatedJobs) => {
+      setJobs(updatedJobs);
+    });
+
+    const unsubCandidates = subscribeToCandidates((updatedCandidates) => {
+      setCandidates(updatedCandidates);
+    });
+
     return () => {
       unsubEmployees();
       unsubAttendance();
@@ -216,6 +231,8 @@ function AppContent() {
       unsubDepartments();
       unsubDesignations();
       unsubAudit();
+      unsubJobs();
+      unsubCandidates();
     };
   }, []);
 
@@ -444,10 +461,21 @@ function AppContent() {
   // Handlers for Recruitment
   const handleAddJob = (job: JobPosting) => {
     setJobs((prev) => [job, ...prev]);
+    saveJobToFirestore(job);
     notifyAndLog("JOB_POSTED", `Published job circular: ${job.title}`, "RECRUITMENT");
   };
 
+  const handleDeleteJob = (jobId: string) => {
+    setJobs((prev) => prev.filter((j) => j.id !== jobId));
+    deleteJobFromFirestore(jobId);
+    notifyAndLog("JOB_DELETED", `Removed job circular`, "RECRUITMENT");
+  };
+
   const handleUpdateCandidateStage = (candidateId: string, stage: Candidate["stage"]) => {
+    const target = candidates.find((c) => c.id === candidateId);
+    if (target) {
+      saveCandidateToFirestore({ ...target, stage });
+    }
     setCandidates((prev) =>
       prev.map((c) => (c.id === candidateId ? { ...c, stage } : c))
     );
@@ -460,6 +488,7 @@ function AppContent() {
 
   const handleAddCandidates = (newCandidates: Candidate[]) => {
     setCandidates((prev) => [...newCandidates, ...prev]);
+    saveBulkCandidatesToFirestore(newCandidates);
     notifyAndLog(
       "CANDIDATES_IMPORTED",
       `Imported ${newCandidates.length} candidate CV profiles from spreadsheet`,
@@ -472,6 +501,7 @@ function AppContent() {
       const updatedMap = new Map(updatedList.map((c) => [c.id, c]));
       return prev.map((c) => updatedMap.get(c.id) || c);
     });
+    saveBulkCandidatesToFirestore(updatedList);
     notifyAndLog(
       "CANDIDATES_SCREENED",
       `Automated multi-criteria screening updated for ${updatedList.length} candidates`,
@@ -481,6 +511,7 @@ function AppContent() {
 
   const handleDeleteCandidate = (candId: string) => {
     setCandidates((prev) => prev.filter((c) => c.id !== candId));
+    deleteCandidateFromFirestore(candId);
     notifyAndLog("CANDIDATE_REMOVED", `Removed candidate application record`, "RECRUITMENT");
   };
 
@@ -815,6 +846,7 @@ function AppContent() {
               branches={branches}
               departments={departments}
               onAddJob={handleAddJob}
+              onDeleteJob={handleDeleteJob}
               onUpdateCandidateStage={handleUpdateCandidateStage}
               onAddCandidates={handleAddCandidates}
               onBulkUpdateCandidates={handleBulkUpdateCandidates}

@@ -6,6 +6,7 @@ import {
   getDoc,
   setDoc,
   updateDoc,
+  deleteDoc,
   onSnapshot,
 } from "../lib/firebase";
 import {
@@ -22,6 +23,8 @@ import {
   Designation,
   Shift,
   CompanyBranding,
+  JobPosting,
+  Candidate,
 } from "../types";
 import {
   INITIAL_EMPLOYEES,
@@ -36,7 +39,10 @@ import {
   INITIAL_ASSETS,
   INITIAL_NOTICES,
   INITIAL_AUDIT_LOGS,
+  mockJobPostings,
+  mockCandidates,
 } from "../data/mockDatabase";
+import firebaseConfig from "../../firebase-applet-config.json";
 
 // Collection Names
 const COL_EMPLOYEES = "employees";
@@ -52,6 +58,8 @@ const COL_BRANCHES = "branches";
 const COL_DEPARTMENTS = "departments";
 const COL_DESIGNATIONS = "designations";
 const COL_SHIFTS = "shifts";
+const COL_RECRUITMENT_JOBS = "recruitment_jobs";
+const COL_RECRUITMENT_CANDIDATES = "recruitment_candidates";
 
 /**
  * Sanitizes object by removing all undefined keys for Firestore compatibility
@@ -130,7 +138,31 @@ export async function initializeFirestoreDatabase() {
         await setDoc(doc(db, COL_AUDIT_LOGS, log.id), cleanForFirestore(log));
       }
 
+      // Seed Recruitment Jobs
+      for (const job of mockJobPostings) {
+        await setDoc(doc(db, COL_RECRUITMENT_JOBS, job.id), cleanForFirestore(job));
+      }
+
+      // Seed Recruitment Candidates
+      for (const cand of mockCandidates) {
+        await setDoc(doc(db, COL_RECRUITMENT_CANDIDATES, cand.id), cleanForFirestore(cand));
+      }
+
       console.log("Firestore initial seeding completed successfully.");
+    } else {
+      // Also ensure recruitment collections are seeded if they were added later
+      const jobSnap = await getDocs(collection(db, COL_RECRUITMENT_JOBS));
+      if (jobSnap.empty) {
+        for (const job of mockJobPostings) {
+          await setDoc(doc(db, COL_RECRUITMENT_JOBS, job.id), cleanForFirestore(job));
+        }
+      }
+      const candSnap = await getDocs(collection(db, COL_RECRUITMENT_CANDIDATES));
+      if (candSnap.empty) {
+        for (const cand of mockCandidates) {
+          await setDoc(doc(db, COL_RECRUITMENT_CANDIDATES, cand.id), cleanForFirestore(cand));
+        }
+      }
     }
   } catch (err) {
     console.error("Firestore seeding error (will use offline fallback):", err);
@@ -507,3 +539,139 @@ export function subscribeToDesignations(onUpdate: (designations: Designation[]) 
     return () => {};
   }
 }
+
+/* ============================================================
+   RECRUITMENT (JOBS & CANDIDATES) FIRESTORE APIS
+   ============================================================ */
+
+export async function fetchJobsFromFirestore(): Promise<JobPosting[]> {
+  try {
+    const snap = await getDocs(collection(db, COL_RECRUITMENT_JOBS));
+    if (!snap.empty) {
+      return snap.docs.map((d) => d.data() as JobPosting);
+    }
+  } catch (err) {
+    console.warn("Firestore fetch jobs error:", err);
+  }
+  return mockJobPostings;
+}
+
+export function subscribeToJobs(onUpdate: (jobs: JobPosting[]) => void) {
+  try {
+    return onSnapshot(
+      collection(db, COL_RECRUITMENT_JOBS),
+      (snap) => {
+        if (!snap.empty) {
+          const list = snap.docs.map((d) => d.data() as JobPosting);
+          onUpdate(list);
+        }
+      },
+      (err) => console.warn("Firestore jobs listener error:", err)
+    );
+  } catch (e) {
+    console.warn(e);
+    return () => {};
+  }
+}
+
+export async function saveJobToFirestore(job: JobPosting) {
+  try {
+    await setDoc(doc(db, COL_RECRUITMENT_JOBS, job.id), cleanForFirestore(job), { merge: true });
+  } catch (err) {
+    console.error("Failed to save job to Firestore:", err);
+  }
+}
+
+export async function deleteJobFromFirestore(jobId: string) {
+  try {
+    await deleteDoc(doc(db, COL_RECRUITMENT_JOBS, jobId));
+  } catch (err) {
+    console.error("Failed to delete job from Firestore:", err);
+  }
+}
+
+export async function fetchCandidatesFromFirestore(): Promise<Candidate[]> {
+  try {
+    const snap = await getDocs(collection(db, COL_RECRUITMENT_CANDIDATES));
+    if (!snap.empty) {
+      return snap.docs.map((d) => d.data() as Candidate);
+    }
+  } catch (err) {
+    console.warn("Firestore fetch candidates error:", err);
+  }
+  return mockCandidates;
+}
+
+export function subscribeToCandidates(onUpdate: (candidates: Candidate[]) => void) {
+  try {
+    return onSnapshot(
+      collection(db, COL_RECRUITMENT_CANDIDATES),
+      (snap) => {
+        if (!snap.empty) {
+          const list = snap.docs.map((d) => d.data() as Candidate);
+          onUpdate(list);
+        }
+      },
+      (err) => console.warn("Firestore candidates listener error:", err)
+    );
+  } catch (e) {
+    console.warn(e);
+    return () => {};
+  }
+}
+
+export async function saveCandidateToFirestore(candidate: Candidate) {
+  try {
+    await setDoc(doc(db, COL_RECRUITMENT_CANDIDATES, candidate.id), cleanForFirestore(candidate), { merge: true });
+  } catch (err) {
+    console.error("Failed to save candidate to Firestore:", err);
+  }
+}
+
+export async function saveBulkCandidatesToFirestore(candidates: Candidate[]) {
+  try {
+    // Save in batches or parallel setDocs
+    for (const cand of candidates) {
+      await setDoc(doc(db, COL_RECRUITMENT_CANDIDATES, cand.id), cleanForFirestore(cand), { merge: true });
+    }
+  } catch (err) {
+    console.error("Failed to bulk save candidates to Firestore:", err);
+  }
+}
+
+export async function deleteCandidateFromFirestore(candidateId: string) {
+  try {
+    await deleteDoc(doc(db, COL_RECRUITMENT_CANDIDATES, candidateId));
+  } catch (err) {
+    console.error("Failed to delete candidate from Firestore:", err);
+  }
+}
+
+/* ============================================================
+   FIRESTORE HEALTH & STATUS CHECK
+   ============================================================ */
+export async function checkFirestoreConnection(): Promise<{
+  ok: boolean;
+  databaseId: string;
+  projectId: string;
+  error?: string;
+}> {
+  try {
+    // Quick probe to test live server read
+    await getDocs(collection(db, COL_SETTINGS));
+    return {
+      ok: true,
+      databaseId: firebaseConfig.firestoreDatabaseId || "default",
+      projectId: firebaseConfig.projectId,
+    };
+  } catch (err: any) {
+    console.warn("Firestore connection check:", err);
+    return {
+      ok: false,
+      databaseId: firebaseConfig.firestoreDatabaseId || "default",
+      projectId: firebaseConfig.projectId,
+      error: err?.message || String(err),
+    };
+  }
+}
+
