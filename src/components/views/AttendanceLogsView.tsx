@@ -130,19 +130,19 @@ export const AttendanceLogsView: React.FC<AttendanceLogsViewProps> = ({
   return (
     <div id="attendance-logs-view" className="space-y-6 animate-in fade-in duration-300">
       {/* Header & Quick Action Bar */}
-      <div className="p-6 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 border border-slate-800 space-y-4">
+      <div className="p-6 rounded-2xl bg-white dark:bg-gradient-to-r dark:from-slate-900 dark:via-slate-850 dark:to-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2">
-              <span className="px-2.5 py-1 rounded-lg bg-teal-500/20 text-teal-300 border border-teal-500/30 text-xs font-bold flex items-center gap-1.5">
+              <span className="px-2.5 py-1 rounded-lg bg-teal-500/15 text-teal-800 dark:text-teal-300 border border-teal-500/30 text-xs font-bold flex items-center gap-1.5">
                 <Clock className="w-3.5 h-3.5" />
                 <span>{isBangla ? "উপস্থিতি ও বায়োমেট্রিক লগ" : "Biometric Audit Trail"}</span>
               </span>
             </div>
-            <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight mt-2">
+            <h2 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight mt-2">
               {isBangla ? "স্মার্ট অ্যাটেনডেন্স ও জিওফেন্স লগ অডিট" : "Attendance Records & Geofence Logs"}
             </h2>
-            <p className="text-xs text-slate-400 mt-0.5">
+            <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
               {isBangla
                 ? "নির্দিষ্ট তারিখ বা সময়সীমা সিলেক্ট করে উপস্থিতি ফিল্টার করুন, এক্সেল/CSV ডাউনলোড করুন"
                 : "Filter records by custom date ranges, branches, verify GPS coordinates and export reports"}
@@ -152,9 +152,9 @@ export const AttendanceLogsView: React.FC<AttendanceLogsViewProps> = ({
           <div className="flex flex-wrap items-center gap-3">
             <button
               onClick={handleExportCSV}
-              className="px-3.5 py-2.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-bold rounded-xl shadow flex items-center gap-1.5 transition-colors cursor-pointer"
+              className="px-3.5 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 text-xs font-bold rounded-xl shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer"
             >
-              <Download className="w-4 h-4 text-teal-400" />
+              <Download className="w-4 h-4 text-teal-600 dark:text-teal-400" />
               <span>{isBangla ? "CSV রিপোর্ট ডাউনলোড" : "Export CSV Report"}</span>
             </button>
 
@@ -169,10 +169,10 @@ export const AttendanceLogsView: React.FC<AttendanceLogsViewProps> = ({
         </div>
 
         {/* Date Filter & Preset Controls */}
-        <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-3 text-xs">
+        <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 space-y-3 text-xs">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-2 text-slate-300 font-bold">
-              <Calendar className="w-4 h-4 text-teal-400" />
+            <div className="flex items-center gap-2 text-slate-800 dark:text-slate-300 font-bold">
+              <Calendar className="w-4 h-4 text-teal-600 dark:text-teal-400" />
               <span>{isBangla ? "তারিখ অনুযায়ী ফিল্টার করুন:" : "Date Range Filtering:"}</span>
             </div>
 
@@ -181,68 +181,68 @@ export const AttendanceLogsView: React.FC<AttendanceLogsViewProps> = ({
               <button
                 type="button"
                 onClick={() => setQuickPreset("TODAY")}
-                className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] font-semibold transition-colors"
+                className="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-transparent text-slate-700 dark:text-slate-300 text-[11px] font-semibold transition-colors"
               >
                 {isBangla ? "আজকে" : "Today"}
               </button>
               <button
                 type="button"
                 onClick={() => setQuickPreset("YESTERDAY")}
-                className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] font-semibold transition-colors"
+                className="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-transparent text-slate-700 dark:text-slate-300 text-[11px] font-semibold transition-colors"
               >
                 {isBangla ? "গতকাল" : "Yesterday"}
               </button>
               <button
                 type="button"
                 onClick={() => setQuickPreset("THIS_WEEK")}
-                className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] font-semibold transition-colors"
+                className="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-transparent text-slate-700 dark:text-slate-300 text-[11px] font-semibold transition-colors"
               >
                 {isBangla ? "এই সপ্তাহ" : "This Week"}
               </button>
               <button
                 type="button"
                 onClick={() => setQuickPreset("THIS_MONTH")}
-                className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] font-semibold transition-colors"
+                className="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-transparent text-slate-700 dark:text-slate-300 text-[11px] font-semibold transition-colors"
               >
                 {isBangla ? "এই মাস" : "This Month"}
               </button>
               <button
                 type="button"
                 onClick={() => setQuickPreset("ALL")}
-                className="px-2.5 py-1 rounded-lg bg-teal-500/20 text-teal-300 border border-teal-500/30 text-[11px] font-bold transition-colors"
+                className="px-2.5 py-1 rounded-lg bg-teal-500/20 text-teal-800 dark:text-teal-300 border border-teal-500/30 text-[11px] font-bold transition-colors"
               >
                 {isBangla ? "সকল সময় (All)" : "All Time"}
               </button>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-2 border-t border-slate-900">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-2 border-t border-slate-200 dark:border-slate-900">
             <div>
-              <label className="block text-slate-400 text-[11px] mb-1">{isBangla ? "শুরুর তারিখ:" : "From Date:"}</label>
+              <label className="block text-slate-600 dark:text-slate-400 text-[11px] mb-1">{isBangla ? "শুরুর তারিখ:" : "From Date:"}</label>
               <input
                 type="date"
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
-                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono focus:border-teal-500"
+                className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white font-mono focus:border-teal-500"
               />
             </div>
 
             <div>
-              <label className="block text-slate-400 text-[11px] mb-1">{isBangla ? "শেষের তারিখ:" : "To Date:"}</label>
+              <label className="block text-slate-600 dark:text-slate-400 text-[11px] mb-1">{isBangla ? "শেষের তারিখ:" : "To Date:"}</label>
               <input
                 type="date"
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
-                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono focus:border-teal-500"
+                className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white font-mono focus:border-teal-500"
               />
             </div>
 
             <div>
-              <label className="block text-slate-400 text-[11px] mb-1">{isBangla ? "ব্রাঞ্চ সিলেক্ট করুন:" : "Branch:"}</label>
+              <label className="block text-slate-600 dark:text-slate-400 text-[11px] mb-1">{isBangla ? "ব্রাঞ্চ সিলেক্ট করুন:" : "Branch:"}</label>
               <select
                 value={selectedBranch}
                 onChange={(e) => setSelectedBranch(e.target.value)}
-                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white focus:border-teal-500"
+                className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white focus:border-teal-500"
               >
                 <option value="ALL">{isBangla ? "সকল ব্রাঞ্চ" : "All Branches"}</option>
                 {branches.map((b) => (
@@ -254,11 +254,11 @@ export const AttendanceLogsView: React.FC<AttendanceLogsViewProps> = ({
             </div>
 
             <div>
-              <label className="block text-slate-400 text-[11px] mb-1">{isBangla ? "স্ট্যাটাস ফিল্টার:" : "Status Filter:"}</label>
+              <label className="block text-slate-600 dark:text-slate-400 text-[11px] mb-1">{isBangla ? "স্ট্যাটাস ফিল্টার:" : "Status Filter:"}</label>
               <select
                 value={selectedStatus}
                 onChange={(e) => setSelectedStatus(e.target.value)}
-                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white focus:border-teal-500"
+                className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white focus:border-teal-500"
               >
                 <option value="ALL">{isBangla ? "সকল স্ট্যাটাস" : "All Status"}</option>
                 <option value="PRESENT">{isBangla ? "উপস্থিত (Present)" : "Present"}</option>
@@ -280,11 +280,11 @@ export const AttendanceLogsView: React.FC<AttendanceLogsViewProps> = ({
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder={isBangla ? "নাম, আইডি বা ডিপার্টমেন্ট দিয়ে খুঁজুন..." : "Search by name, ID or department..."}
-              className="w-full bg-slate-950 border border-slate-700 rounded-xl pl-9 pr-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-teal-500"
+              className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl pl-9 pr-3 py-2 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-teal-500"
             />
           </div>
 
-          <div className="text-slate-400 text-xs font-semibold">
+          <div className="text-slate-600 dark:text-slate-400 text-xs font-semibold">
             {isBangla
               ? `ফিল্টার অনুযায়ী প্রাপ্ত লগ: ${filteredLogs.length} টি`
               : `Showing ${filteredLogs.length} attendance records`}
@@ -293,10 +293,10 @@ export const AttendanceLogsView: React.FC<AttendanceLogsViewProps> = ({
       </div>
 
       {/* Attendance Records Table */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-xs">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
-            <thead className="bg-slate-950/80 border-b border-slate-800 text-slate-400 font-bold uppercase tracking-wider text-[10px]">
+            <thead className="bg-slate-50 dark:bg-slate-950/80 border-b border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 font-bold uppercase tracking-wider text-[10px]">
               <tr>
                 <th className="py-3.5 px-4">{isBangla ? "তারিখ" : "Date"}</th>
                 <th className="py-3.5 px-4">{isBangla ? "কর্মকর্তা / কর্মী" : "Staff Member"}</th>
@@ -308,7 +308,7 @@ export const AttendanceLogsView: React.FC<AttendanceLogsViewProps> = ({
                 <th className="py-3.5 px-4 text-right">{isBangla ? "অ্যাকশন" : "Action"}</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800/60">
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
               {filteredLogs.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="py-12 text-center text-slate-500 text-xs">
@@ -323,8 +323,8 @@ export const AttendanceLogsView: React.FC<AttendanceLogsViewProps> = ({
                   const isOnLeave = log.status === "ON_LEAVE";
 
                   return (
-                    <tr key={log.id} className="hover:bg-slate-800/40 transition-colors">
-                      <td className="py-3 px-4 font-mono font-bold text-white whitespace-nowrap">
+                    <tr key={log.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
+                      <td className="py-3 px-4 font-mono font-bold text-slate-900 dark:text-white whitespace-nowrap">
                         {log.date}
                       </td>
 
@@ -337,39 +337,39 @@ export const AttendanceLogsView: React.FC<AttendanceLogsViewProps> = ({
                               className="w-8 h-8 rounded-lg object-cover border border-teal-500/40"
                             />
                           ) : (
-                            <div className="w-8 h-8 rounded-lg bg-slate-800 text-teal-400 flex items-center justify-center font-bold text-xs">
+                            <div className="w-8 h-8 rounded-lg bg-teal-50 dark:bg-slate-800 text-teal-700 dark:text-teal-400 flex items-center justify-center font-bold text-xs">
                               {log.employeeName.charAt(0)}
                             </div>
                           )}
                           <div>
-                            <span className="font-bold text-white block">{log.employeeName}</span>
-                            <span className="text-[10px] text-slate-400 font-mono">{log.employeeCode}</span>
+                            <span className="font-bold text-slate-900 dark:text-white block">{log.employeeName}</span>
+                            <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">{log.employeeCode}</span>
                           </div>
                         </div>
                       </td>
 
                       <td className="py-3 px-4">
-                        <span className="text-slate-300 block font-medium">{log.branchName}</span>
-                        <span className="text-[10px] text-slate-400">{log.departmentName}</span>
+                        <span className="text-slate-800 dark:text-slate-300 block font-medium">{log.branchName}</span>
+                        <span className="text-[10px] text-slate-500 dark:text-slate-400">{log.departmentName}</span>
                       </td>
 
                       <td className="py-3 px-4 font-mono">
-                        <div className="flex items-center gap-1.5 text-emerald-400 font-bold">
+                        <div className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-bold">
                           <span>IN: {log.checkInTime || "--:--"}</span>
                         </div>
                         {log.checkOutTime && (
-                          <div className="text-[10px] text-slate-400">
+                          <div className="text-[10px] text-slate-500 dark:text-slate-400">
                             OUT: {log.checkOutTime}
                           </div>
                         )}
                       </td>
 
                       <td className="py-3 px-4 font-mono">
-                        <span className="font-bold text-white">
+                        <span className="font-bold text-slate-900 dark:text-white">
                           {(log.totalWorkMinutes / 60).toFixed(1)}h
                         </span>
                         {log.lateMinutes > 0 && (
-                          <span className="text-[10px] text-red-400 block">
+                          <span className="text-[10px] text-rose-600 dark:text-red-400 block">
                             +{log.lateMinutes}m Late
                           </span>
                         )}
@@ -378,13 +378,13 @@ export const AttendanceLogsView: React.FC<AttendanceLogsViewProps> = ({
                       <td className="py-3 px-4">
                         <div className="space-y-0.5">
                           <div className="flex items-center gap-1 text-[11px]">
-                            <MapPin className="w-3 h-3 text-teal-400" />
-                            <span className={log.checkInGeofencePassed ? "text-slate-300 font-mono" : "text-amber-400 font-mono"}>
+                            <MapPin className="w-3 h-3 text-teal-600 dark:text-teal-400" />
+                            <span className={log.checkInGeofencePassed ? "text-slate-700 dark:text-slate-300 font-mono" : "text-amber-600 dark:text-amber-400 font-mono"}>
                               {log.checkInDistanceMeters || 0}m
                             </span>
                           </div>
-                          <div className="flex items-center gap-1 text-[10px] text-slate-400 font-mono">
-                            <ShieldCheck className="w-3 h-3 text-emerald-400" />
+                          <div className="flex items-center gap-1 text-[10px] text-slate-500 dark:text-slate-400 font-mono">
+                            <ShieldCheck className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
                             <span>Match: {log.checkInFaceMatchScore}%</span>
                           </div>
                         </div>
@@ -394,14 +394,14 @@ export const AttendanceLogsView: React.FC<AttendanceLogsViewProps> = ({
                         <span
                           className={`px-2.5 py-1 rounded-full text-[10px] font-bold inline-flex items-center gap-1 ${
                             isPresent
-                              ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                              ? "bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 border border-emerald-500/30"
                               : isLate
-                              ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
+                              ? "bg-amber-500/15 text-amber-800 dark:text-amber-300 border border-amber-500/30"
                               : isHalfDay
-                              ? "bg-blue-500/20 text-blue-300 border border-blue-500/30"
+                              ? "bg-blue-500/15 text-blue-800 dark:text-blue-300 border border-blue-500/30"
                               : isOnLeave
-                              ? "bg-purple-500/20 text-purple-300 border border-purple-500/30"
-                              : "bg-red-500/20 text-red-300 border border-red-500/30"
+                              ? "bg-purple-500/15 text-purple-800 dark:text-purple-300 border border-purple-500/30"
+                              : "bg-rose-500/15 text-rose-800 dark:text-rose-300 border border-rose-500/30"
                           }`}
                         >
                           {log.status}
@@ -411,7 +411,7 @@ export const AttendanceLogsView: React.FC<AttendanceLogsViewProps> = ({
                       <td className="py-3 px-4 text-right">
                         <button
                           onClick={() => setSelectedRecord(log)}
-                          className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-teal-300 text-xs font-bold inline-flex items-center gap-1 transition-colors cursor-pointer"
+                          className="px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-teal-700 dark:text-teal-300 text-xs font-bold inline-flex items-center gap-1 transition-colors cursor-pointer"
                         >
                           <Eye className="w-3.5 h-3.5" />
                           <span>{isBangla ? "অডিট" : "Audit"}</span>
@@ -428,24 +428,24 @@ export const AttendanceLogsView: React.FC<AttendanceLogsViewProps> = ({
 
       {/* Biometric Snapshot Audit Modal */}
       {selectedRecord && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
-          <div className="bg-slate-900 border border-slate-700 rounded-2xl p-6 w-full max-w-lg text-slate-100 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-              <h3 className="text-base font-bold text-white flex items-center gap-2">
-                <ShieldCheck className="w-5 h-5 text-teal-400" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl p-6 w-full max-w-lg text-slate-900 dark:text-slate-100 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
+              <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <ShieldCheck className="w-5 h-5 text-teal-600 dark:text-teal-400" />
                 <span>{isBangla ? "বায়োমেট্রিক উপস্থিতি অডিট রেকর্ড" : "Biometric Verification Audit Log"}</span>
               </h3>
               <button
                 onClick={() => setSelectedRecord(null)}
-                className="text-slate-400 hover:text-white"
+                className="text-slate-400 hover:text-slate-700 dark:hover:text-white cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-              <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 text-center space-y-2">
-                <span className="text-[10px] text-slate-400 block font-bold uppercase">{isBangla ? "ক্লক-ইন স্ন্যাপশট" : "Clock-In Snapshot"}</span>
+              <div className="p-3 bg-slate-50 dark:bg-slate-950 rounded-xl border border-slate-200 dark:border-slate-800 text-center space-y-2">
+                <span className="text-[10px] text-slate-500 dark:text-slate-400 block font-bold uppercase">{isBangla ? "ক্লক-ইন স্ন্যাপশট" : "Clock-In Snapshot"}</span>
                 {selectedRecord.checkInSnapshotUrl ? (
                   <img
                     src={selectedRecord.checkInSnapshotUrl}
@@ -453,65 +453,65 @@ export const AttendanceLogsView: React.FC<AttendanceLogsViewProps> = ({
                     className="w-full h-36 object-cover rounded-lg border border-teal-500/40"
                   />
                 ) : (
-                  <div className="w-full h-36 bg-slate-900 rounded-lg flex items-center justify-center text-slate-500 text-xs">
+                  <div className="w-full h-36 bg-slate-100 dark:bg-slate-900 rounded-lg flex items-center justify-center text-slate-400 dark:text-slate-500 text-xs">
                     No Snapshot
                   </div>
                 )}
-                <span className="text-[10px] text-teal-400 font-mono block">
+                <span className="text-[10px] text-teal-700 dark:text-teal-400 font-mono block">
                   Time: {selectedRecord.checkInTime || "N/A"}
                 </span>
               </div>
 
-              <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 text-center space-y-2">
-                <span className="text-[10px] text-slate-400 block font-bold uppercase">{isBangla ? "ক্লক-আউট স্ন্যাপশট" : "Clock-Out Snapshot"}</span>
+              <div className="p-3 bg-slate-50 dark:bg-slate-950 rounded-xl border border-slate-200 dark:border-slate-800 text-center space-y-2">
+                <span className="text-[10px] text-slate-500 dark:text-slate-400 block font-bold uppercase">{isBangla ? "ক্লক-আউট স্ন্যাপশট" : "Clock-Out Snapshot"}</span>
                 {selectedRecord.checkOutSnapshotUrl ? (
                   <img
                     src={selectedRecord.checkOutSnapshotUrl}
                     alt="Check out photo"
-                    className="w-full h-36 object-cover rounded-lg border border-slate-700"
+                    className="w-full h-36 object-cover rounded-lg border border-slate-200 dark:border-slate-700"
                   />
                 ) : (
-                  <div className="w-full h-36 bg-slate-900 rounded-lg flex items-center justify-center text-slate-500 text-xs">
+                  <div className="w-full h-36 bg-slate-100 dark:bg-slate-900 rounded-lg flex items-center justify-center text-slate-400 dark:text-slate-500 text-xs">
                     {selectedRecord.checkOutTime ? "No photo logged" : "Not Checked Out"}
                   </div>
                 )}
-                <span className="text-[10px] text-slate-400 font-mono block">
+                <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono block">
                   Time: {selectedRecord.checkOutTime || "Pending"}
                 </span>
               </div>
             </div>
 
-            <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-2 text-xs">
+            <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 space-y-2 text-xs">
               <div className="flex justify-between">
-                <span className="text-slate-400">{isBangla ? "কর্মচারীর নাম:" : "Employee:"}</span>
-                <span className="font-bold text-white">{selectedRecord.employeeName} ({selectedRecord.employeeCode})</span>
+                <span className="text-slate-500 dark:text-slate-400">{isBangla ? "কর্মচারীর নাম:" : "Employee:"}</span>
+                <span className="font-bold text-slate-900 dark:text-white">{selectedRecord.employeeName} ({selectedRecord.employeeCode})</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-400">{isBangla ? "তারিখ:" : "Date:"}</span>
-                <span className="font-mono text-white">{selectedRecord.date}</span>
+                <span className="text-slate-500 dark:text-slate-400">{isBangla ? "তারিখ:" : "Date:"}</span>
+                <span className="font-mono text-slate-800 dark:text-white">{selectedRecord.date}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-400">{isBangla ? "ব্রাঞ্চ ও লোকেশন:" : "Branch & City:"}</span>
-                <span className="text-teal-300">{selectedRecord.branchName}</span>
+                <span className="text-slate-500 dark:text-slate-400">{isBangla ? "ব্রাঞ্চ ও লোকেশন:" : "Branch & City:"}</span>
+                <span className="text-teal-700 dark:text-teal-300 font-semibold">{selectedRecord.branchName}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-400">{isBangla ? "বায়োমেট্রিক কনফিডেন্স স্কোর:" : "Biometric Match Confidence:"}</span>
-                <span className="font-mono font-bold text-emerald-400">{selectedRecord.checkInFaceMatchScore}%</span>
+                <span className="text-slate-500 dark:text-slate-400">{isBangla ? "বায়োমেট্রিক কনফিডেন্স স্কোর:" : "Biometric Match Confidence:"}</span>
+                <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">{selectedRecord.checkInFaceMatchScore}%</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-400">{isBangla ? "অ্যান্টি-স্পুফিং ভেরিফিকেশন:" : "Anti-Spoofing Liveness:"}</span>
-                <span className="text-emerald-400 font-bold flex items-center gap-1">
+                <span className="text-slate-500 dark:text-slate-400">{isBangla ? "অ্যান্টি-স্পুফিং ভেরিফিকেশন:" : "Anti-Spoofing Liveness:"}</span>
+                <span className="text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1">
                   <CheckCircle className="w-3.5 h-3.5" />
                   <span>{selectedRecord.checkInAntiSpoofingPassed ? "PASSED (Live Human)" : "UNVERIFIED"}</span>
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-400">{isBangla ? "জিওফেন্স দূরত্ব (মিটার):" : "Geofence Center Distance:"}</span>
-                <span className="font-mono text-white">{selectedRecord.checkInDistanceMeters} meters</span>
+                <span className="text-slate-500 dark:text-slate-400">{isBangla ? "জিওফেন্স দূরত্ব (মিটার):" : "Geofence Center Distance:"}</span>
+                <span className="font-mono text-slate-800 dark:text-white">{selectedRecord.checkInDistanceMeters} meters</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-400">{isBangla ? "জিপিএস স্থানাঙ্ক (GPS Coordinates):" : "GPS Lat/Lng:"}</span>
-                <span className="font-mono text-slate-300 text-[11px]">
+                <span className="text-slate-500 dark:text-slate-400">{isBangla ? "জিপিএস স্থানাঙ্ক (GPS Coordinates):" : "GPS Lat/Lng:"}</span>
+                <span className="font-mono text-slate-700 dark:text-slate-300 text-[11px]">
                   {selectedRecord.checkInLat?.toFixed(5)}, {selectedRecord.checkInLng?.toFixed(5)}
                 </span>
               </div>
@@ -521,7 +521,7 @@ export const AttendanceLogsView: React.FC<AttendanceLogsViewProps> = ({
               <button
                 type="button"
                 onClick={() => setSelectedRecord(null)}
-                className="px-5 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-bold text-xs"
+                className="px-5 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-white rounded-xl font-bold text-xs cursor-pointer transition-colors"
               >
                 {isBangla ? "বন্ধ করুন" : "Close Audit View"}
               </button>

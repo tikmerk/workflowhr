@@ -152,7 +152,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   return (
     <div id="executive-dashboard-view" className="space-y-6 animate-in fade-in duration-300">
       {/* Top Banner: Greeting & Active Branch Snapshot */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 border border-slate-800 p-6 sm:p-8">
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-teal-50 via-white to-emerald-50 dark:from-slate-900 dark:via-slate-850 dark:to-slate-900 border border-teal-100 dark:border-slate-800 p-6 sm:p-8 shadow-xs">
         {/* Subtle Background Glow */}
         <div className="absolute top-0 right-0 -mr-16 -mt-16 w-80 h-80 bg-teal-500/10 rounded-full blur-3xl pointer-events-none"></div>
         <div className="absolute bottom-0 left-1/3 -mb-16 w-60 h-60 bg-blue-500/10 rounded-full blur-3xl pointer-events-none"></div>
@@ -160,20 +160,20 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         <div className="relative z-10 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
           <div className="space-y-2">
             <div className="flex items-center gap-2">
-              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-teal-500/20 text-teal-300 border border-teal-500/30">
+              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-teal-500/15 text-teal-800 dark:text-teal-300 border border-teal-500/30">
                 {activeBranch.isHeadOffice ? "Headquarters Overview" : "Branch Operations Hub"}
               </span>
-              <span className="text-xs text-slate-400">
+              <span className="text-xs text-slate-500 dark:text-slate-400">
                 {new Date().toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric", year: "numeric" })}
               </span>
             </div>
 
-            <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-              Welcome back, <span className="text-teal-400">{activeUser.fullName}</span>
+            <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">
+              Welcome back, <span className="text-teal-600 dark:text-teal-400">{activeUser.fullName}</span>
             </h1>
-            <p className="text-xs sm:text-sm text-slate-300 max-w-2xl leading-relaxed">
+            <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 max-w-2xl leading-relaxed">
               Monitoring workforce operations for{" "}
-              <strong className="text-white">{activeBranch.name}</strong>. Centralized biometric
+              <strong className="text-slate-900 dark:text-white">{activeBranch.name}</strong>. Centralized biometric
               attendance, dynamic geofencing, and automated payroll pipelines are active.
             </p>
           </div>
@@ -189,9 +189,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
             <button
               onClick={handleOpenAi}
-              className="px-4 py-2.5 bg-slate-800 hover:bg-slate-750 border border-teal-500/30 text-teal-300 text-xs font-bold rounded-xl shadow flex items-center gap-2 transition-all hover:border-teal-400 cursor-pointer"
+              className="px-4 py-2.5 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-750 border border-teal-500/30 text-teal-700 dark:text-teal-300 text-xs font-bold rounded-xl shadow flex items-center gap-2 transition-all hover:border-teal-400 cursor-pointer"
             >
-              <Sparkles className="w-4 h-4 text-teal-400" />
+              <Sparkles className="w-4 h-4 text-teal-500 dark:text-teal-400" />
               <span>AI Workforce Insights</span>
             </button>
           </div>
@@ -203,23 +203,23 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         {/* Card 1: Total Staff */}
         <div
           onClick={() => handleNavigation("employees")}
-          className="p-5 rounded-2xl bg-slate-900/90 border border-slate-800 hover:border-teal-500/40 transition-all cursor-pointer group"
+          className="p-5 rounded-2xl bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 hover:border-teal-500/40 shadow-xs transition-all cursor-pointer group"
         >
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+            <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
               Total Workforce
             </span>
-            <div className="p-2.5 rounded-xl bg-blue-500/10 text-blue-400 group-hover:scale-110 transition-transform">
+            <div className="p-2.5 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 group-hover:scale-110 transition-transform">
               <Users className="w-5 h-5" />
             </div>
           </div>
           <div className="mt-3 flex items-baseline gap-2">
-            <span className="text-2xl font-black text-white">{totalStaffCount}</span>
-            <span className="text-xs text-slate-400">Employees</span>
+            <span className="text-2xl font-black text-slate-900 dark:text-white">{totalStaffCount}</span>
+            <span className="text-xs text-slate-500 dark:text-slate-400">Employees</span>
           </div>
-          <div className="mt-2 flex items-center justify-between text-[11px] text-slate-400 pt-2 border-t border-slate-800">
+          <div className="mt-2 flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 pt-2 border-t border-slate-100 dark:border-slate-800">
             <span>Across Regional Branches</span>
-            <span className="text-teal-400 font-semibold flex items-center gap-0.5">
+            <span className="text-teal-600 dark:text-teal-400 font-semibold flex items-center gap-0.5">
               Manage <ArrowUpRight className="w-3 h-3" />
             </span>
           </div>
@@ -228,27 +228,27 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         {/* Card 2: Today's Attendance & Punctuality */}
         <div
           onClick={() => handleNavigation("attendance-logs")}
-          className="p-5 rounded-2xl bg-slate-900/90 border border-slate-800 hover:border-emerald-500/40 transition-all cursor-pointer group"
+          className="p-5 rounded-2xl bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 hover:border-emerald-500/40 shadow-xs transition-all cursor-pointer group"
         >
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+            <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
               Live Attendance
             </span>
-            <div className="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-400 group-hover:scale-110 transition-transform">
+            <div className="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 group-hover:scale-110 transition-transform">
               <Clock className="w-5 h-5" />
             </div>
           </div>
           <div className="mt-3 flex items-baseline gap-2">
-            <span className="text-2xl font-black text-white">{presentCount + lateCount}</span>
-            <span className="text-xs text-emerald-400 font-semibold">
+            <span className="text-2xl font-black text-slate-900 dark:text-white">{presentCount + lateCount}</span>
+            <span className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold">
               ({punctualityRate}% On-Time)
             </span>
           </div>
-          <div className="mt-2 flex items-center justify-between text-[11px] text-slate-400 pt-2 border-t border-slate-800">
+          <div className="mt-2 flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 pt-2 border-t border-slate-100 dark:border-slate-800">
             <span>
               {lateCount} Late • {onLeaveCount} On Leave
             </span>
-            <span className="text-emerald-400 font-semibold flex items-center gap-0.5">
+            <span className="text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-0.5">
               Logs <ArrowUpRight className="w-3 h-3" />
             </span>
           </div>
@@ -257,25 +257,25 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         {/* Card 3: Monthly Payroll Budget */}
         <div
           onClick={() => handleNavigation("payroll")}
-          className="p-5 rounded-2xl bg-slate-900/90 border border-slate-800 hover:border-teal-500/40 transition-all cursor-pointer group"
+          className="p-5 rounded-2xl bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 hover:border-teal-500/40 shadow-xs transition-all cursor-pointer group"
         >
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+            <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
               August Payroll
             </span>
-            <div className="p-2.5 rounded-xl bg-teal-500/10 text-teal-400 group-hover:scale-110 transition-transform">
+            <div className="p-2.5 rounded-xl bg-teal-500/10 text-teal-600 dark:text-teal-400 group-hover:scale-110 transition-transform">
               <CreditCard className="w-5 h-5" />
             </div>
           </div>
           <div className="mt-3 flex items-baseline gap-1">
-            <span className="text-xs font-bold text-teal-400">৳</span>
-            <span className="text-2xl font-black text-white">
+            <span className="text-xs font-bold text-teal-600 dark:text-teal-400">৳</span>
+            <span className="text-2xl font-black text-slate-900 dark:text-white">
               {(totalPayrollPayout ?? 0).toLocaleString()}
             </span>
           </div>
-          <div className="mt-2 flex items-center justify-between text-[11px] text-slate-400 pt-2 border-t border-slate-800">
+          <div className="mt-2 flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 pt-2 border-t border-slate-100 dark:border-slate-800">
             <span>Auto-computed with PF & Tax</span>
-            <span className="text-teal-400 font-semibold flex items-center gap-0.5">
+            <span className="text-teal-600 dark:text-teal-400 font-semibold flex items-center gap-0.5">
               Disburse <ArrowUpRight className="w-3 h-3" />
             </span>
           </div>
@@ -284,23 +284,23 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         {/* Card 4: Active Projects & Tasks */}
         <div
           onClick={() => handleNavigation("projects-tasks")}
-          className="p-5 rounded-2xl bg-slate-900/90 border border-slate-800 hover:border-blue-500/40 transition-all cursor-pointer group"
+          className="p-5 rounded-2xl bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 hover:border-blue-500/40 shadow-xs transition-all cursor-pointer group"
         >
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+            <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
               Project Delivery
             </span>
-            <div className="p-2.5 rounded-xl bg-indigo-500/10 text-indigo-400 group-hover:scale-110 transition-transform">
+            <div className="p-2.5 rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 group-hover:scale-110 transition-transform">
               <TrendingUp className="w-5 h-5" />
             </div>
           </div>
           <div className="mt-3 flex items-baseline gap-2">
-            <span className="text-2xl font-black text-white">{(projects || []).length}</span>
-            <span className="text-xs text-blue-400 font-semibold">Active Initiatives</span>
+            <span className="text-2xl font-black text-slate-900 dark:text-white">{(projects || []).length}</span>
+            <span className="text-xs text-blue-600 dark:text-blue-400 font-semibold">Active Initiatives</span>
           </div>
-          <div className="mt-2 flex items-center justify-between text-[11px] text-slate-400 pt-2 border-t border-slate-800">
+          <div className="mt-2 flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 pt-2 border-t border-slate-100 dark:border-slate-800">
             <span>Enterprise Roadmaps</span>
-            <span className="text-blue-400 font-semibold flex items-center gap-0.5">
+            <span className="text-blue-600 dark:text-blue-400 font-semibold flex items-center gap-0.5">
               Kanban <ArrowUpRight className="w-3 h-3" />
             </span>
           </div>
@@ -312,17 +312,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         {/* Left: Multi-Branch Status & Realtime Attendance Stream (8 cols) */}
         <div className="lg:col-span-8 space-y-6">
           {/* Multi-Branch Hierarchy Grid */}
-          <div className="p-6 rounded-2xl bg-slate-900/90 border border-slate-800 space-y-4">
+          <div className="p-6 rounded-2xl bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Building2 className="w-5 h-5 text-teal-400" />
-                <h3 className="text-base font-bold text-white">
+                <Building2 className="w-5 h-5 text-teal-600 dark:text-teal-400" />
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">
                   Multi-Branch Infrastructure & Geofencing Status
                 </h3>
               </div>
               <button
                 onClick={() => handleNavigation("branches-geofence")}
-                className="text-xs text-teal-400 hover:text-teal-300 font-semibold flex items-center gap-1 cursor-pointer"
+                className="text-xs text-teal-600 dark:text-teal-400 hover:text-teal-700 dark:hover:text-teal-300 font-semibold flex items-center gap-1 cursor-pointer"
               >
                 Configure <ArrowUpRight className="w-3.5 h-3.5" />
               </button>
@@ -334,37 +334,37 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   key={br.id}
                   className={`p-4 rounded-xl border transition-all ${
                     activeBranch.id === br.id
-                      ? "bg-teal-500/10 border-teal-500/40 shadow-sm"
-                      : "bg-slate-800/40 border-slate-700/60"
+                      ? "bg-teal-50 dark:bg-teal-500/10 border-teal-500/40 shadow-xs"
+                      : "bg-slate-50 dark:bg-slate-800/40 border-slate-200/80 dark:border-slate-700/60"
                   }`}
                 >
                   <div className="flex items-start justify-between">
                     <div>
                       <div className="flex items-center gap-1.5">
-                        <span className="font-bold text-white text-xs">{br.name}</span>
+                        <span className="font-bold text-slate-900 dark:text-white text-xs">{br.name}</span>
                         {br.isHeadOffice && (
-                          <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-teal-500/20 text-teal-300 border border-teal-500/30">
+                          <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-teal-500/20 text-teal-700 dark:text-teal-300 border border-teal-500/30">
                             HQ
                           </span>
                         )}
                       </div>
-                      <p className="text-[11px] text-slate-400 mt-0.5">{br.city}, Bangladesh</p>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">{br.city}, Bangladesh</p>
                     </div>
-                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
                   </div>
 
-                  <div className="mt-3 grid grid-cols-3 gap-2 text-center text-[10px] pt-2 border-t border-slate-800">
-                    <div className="p-1.5 rounded bg-slate-900/60">
-                      <span className="text-slate-400 block">Radius</span>
-                      <span className="font-bold text-teal-300">{br.geofenceRadiusMeters || 100}m</span>
+                  <div className="mt-3 grid grid-cols-3 gap-2 text-center text-[10px] pt-2 border-t border-slate-200/80 dark:border-slate-800">
+                    <div className="p-1.5 rounded bg-white dark:bg-slate-900/60 border border-slate-200/60 dark:border-transparent">
+                      <span className="text-slate-500 dark:text-slate-400 block">Radius</span>
+                      <span className="font-bold text-teal-700 dark:text-teal-300">{br.geofenceRadiusMeters || 100}m</span>
                     </div>
-                    <div className="p-1.5 rounded bg-slate-900/60">
-                      <span className="text-slate-400 block">Staff</span>
-                      <span className="font-bold text-white">{br.totalEmployees || 0}</span>
+                    <div className="p-1.5 rounded bg-white dark:bg-slate-900/60 border border-slate-200/60 dark:border-transparent">
+                      <span className="text-slate-500 dark:text-slate-400 block">Staff</span>
+                      <span className="font-bold text-slate-900 dark:text-white">{br.totalEmployees || 0}</span>
                     </div>
-                    <div className="p-1.5 rounded bg-slate-900/60">
-                      <span className="text-slate-400 block">Manager</span>
-                      <span className="font-bold text-slate-200 truncate block">
+                    <div className="p-1.5 rounded bg-white dark:bg-slate-900/60 border border-slate-200/60 dark:border-transparent">
+                      <span className="text-slate-500 dark:text-slate-400 block">Manager</span>
+                      <span className="font-bold text-slate-700 dark:text-slate-200 truncate block">
                         {(br.managerName || "HR Lead").split(" ")[0]}
                       </span>
                     </div>
@@ -375,20 +375,20 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
 
           {/* Real-time Biometric Attendance Live Stream */}
-          <div className="p-6 rounded-2xl bg-slate-900/90 border border-slate-800 space-y-4">
+          <div className="p-6 rounded-2xl bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <ScanFace className="w-5 h-5 text-emerald-400" />
-                <h3 className="text-base font-bold text-white">
+                <ScanFace className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">
                   Today's Biometric Attendance Feed
                 </h3>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span> Live
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping"></span> Live
                 </span>
               </div>
               <button
                 onClick={() => handleNavigation("attendance-logs")}
-                className="text-xs text-emerald-400 hover:text-emerald-300 font-semibold flex items-center gap-1 cursor-pointer"
+                className="text-xs text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 font-semibold flex items-center gap-1 cursor-pointer"
               >
                 All Logs <ArrowUpRight className="w-3.5 h-3.5" />
               </button>
@@ -398,7 +398,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               {(todayAttendance || []).map((rec) => (
                 <div
                   key={rec.id}
-                  className="p-3.5 rounded-xl bg-slate-800/50 border border-slate-700/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
+                  className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
                 >
                   <div className="flex items-center gap-3">
                     <div className="relative">
@@ -407,20 +407,20 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                         alt={rec.employeeName}
                         className="w-10 h-10 rounded-xl object-cover border-2 border-emerald-500/40"
                       />
-                      <div className="absolute -bottom-1 -right-1 bg-slate-900 rounded-full p-0.5 border border-slate-700">
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                      <div className="absolute -bottom-1 -right-1 bg-white dark:bg-slate-900 rounded-full p-0.5 border border-slate-200 dark:border-slate-700">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 dark:text-emerald-400" />
                       </div>
                     </div>
 
                     <div>
-                      <div className="font-bold text-white flex items-center gap-2">
+                      <div className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
                         <span>{rec.employeeName}</span>
-                        <span className="text-[10px] font-mono text-slate-400">
+                        <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400">
                           ({rec.employeeCode})
                         </span>
                       </div>
-                      <div className="text-[11px] text-slate-400 flex items-center gap-2 mt-0.5">
-                        <span className="text-teal-300">{rec.departmentName}</span>
+                      <div className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-2 mt-0.5">
+                        <span className="text-teal-700 dark:text-teal-300 font-medium">{rec.departmentName}</span>
                         <span>•</span>
                         <span>{(rec.branchName || "Headquarters").split("(")[0]}</span>
                       </div>
@@ -429,11 +429,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
                   <div className="flex items-center justify-between sm:justify-end gap-3 text-right">
                     <div>
-                      <div className="font-mono font-bold text-slate-200">
+                      <div className="font-mono font-bold text-slate-800 dark:text-slate-200">
                         {rec.checkInTime}
                       </div>
-                      <div className="text-[10px] text-slate-400 flex items-center gap-1">
-                        <MapPin className="w-3 h-3 text-emerald-400" />
+                      <div className="text-[10px] text-slate-500 dark:text-slate-400 flex items-center gap-1">
+                        <MapPin className="w-3 h-3 text-emerald-500 dark:text-emerald-400" />
                         <span>{rec.checkInDistanceMeters || 12}m from beacon</span>
                       </div>
                     </div>
@@ -441,8 +441,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     <span
                       className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
                         rec.status === "PRESENT"
-                          ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
-                          : "bg-amber-500/20 text-amber-300 border border-amber-500/30"
+                          ? "bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 border border-emerald-500/30"
+                          : "bg-amber-500/15 text-amber-800 dark:text-amber-300 border border-amber-500/30"
                       }`}
                     >
                       {rec.status === "PRESENT" ? "On Time" : `Late (${rec.lateMinutes || 15}m)`}
@@ -457,39 +457,39 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         {/* Right Column: Pending Approvals, AI Advisor Card & Quick Tools (4 cols) */}
         <div className="lg:col-span-4 space-y-6">
           {/* Gemini AI Advisor Highlight Card */}
-          <div className="p-6 rounded-2xl bg-gradient-to-b from-teal-950/40 via-slate-900 to-slate-900 border border-teal-500/30 space-y-4">
+          <div className="p-6 rounded-2xl bg-gradient-to-b from-teal-50 via-white to-white dark:from-teal-950/40 dark:via-slate-900 dark:to-slate-900 border border-teal-200 dark:border-teal-500/30 space-y-4 shadow-xs">
             <div className="flex items-center gap-2.5">
-              <div className="p-2 rounded-xl bg-teal-500/20 text-teal-400">
+              <div className="p-2 rounded-xl bg-teal-500/15 text-teal-700 dark:text-teal-400">
                 <Sparkles className="w-5 h-5" />
               </div>
               <div>
-                <h4 className="text-sm font-bold text-white">Gemini Workforce Intelligence</h4>
-                <p className="text-[10px] text-teal-400 font-medium">Real-Time Autonomous Analytics</p>
+                <h4 className="text-sm font-bold text-slate-900 dark:text-white">Gemini Workforce Intelligence</h4>
+                <p className="text-[10px] text-teal-700 dark:text-teal-400 font-medium">Real-Time Autonomous Analytics</p>
               </div>
             </div>
 
-            <p className="text-xs text-slate-300 leading-relaxed">
+            <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
               "Punctuality rate across all branches is at <strong>96.2%</strong> today. Chittagong
               branch achieved 100% on-time check-in. Recommend reviewing late rules for field logistics."
             </p>
 
             <button
               onClick={handleOpenAi}
-              className="w-full py-2.5 px-4 bg-teal-600/30 hover:bg-teal-600/50 border border-teal-500/40 text-teal-200 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer"
+              className="w-full py-2.5 px-4 bg-teal-500/15 hover:bg-teal-500/25 border border-teal-500/40 text-teal-800 dark:text-teal-200 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer"
             >
-              <Sparkles className="w-3.5 h-3.5 text-teal-400" />
+              <Sparkles className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
               <span>Launch AI HR Advisor</span>
             </button>
           </div>
 
           {/* Pending Leave Requests */}
-          <div className="p-6 rounded-2xl bg-slate-900/90 border border-slate-800 space-y-4">
+          <div className="p-6 rounded-2xl bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <CalendarCheck className="w-5 h-5 text-amber-400" />
-                <h4 className="text-sm font-bold text-white">Pending Leave Requests</h4>
+                <CalendarCheck className="w-5 h-5 text-amber-500" />
+                <h4 className="text-sm font-bold text-slate-900 dark:text-white">Pending Leave Requests</h4>
               </div>
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300">
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-800 dark:text-amber-300">
                 {pendingLeaves} Action Required
               </span>
             </div>
@@ -501,22 +501,22 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 .map((req) => (
                   <div
                     key={req.id}
-                    className="p-3 rounded-xl bg-slate-800/60 border border-slate-700/60 text-xs space-y-2"
+                    className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60 text-xs space-y-2"
                   >
                     <div className="flex items-center justify-between">
-                      <span className="font-bold text-white">{req.employeeName}</span>
-                      <span className="text-[10px] font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded">
+                      <span className="font-bold text-slate-900 dark:text-white">{req.employeeName}</span>
+                      <span className="text-[10px] font-bold text-amber-700 dark:text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded">
                         {req.leaveType}
                       </span>
                     </div>
-                    <p className="text-[11px] text-slate-300 italic">"{req.reason}"</p>
-                    <div className="flex items-center justify-between text-[10px] text-slate-400 pt-1">
+                    <p className="text-[11px] text-slate-600 dark:text-slate-300 italic">"{req.reason}"</p>
+                    <div className="flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400 pt-1">
                       <span>
                         {req.startDate} ({req.totalDays} Day)
                       </span>
                       <button
                         onClick={() => handleNavigation("leaves")}
-                        className="text-teal-400 hover:underline font-semibold cursor-pointer"
+                        className="text-teal-600 dark:text-teal-400 hover:underline font-semibold cursor-pointer"
                       >
                         Review & Approve
                       </button>
@@ -524,7 +524,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   </div>
                 ))}
               {pendingLeaves === 0 && (
-                <div className="p-4 rounded-xl bg-slate-800/30 text-center text-slate-400 text-xs">
+                <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/30 text-center text-slate-500 dark:text-slate-400 text-xs">
                   No pending leave applications.
                 </div>
               )}
@@ -532,40 +532,40 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
 
           {/* Quick Access Utility Actions */}
-          <div className="p-6 rounded-2xl bg-slate-900/90 border border-slate-800 space-y-3">
-            <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+          <div className="p-6 rounded-2xl bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 shadow-xs space-y-3">
+            <h4 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
               Quick HR Operations
             </h4>
             <div className="grid grid-cols-2 gap-2 text-xs">
               <button
                 onClick={() => handleNavigation("certificates")}
-                className="p-3 rounded-xl bg-slate-800/60 hover:bg-slate-800 border border-slate-700 text-slate-200 hover:text-white font-semibold text-left transition-colors flex flex-col gap-1 cursor-pointer"
+                className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:text-slate-900 dark:hover:text-white font-semibold text-left transition-colors flex flex-col gap-1 cursor-pointer"
               >
-                <FileText className="w-4 h-4 text-teal-400" />
+                <FileText className="w-4 h-4 text-teal-600 dark:text-teal-400" />
                 <span>Issue Certificate</span>
               </button>
 
               <button
                 onClick={() => handleNavigation("recruitment")}
-                className="p-3 rounded-xl bg-slate-800/60 hover:bg-slate-800 border border-slate-700 text-slate-200 hover:text-white font-semibold text-left transition-colors flex flex-col gap-1 cursor-pointer"
+                className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:text-slate-900 dark:hover:text-white font-semibold text-left transition-colors flex flex-col gap-1 cursor-pointer"
               >
-                <Users className="w-4 h-4 text-blue-400" />
+                <Users className="w-4 h-4 text-blue-600 dark:text-blue-400" />
                 <span>Screen Resumes</span>
               </button>
 
               <button
                 onClick={() => handleNavigation("payroll")}
-                className="p-3 rounded-xl bg-slate-800/60 hover:bg-slate-800 border border-slate-700 text-slate-200 hover:text-white font-semibold text-left transition-colors flex flex-col gap-1 cursor-pointer"
+                className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:text-slate-900 dark:hover:text-white font-semibold text-left transition-colors flex flex-col gap-1 cursor-pointer"
               >
-                <CreditCard className="w-4 h-4 text-emerald-400" />
+                <CreditCard className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
                 <span>Process Salary</span>
               </button>
 
               <button
                 onClick={() => handleNavigation("audit-reports")}
-                className="p-3 rounded-xl bg-slate-800/60 hover:bg-slate-800 border border-slate-700 text-slate-200 hover:text-white font-semibold text-left transition-colors flex flex-col gap-1 cursor-pointer"
+                className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:text-slate-900 dark:hover:text-white font-semibold text-left transition-colors flex flex-col gap-1 cursor-pointer"
               >
-                <ShieldCheck className="w-4 h-4 text-purple-400" />
+                <ShieldCheck className="w-4 h-4 text-purple-600 dark:text-purple-400" />
                 <span>Audit Logs</span>
               </button>
             </div>

@@ -115,10 +115,10 @@ export const ProjectsTasksView: React.FC<ProjectsTasksViewProps> = ({
   }, [tasks, selectedProjectId, filteredProjects, taskSearchTerm]);
 
   const columns: Array<{ status: ProjectTask["status"]; label: string; labelBn: string; color: string }> = [
-    { status: "TODO", label: "To Do", labelBn: "করণীয় কাজ", color: "border-slate-700 bg-slate-900/60" },
-    { status: "IN_PROGRESS", label: "In Progress", labelBn: "চলমান কাজ", color: "border-teal-500/40 bg-teal-500/5" },
-    { status: "REVIEW", label: "In Review", labelBn: "পর্যালোচনা", color: "border-amber-500/40 bg-amber-500/5" },
-    { status: "DONE", label: "Completed", labelBn: "সম্পন্ন", color: "border-emerald-500/40 bg-emerald-500/5" },
+    { status: "TODO", label: "To Do", labelBn: "করণীয় কাজ", color: "border-slate-200 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-900/60" },
+    { status: "IN_PROGRESS", label: "In Progress", labelBn: "চলমান কাজ", color: "border-teal-500/30 bg-teal-500/5" },
+    { status: "REVIEW", label: "In Review", labelBn: "পর্যালোচনা", color: "border-amber-500/30 bg-amber-500/5" },
+    { status: "DONE", label: "Completed", labelBn: "সম্পন্ন", color: "border-emerald-500/30 bg-emerald-500/5" },
   ];
 
   const handleCreateProject = (e: React.FormEvent) => {
@@ -208,22 +208,22 @@ export const ProjectsTasksView: React.FC<ProjectsTasksViewProps> = ({
   return (
     <div id="projects-tasks-view" className="space-y-6 animate-in fade-in duration-300">
       {/* Top Banner & Hierarchy Controls */}
-      <div className="p-6 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 border border-slate-800 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+      <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col lg:flex-row lg:items-center justify-between gap-6">
         <div>
           <div className="flex items-center gap-2">
-            <span className="px-2.5 py-1 rounded-lg bg-teal-500/20 text-teal-300 border border-teal-500/30 text-xs font-bold flex items-center gap-1.5">
+            <span className="px-2.5 py-1 rounded-lg bg-teal-500/15 text-teal-800 dark:text-teal-300 border border-teal-500/30 text-xs font-bold flex items-center gap-1.5">
               <FolderKanban className="w-3.5 h-3.5" />
               <span>{isBangla ? "প্রজেক্ট ও টাস্ক ম্যানেজমেন্ট" : "Projects & Task Management"}</span>
             </span>
-            <span className="text-slate-500 text-xs">•</span>
-            <span className="text-xs text-slate-400">
+            <span className="text-slate-400 dark:text-slate-500 text-xs">•</span>
+            <span className="text-xs text-slate-500 dark:text-slate-400">
               {isBangla ? "ব্রাঞ্চ ➔ ডিপার্টমেন্ট ➔ প্রজেক্ট হায়ারার্কি" : "Branch ➔ Department ➔ Project Hierarchy"}
             </span>
           </div>
-          <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight mt-2">
+          <h2 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight mt-2">
             {isBangla ? "কর্পোরেট প্রজেক্ট ও স্প্রিন্ট কানবান বোর্ড" : "Enterprise Projects & Agile Sprint Board"}
           </h2>
-          <p className="text-xs text-slate-400 mt-1">
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
             {isBangla
               ? "ব্রাঞ্চ ও ডিপার্টমেন্ট অনুযায়ী নতুন প্রজেক্ট তৈরি করুন, ডেলিভারেবল এসাইন করুন এবং অগ্রগতি পর্যবেক্ষণ করুন"
               : "Create branch & department aligned projects, assign agile milestones, log billable hours & monitor execution"}
@@ -234,9 +234,9 @@ export const ProjectsTasksView: React.FC<ProjectsTasksViewProps> = ({
           <button
             type="button"
             onClick={() => setShowProjectModal(true)}
-            className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 hover:border-teal-500/40 text-teal-300 text-xs font-bold rounded-xl shadow flex items-center gap-2 transition-all cursor-pointer"
+            className="px-4 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 hover:border-teal-500/40 text-teal-700 dark:text-teal-300 text-xs font-bold rounded-xl shadow-xs flex items-center gap-2 transition-all cursor-pointer"
           >
-            <Plus className="w-4 h-4 text-teal-400" />
+            <Plus className="w-4 h-4 text-teal-600 dark:text-teal-400" />
             <span>{isBangla ? "+ নতুন প্রজেক্ট তৈরি" : "+ Create New Project"}</span>
           </button>
 
@@ -252,11 +252,11 @@ export const ProjectsTasksView: React.FC<ProjectsTasksViewProps> = ({
       </div>
 
       {/* Dynamic 3-Level Filter Bar: Branch -> Department -> Project */}
-      <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+      <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
         {/* 1. Branch Selector */}
         <div>
-          <label className="block text-slate-400 font-bold mb-1 flex items-center gap-1.5">
-            <Building2 className="w-3.5 h-3.5 text-teal-400" />
+          <label className="block text-slate-600 dark:text-slate-400 font-bold mb-1 flex items-center gap-1.5">
+            <Building2 className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
             <span>{isBangla ? "ব্রাঞ্চ সিলেক্ট করুন:" : "1. Select Branch:"}</span>
           </label>
           <select
@@ -265,7 +265,7 @@ export const ProjectsTasksView: React.FC<ProjectsTasksViewProps> = ({
               setSelectedBranchId(e.target.value);
               setSelectedProjectId("ALL");
             }}
-            className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-teal-500"
+            className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white focus:outline-none focus:border-teal-500"
           >
             <option value="ALL">{isBangla ? "সকল ব্রাঞ্চ (All Branches)" : "All Branches"}</option>
             {branches.map((b) => (
@@ -278,8 +278,8 @@ export const ProjectsTasksView: React.FC<ProjectsTasksViewProps> = ({
 
         {/* 2. Department Selector */}
         <div>
-          <label className="block text-slate-400 font-bold mb-1 flex items-center gap-1.5">
-            <Layers className="w-3.5 h-3.5 text-blue-400" />
+          <label className="block text-slate-600 dark:text-slate-400 font-bold mb-1 flex items-center gap-1.5">
+            <Layers className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
             <span>{isBangla ? "ডিপার্টমেন্ট সিলেক্ট করুন:" : "2. Select Department:"}</span>
           </label>
           <select
@@ -288,7 +288,7 @@ export const ProjectsTasksView: React.FC<ProjectsTasksViewProps> = ({
               setSelectedDeptId(e.target.value);
               setSelectedProjectId("ALL");
             }}
-            className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-teal-500"
+            className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white focus:outline-none focus:border-teal-500"
           >
             <option value="ALL">{isBangla ? "সকল ডিপার্টমেন্ট (All Departments)" : "All Departments"}</option>
             {departments.map((d) => (
@@ -301,14 +301,14 @@ export const ProjectsTasksView: React.FC<ProjectsTasksViewProps> = ({
 
         {/* 3. Project Selector */}
         <div>
-          <label className="block text-slate-400 font-bold mb-1 flex items-center gap-1.5">
-            <FolderKanban className="w-3.5 h-3.5 text-emerald-400" />
+          <label className="block text-slate-600 dark:text-slate-400 font-bold mb-1 flex items-center gap-1.5">
+            <FolderKanban className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
             <span>{isBangla ? "প্রজেক্ট সিলেক্ট করুন:" : "3. Select Project:"}</span>
           </label>
           <select
             value={selectedProjectId}
             onChange={(e) => setSelectedProjectId(e.target.value)}
-            className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white font-semibold focus:outline-none focus:border-teal-500"
+            className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white font-semibold focus:outline-none focus:border-teal-500"
           >
             <option value="ALL">
               {isBangla ? `সকল প্রজেক্ট (${filteredProjects.length} টি)` : `All Active Projects (${filteredProjects.length})`}
@@ -323,8 +323,8 @@ export const ProjectsTasksView: React.FC<ProjectsTasksViewProps> = ({
 
         {/* 4. Task Search */}
         <div>
-          <label className="block text-slate-400 font-bold mb-1 flex items-center gap-1.5">
-            <Search className="w-3.5 h-3.5 text-amber-400" />
+          <label className="block text-slate-600 dark:text-slate-400 font-bold mb-1 flex items-center gap-1.5">
+            <Search className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
             <span>{isBangla ? "টাস্ক বা কর্মী খুঁজুন:" : "4. Search Tasks:"}</span>
           </label>
           <div className="relative">
@@ -333,12 +333,12 @@ export const ProjectsTasksView: React.FC<ProjectsTasksViewProps> = ({
               value={taskSearchTerm}
               onChange={(e) => setTaskSearchTerm(e.target.value)}
               placeholder={isBangla ? "টাস্ক টাইটেল বা কর্মী..." : "Task title, assignee..."}
-              className="w-full bg-slate-950 border border-slate-700 rounded-xl pl-3 pr-8 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-teal-500"
+              className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl pl-3 pr-8 py-2 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-teal-500"
             />
             {taskSearchTerm && (
               <button
                 onClick={() => setTaskSearchTerm("")}
-                className="absolute right-2.5 top-2.5 text-slate-400 hover:text-white"
+                className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-700 dark:hover:text-white cursor-pointer"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
@@ -349,44 +349,44 @@ export const ProjectsTasksView: React.FC<ProjectsTasksViewProps> = ({
 
       {/* Selected Project Overview Card (When a specific project is selected) */}
       {activeProject && (
-        <div className="p-5 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 border border-teal-500/30 shadow-lg space-y-4">
+        <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-teal-500/30 shadow-xs space-y-4">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
               <div className="flex flex-wrap items-center gap-2">
-                <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-teal-500/20 text-teal-300 border border-teal-500/30">
+                <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-teal-500/15 text-teal-800 dark:text-teal-300 border border-teal-500/30">
                   {activeProject.code || "PRJ"}
                 </span>
-                <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-slate-800 text-slate-300">
+                <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
                   {activeProject.branchName || "Branch"}
                 </span>
-                <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-slate-800 text-slate-300">
+                <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
                   {activeProject.departmentName || "Department"}
                 </span>
                 <span
                   className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
                     activeProject.priority === "URGENT" || activeProject.priority === "HIGH"
-                      ? "bg-red-500/20 text-red-300 border border-red-500/30"
-                      : "bg-blue-500/20 text-blue-300 border border-blue-500/30"
+                      ? "bg-red-500/15 text-red-800 dark:text-red-300 border border-red-500/30"
+                      : "bg-blue-500/15 text-blue-800 dark:text-blue-300 border border-blue-500/30"
                   }`}
                 >
                   {activeProject.priority || "MEDIUM"}
                 </span>
               </div>
 
-              <h3 className="text-lg font-black text-white mt-1.5">{activeProject.name}</h3>
-              <p className="text-xs text-slate-400 mt-0.5 max-w-3xl">{activeProject.description}</p>
+              <h3 className="text-lg font-black text-slate-900 dark:text-white mt-1.5">{activeProject.name}</h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 max-w-3xl">{activeProject.description}</p>
             </div>
 
             <div className="flex items-center gap-4 shrink-0">
               <div className="text-right">
-                <span className="text-[10px] text-slate-400 block">{isBangla ? "প্রজেক্ট বাজেট" : "Allocated Budget"}</span>
-                <span className="text-base font-black text-emerald-400 font-mono">
+                <span className="text-[10px] text-slate-500 dark:text-slate-400 block">{isBangla ? "প্রজেক্ট বাজেট" : "Allocated Budget"}</span>
+                <span className="text-base font-black text-emerald-600 dark:text-emerald-400 font-mono">
                   ৳{(activeProject.budget || 0).toLocaleString()} BDT
                 </span>
               </div>
               <div className="text-right">
-                <span className="text-[10px] text-slate-400 block">{isBangla ? "ডেডলাইন" : "Deadline"}</span>
-                <span className="text-xs font-bold text-amber-400 font-mono">
+                <span className="text-[10px] text-slate-500 dark:text-slate-400 block">{isBangla ? "ডেডলাইন" : "Deadline"}</span>
+                <span className="text-xs font-bold text-amber-600 dark:text-amber-400 font-mono">
                   {activeProject.deadline || "Ongoing"}
                 </span>
               </div>
@@ -398,7 +398,7 @@ export const ProjectsTasksView: React.FC<ProjectsTasksViewProps> = ({
                       setSelectedProjectId("ALL");
                     }
                   }}
-                  className="p-2 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20"
+                  className="p-2 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-600 dark:text-red-400 border border-red-500/20 cursor-pointer"
                   title="Delete Project"
                 >
                   <Trash2 className="w-4 h-4" />
@@ -408,13 +408,13 @@ export const ProjectsTasksView: React.FC<ProjectsTasksViewProps> = ({
           </div>
 
           {/* Progress Bar & Team Members */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-3 border-t border-slate-800 text-xs">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-3 border-t border-slate-100 dark:border-slate-800 text-xs">
             <div>
-              <div className="flex justify-between font-bold text-slate-300 mb-1.5">
+              <div className="flex justify-between font-bold text-slate-700 dark:text-slate-300 mb-1.5">
                 <span>{isBangla ? "প্রজেক্ট অগ্রগতি" : "Sprint Execution Progress"}</span>
-                <span className="text-teal-400 font-mono">{activeProject.progressPercentage || 0}%</span>
+                <span className="text-teal-600 dark:text-teal-400 font-mono">{activeProject.progressPercentage || 0}%</span>
               </div>
-              <div className="w-full bg-slate-950 h-2.5 rounded-full overflow-hidden border border-slate-800">
+              <div className="w-full bg-slate-100 dark:bg-slate-950 h-2.5 rounded-full overflow-hidden border border-slate-200 dark:border-slate-800">
                 <div
                   className="h-full bg-gradient-to-r from-teal-500 to-emerald-400 transition-all duration-500"
                   style={{ width: `${activeProject.progressPercentage || 0}%` }}
@@ -424,11 +424,11 @@ export const ProjectsTasksView: React.FC<ProjectsTasksViewProps> = ({
 
             <div className="flex items-center justify-between">
               <div>
-                <span className="text-slate-400 block text-[10px]">{isBangla ? "প্রজেক্ট ম্যানেজার" : "Project Manager"}</span>
-                <span className="font-bold text-white text-xs">{activeProject.managerName || "HR Lead"}</span>
+                <span className="text-slate-500 dark:text-slate-400 block text-[10px]">{isBangla ? "প্রজেক্ট ম্যানেজার" : "Project Manager"}</span>
+                <span className="font-bold text-slate-900 dark:text-white text-xs">{activeProject.managerName || "HR Lead"}</span>
               </div>
               <div>
-                <span className="text-slate-400 block text-[10px]">{isBangla ? "টিম মেম্বার্স" : "Team Members"}</span>
+                <span className="text-slate-500 dark:text-slate-400 block text-[10px]">{isBangla ? "টিম মেম্বার্স" : "Team Members"}</span>
                 <div className="flex items-center -space-x-2 mt-0.5">
                   {(activeProject.teamMembers || []).slice(0, 5).map((m, idx) => (
                     <img
@@ -436,11 +436,11 @@ export const ProjectsTasksView: React.FC<ProjectsTasksViewProps> = ({
                       src={m.avatarUrl}
                       alt={m.name}
                       title={m.name}
-                      className="w-6 h-6 rounded-full border-2 border-slate-900 object-cover"
+                      className="w-6 h-6 rounded-full border-2 border-white dark:border-slate-900 object-cover"
                     />
                   ))}
                   {(activeProject.teamMembers || []).length > 5 && (
-                    <span className="w-6 h-6 rounded-full bg-slate-800 border-2 border-slate-900 text-[10px] text-teal-300 font-bold flex items-center justify-center">
+                    <span className="w-6 h-6 rounded-full bg-slate-100 dark:bg-slate-800 border-2 border-white dark:border-slate-900 text-[10px] text-teal-700 dark:text-teal-300 font-bold flex items-center justify-center">
                       +{(activeProject.teamMembers || []).length - 5}
                     </span>
                   )}
@@ -460,60 +460,60 @@ export const ProjectsTasksView: React.FC<ProjectsTasksViewProps> = ({
               key={col.status}
               className={`p-4 rounded-2xl border ${col.color} flex flex-col min-h-[500px] transition-all`}
             >
-              <div className="flex items-center justify-between pb-3 border-b border-slate-800 mb-3">
-                <span className="text-xs font-bold text-slate-200">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800 mb-3">
+                <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
                   {isBangla ? col.labelBn : col.label}
                 </span>
-                <span className="w-5 h-5 rounded-full bg-slate-800 text-teal-400 font-bold text-[10px] flex items-center justify-center">
+                <span className="w-5 h-5 rounded-full bg-slate-200 dark:bg-slate-800 text-teal-700 dark:text-teal-400 font-bold text-[10px] flex items-center justify-center">
                   {colTasks.length}
                 </span>
               </div>
 
               <div className="space-y-3 flex-1 overflow-y-auto">
                 {colTasks.length === 0 ? (
-                  <div className="py-12 text-center text-slate-500 text-xs">
+                  <div className="py-12 text-center text-slate-400 dark:text-slate-500 text-xs">
                     {isBangla ? "কোনো টাস্ক নেই" : "No tasks in this column"}
                   </div>
                 ) : (
                   colTasks.map((task) => (
                     <div
                       key={task.id}
-                      className="p-4 rounded-xl bg-slate-800/80 border border-slate-700/80 hover:border-teal-500/50 transition-all space-y-3 shadow-md"
+                      className="p-4 rounded-xl bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/80 hover:border-teal-500/50 transition-all space-y-3 shadow-xs"
                     >
                       <div className="flex items-start justify-between gap-2">
-                        <span className="text-[9px] font-bold px-2 py-0.5 rounded bg-slate-900 text-teal-300 truncate max-w-[140px]">
+                        <span className="text-[9px] font-bold px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-900 text-teal-700 dark:text-teal-300 truncate max-w-[140px]">
                           {task.projectName}
                         </span>
                         <span
                           className={`text-[9px] font-bold px-1.5 py-0.5 rounded shrink-0 ${
                             task.priority === "URGENT" || task.priority === "HIGH"
-                              ? "bg-red-500/20 text-red-300"
-                              : "bg-blue-500/20 text-blue-300"
+                              ? "bg-red-500/15 text-red-800 dark:text-red-300"
+                              : "bg-blue-500/15 text-blue-800 dark:text-blue-300"
                           }`}
                         >
                           {task.priority}
                         </span>
                       </div>
 
-                      <h4 className="font-bold text-white text-xs leading-snug">{task.title}</h4>
+                      <h4 className="font-bold text-slate-900 dark:text-white text-xs leading-snug">{task.title}</h4>
                       {task.description && (
-                        <p className="text-[11px] text-slate-400 line-clamp-2">{task.description}</p>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-2">{task.description}</p>
                       )}
 
-                      <div className="flex items-center justify-between pt-2 border-t border-slate-700/60 text-xs">
+                      <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-700/60 text-xs">
                         <div className="flex items-center gap-1.5">
                           <img
                             src={task.assignedToAvatar}
                             alt={task.assignedToName || "Assignee"}
                             className="w-5 h-5 rounded-full object-cover border border-teal-500/40"
                           />
-                          <span className="text-[10px] text-slate-300 truncate max-w-[80px]">
+                          <span className="text-[10px] text-slate-700 dark:text-slate-300 truncate max-w-[80px]">
                             {(task.assignedToName || "Unassigned").split(" ")[0]}
                           </span>
                         </div>
 
-                        <div className="flex items-center gap-1 text-[10px] text-slate-400 font-mono">
-                          <Clock className="w-3 h-3 text-teal-400" />
+                        <div className="flex items-center gap-1 text-[10px] text-slate-500 dark:text-slate-400 font-mono">
+                          <Clock className="w-3 h-3 text-teal-600 dark:text-teal-400" />
                           <span>{task.loggedHours || 0}/{task.estimatedHours || 16}h</span>
                         </div>
                       </div>
@@ -523,7 +523,7 @@ export const ProjectsTasksView: React.FC<ProjectsTasksViewProps> = ({
                         <select
                           value={task.status}
                           onChange={(e) => onUpdateTaskStatus(task.id, e.target.value as any)}
-                          className="w-full bg-slate-950 border border-slate-700 text-slate-300 text-[10px] rounded-lg px-2 py-1 focus:border-teal-500"
+                          className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-[10px] rounded-lg px-2 py-1 focus:border-teal-500"
                         >
                           <option value="TODO">{isBangla ? "মুভ: করণীয়" : "Move: To Do"}</option>
                           <option value="IN_PROGRESS">{isBangla ? "মুভ: চলমান" : "Move: In Progress"}</option>
@@ -534,7 +534,7 @@ export const ProjectsTasksView: React.FC<ProjectsTasksViewProps> = ({
                         {onDeleteTask && (
                           <button
                             onClick={() => onDeleteTask(task.id)}
-                            className="p-1 rounded text-slate-500 hover:text-red-400"
+                            className="p-1 rounded text-slate-400 hover:text-red-500 cursor-pointer"
                             title="Delete Task"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -552,15 +552,15 @@ export const ProjectsTasksView: React.FC<ProjectsTasksViewProps> = ({
 
       {/* Modal: Create New Project */}
       {showProjectModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md overflow-y-auto">
-          <div className="bg-slate-900 border border-slate-700 rounded-2xl p-6 w-full max-w-xl text-slate-100 shadow-2xl space-y-4 my-8 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs overflow-y-auto animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl p-6 w-full max-w-xl text-slate-900 dark:text-slate-100 shadow-2xl space-y-4 my-8 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
               <div>
-                <h3 className="text-base font-bold text-white flex items-center gap-2">
-                  <FolderKanban className="w-5 h-5 text-teal-400" />
+                <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                  <FolderKanban className="w-5 h-5 text-teal-600 dark:text-teal-400" />
                   <span>{isBangla ? "নতুন এন্টারপ্রাইজ প্রজেক্ট তৈরি করুন" : "Create New Enterprise Project"}</span>
                 </h3>
-                <p className="text-xs text-slate-400 mt-0.5">
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                   {isBangla
                     ? "নির্দিষ্ট ব্রাঞ্চ ও ডিপার্টমেন্টের অধীনে প্রজেক্ট কনফিগার করুন"
                     : "Configure strategic milestone aligned with specific branch & department"}
@@ -568,7 +568,7 @@ export const ProjectsTasksView: React.FC<ProjectsTasksViewProps> = ({
               </div>
               <button
                 onClick={() => setShowProjectModal(false)}
-                className="text-slate-400 hover:text-white p-1 rounded-lg"
+                className="text-slate-400 hover:text-slate-700 dark:hover:text-white p-1 rounded-lg cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -577,7 +577,7 @@ export const ProjectsTasksView: React.FC<ProjectsTasksViewProps> = ({
             <form onSubmit={handleCreateProject} className="space-y-4 text-xs">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-slate-400 font-bold mb-1">
+                  <label className="block text-slate-600 dark:text-slate-400 font-bold mb-1">
                     {isBangla ? "প্রজেক্টের নাম *" : "Project Name *"}
                   </label>
                   <input
@@ -585,20 +585,20 @@ export const ProjectsTasksView: React.FC<ProjectsTasksViewProps> = ({
                     value={newProjName}
                     onChange={(e) => setNewProjName(e.target.value)}
                     placeholder="e.g. Core ERP Cloud Migration & Mobile App"
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white"
+                    className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white"
                     required
                   />
                 </div>
 
                 <div>
-                  <label className="block text-slate-400 font-bold mb-1">
+                  <label className="block text-slate-600 dark:text-slate-400 font-bold mb-1">
                     {isBangla ? "প্রজেক্ট কোড" : "Project Code"}
                   </label>
                   <input
                     type="text"
                     value={newProjCode}
                     onChange={(e) => setNewProjCode(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white font-mono"
+                    className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white font-mono"
                     required
                   />
                 </div>
@@ -607,13 +607,13 @@ export const ProjectsTasksView: React.FC<ProjectsTasksViewProps> = ({
               {/* Branch & Department Selector */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-slate-400 font-bold mb-1">
+                  <label className="block text-slate-600 dark:text-slate-400 font-bold mb-1">
                     {isBangla ? "অধীনস্থ ব্রাঞ্চ *" : "Assigned Branch *"}
                   </label>
                   <select
                     value={newProjBranchId}
                     onChange={(e) => setNewProjBranchId(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white"
+                    className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white"
                   >
                     {branches.map((b) => (
                       <option key={b.id} value={b.id}>
@@ -624,13 +624,13 @@ export const ProjectsTasksView: React.FC<ProjectsTasksViewProps> = ({
                 </div>
 
                 <div>
-                  <label className="block text-slate-400 font-bold mb-1">
+                  <label className="block text-slate-600 dark:text-slate-400 font-bold mb-1">
                     {isBangla ? "অধীনস্থ ডিপার্টমেন্ট *" : "Assigned Department *"}
                   </label>
                   <select
                     value={newProjDeptId}
                     onChange={(e) => setNewProjDeptId(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white"
+                    className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white"
                   >
                     {departments.map((d) => (
                       <option key={d.id} value={d.id}>
@@ -644,13 +644,13 @@ export const ProjectsTasksView: React.FC<ProjectsTasksViewProps> = ({
               {/* Manager & Priority & Budget */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-slate-400 font-bold mb-1">
+                  <label className="block text-slate-600 dark:text-slate-400 font-bold mb-1">
                     {isBangla ? "প্রজেক্ট ম্যানেজার *" : "Project Manager *"}
                   </label>
                   <select
                     value={newProjManagerId}
                     onChange={(e) => setNewProjManagerId(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white"
+                    className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white"
                   >
                     {employees.map((e) => (
                       <option key={e.id} value={e.id}>
@@ -661,13 +661,13 @@ export const ProjectsTasksView: React.FC<ProjectsTasksViewProps> = ({
                 </div>
 
                 <div>
-                  <label className="block text-slate-400 font-bold mb-1">
+                  <label className="block text-slate-600 dark:text-slate-400 font-bold mb-1">
                     {isBangla ? "অগ্রাধিকার (Priority)" : "Priority Level"}
                   </label>
                   <select
                     value={newProjPriority}
                     onChange={(e) => setNewProjPriority(e.target.value as any)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white"
+                    className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white"
                   >
                     <option value="LOW">Low Priority</option>
                     <option value="MEDIUM">Medium Priority</option>
@@ -677,14 +677,14 @@ export const ProjectsTasksView: React.FC<ProjectsTasksViewProps> = ({
                 </div>
 
                 <div>
-                  <label className="block text-slate-400 font-bold mb-1">
+                  <label className="block text-slate-600 dark:text-slate-400 font-bold mb-1">
                     {isBangla ? "বাজেট (BDT ৳)" : "Budget (BDT ৳)"}
                   </label>
                   <input
                     type="number"
                     value={newProjBudget}
                     onChange={(e) => setNewProjBudget(Number(e.target.value))}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white font-mono"
+                    className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white font-mono"
                   />
                 </div>
               </div>
@@ -692,61 +692,61 @@ export const ProjectsTasksView: React.FC<ProjectsTasksViewProps> = ({
               {/* Dates */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-slate-400 font-bold mb-1">
+                  <label className="block text-slate-600 dark:text-slate-400 font-bold mb-1">
                     {isBangla ? "শুরুর তারিখ" : "Start Date"}
                   </label>
                   <input
                     type="date"
                     value={newProjStartDate}
                     onChange={(e) => setNewProjStartDate(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white"
+                    className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-slate-400 font-bold mb-1">
+                  <label className="block text-slate-600 dark:text-slate-400 font-bold mb-1">
                     {isBangla ? "ডেডলাইন / সমাপ্তি" : "Target Deadline"}
                   </label>
                   <input
                     type="date"
                     value={newProjDeadline}
                     onChange={(e) => setNewProjDeadline(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white"
+                    className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white"
                   />
                 </div>
               </div>
 
               {/* Team Members Multi-Select */}
               <div>
-                <label className="block text-slate-400 font-bold mb-1.5">
+                <label className="block text-slate-600 dark:text-slate-400 font-bold mb-1.5">
                   {isBangla ? "টিম মেম্বারদের যুক্ত করুন (মাল্টি-সিলেক্ট):" : "Assign Team Members (Multi-select):"}
                 </label>
-                <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 max-h-36 overflow-y-auto space-y-1.5">
+                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 max-h-36 overflow-y-auto space-y-1.5">
                   {employees.map((emp) => {
                     const isChecked = newProjMembers.includes(emp.id);
                     return (
                       <label
                         key={emp.id}
                         className={`flex items-center justify-between p-2 rounded-lg cursor-pointer transition-colors ${
-                          isChecked ? "bg-teal-500/10 border border-teal-500/30" : "hover:bg-slate-900"
+                          isChecked ? "bg-teal-500/10 border border-teal-500/30" : "hover:bg-slate-100 dark:hover:bg-slate-900"
                         }`}
                       >
                         <div className="flex items-center gap-2">
                           <img
                             src={emp.avatarUrl}
                             alt={emp.fullName}
-                            className="w-6 h-6 rounded-full object-cover border border-slate-700"
+                            className="w-6 h-6 rounded-full object-cover border border-slate-300 dark:border-slate-700"
                           />
                           <div>
-                            <span className="font-bold text-white text-xs block leading-tight">{emp.fullName}</span>
-                            <span className="text-[10px] text-slate-400">{emp.designationTitle} • {emp.departmentName}</span>
+                            <span className="font-bold text-slate-900 dark:text-white text-xs block leading-tight">{emp.fullName}</span>
+                            <span className="text-[10px] text-slate-500 dark:text-slate-400">{emp.designationTitle} • {emp.departmentName}</span>
                           </div>
                         </div>
                         <input
                           type="checkbox"
                           checked={isChecked}
                           onChange={() => toggleMemberSelection(emp.id)}
-                          className="rounded border-slate-700 text-teal-600 focus:ring-teal-500"
+                          className="rounded border-slate-300 dark:border-slate-700 text-teal-600 focus:ring-teal-500"
                         />
                       </label>
                     );
@@ -755,7 +755,7 @@ export const ProjectsTasksView: React.FC<ProjectsTasksViewProps> = ({
               </div>
 
               <div>
-                <label className="block text-slate-400 font-bold mb-1">
+                <label className="block text-slate-600 dark:text-slate-400 font-bold mb-1">
                   {isBangla ? "প্রজেক্টের বিবরণ ও লক্ষ্য" : "Project Objectives & Scope"}
                 </label>
                 <textarea
@@ -763,21 +763,21 @@ export const ProjectsTasksView: React.FC<ProjectsTasksViewProps> = ({
                   value={newProjDesc}
                   onChange={(e) => setNewProjDesc(e.target.value)}
                   placeholder={isBangla ? "প্রজেক্টের মূল উদ্দেশ্য ও ডেলিভারেবল সম্পর্কে লিখুন..." : "Outline key deliverables and milestones..."}
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white"
+                  className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white"
                 />
               </div>
 
-              <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
+              <div className="flex justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-800">
                 <button
                   type="button"
                   onClick={() => setShowProjectModal(false)}
-                  className="px-4 py-2.5 bg-slate-800 text-slate-300 rounded-xl font-bold hover:bg-slate-700"
+                  className="px-4 py-2.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl font-bold hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer"
                 >
                   {isBangla ? "বাতিল" : "Cancel"}
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-2.5 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white rounded-xl font-bold shadow-lg shadow-teal-500/20"
+                  className="px-6 py-2.5 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white rounded-xl font-bold shadow-lg shadow-teal-500/20 cursor-pointer"
                 >
                   {isBangla ? "প্রজেক্ট তৈরি করুন" : "Publish Project"}
                 </button>
@@ -789,21 +789,21 @@ export const ProjectsTasksView: React.FC<ProjectsTasksViewProps> = ({
 
       {/* Modal: Create Task */}
       {showTaskModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
-          <div className="bg-slate-900 border border-slate-700 rounded-2xl p-6 w-full max-w-md text-slate-100 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between pb-2 border-b border-slate-800">
-              <h3 className="text-base font-bold text-white flex items-center gap-2">
-                <CheckSquare className="w-5 h-5 text-teal-400" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl p-6 w-full max-w-md text-slate-900 dark:text-slate-100 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-slate-800">
+              <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <CheckSquare className="w-5 h-5 text-teal-600 dark:text-teal-400" />
                 <span>{isBangla ? "নতুন টাস্ক বা স্প্রিন্ট আইটেম যোগ করুন" : "Create Project Deliverable / Task"}</span>
               </h3>
-              <button onClick={() => setShowTaskModal(false)} className="text-slate-400 hover:text-white">
+              <button onClick={() => setShowTaskModal(false)} className="text-slate-400 hover:text-slate-700 dark:hover:text-white cursor-pointer">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             <form onSubmit={handleCreateTask} className="space-y-3 text-xs">
               <div>
-                <label className="block text-slate-400 font-bold mb-1">
+                <label className="block text-slate-600 dark:text-slate-400 font-bold mb-1">
                   {isBangla ? "টাস্ক টাইটেল *" : "Task Title *"}
                 </label>
                 <input
@@ -811,20 +811,20 @@ export const ProjectsTasksView: React.FC<ProjectsTasksViewProps> = ({
                   value={newTaskTitle}
                   onChange={(e) => setNewTaskTitle(e.target.value)}
                   placeholder="e.g. Implement WebRTC Face Verification Algorithm"
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white"
+                  className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white"
                   required
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block text-slate-400 font-bold mb-1">
+                  <label className="block text-slate-600 dark:text-slate-400 font-bold mb-1">
                     {isBangla ? "প্রজেক্ট *" : "Project *"}
                   </label>
                   <select
                     value={newTaskProjId}
                     onChange={(e) => setNewTaskProjId(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white"
+                    className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white"
                   >
                     {projects.map((p) => (
                       <option key={p.id} value={p.id}>
@@ -834,13 +834,13 @@ export const ProjectsTasksView: React.FC<ProjectsTasksViewProps> = ({
                   </select>
                 </div>
                 <div>
-                  <label className="block text-slate-400 font-bold mb-1">
+                  <label className="block text-slate-600 dark:text-slate-400 font-bold mb-1">
                     {isBangla ? "এসাইন করুন *" : "Assignee *"}
                   </label>
                   <select
                     value={newTaskAssigneeId}
                     onChange={(e) => setNewTaskAssigneeId(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white"
+                    className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white"
                   >
                     {employees.map((e) => (
                       <option key={e.id} value={e.id}>
@@ -853,13 +853,13 @@ export const ProjectsTasksView: React.FC<ProjectsTasksViewProps> = ({
 
               <div className="grid grid-cols-3 gap-2">
                 <div>
-                  <label className="block text-slate-400 font-bold mb-1">
+                  <label className="block text-slate-600 dark:text-slate-400 font-bold mb-1">
                     {isBangla ? "অগ্রাধিকার" : "Priority"}
                   </label>
                   <select
                     value={newTaskPriority}
                     onChange={(e) => setNewTaskPriority(e.target.value as any)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white"
+                    className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white"
                   >
                     <option value="LOW">Low</option>
                     <option value="MEDIUM">Medium</option>
@@ -868,31 +868,31 @@ export const ProjectsTasksView: React.FC<ProjectsTasksViewProps> = ({
                   </select>
                 </div>
                 <div>
-                  <label className="block text-slate-400 font-bold mb-1">
+                  <label className="block text-slate-600 dark:text-slate-400 font-bold mb-1">
                     {isBangla ? "আনুমানিক ঘণ্টা" : "Est. Hours"}
                   </label>
                   <input
                     type="number"
                     value={newTaskEstHours}
                     onChange={(e) => setNewTaskEstHours(Number(e.target.value))}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white"
+                    className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white"
                   />
                 </div>
                 <div>
-                  <label className="block text-slate-400 font-bold mb-1">
+                  <label className="block text-slate-600 dark:text-slate-400 font-bold mb-1">
                     {isBangla ? "জমার তারিখ" : "Due Date"}
                   </label>
                   <input
                     type="date"
                     value={newTaskDueDate}
                     onChange={(e) => setNewTaskDueDate(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white"
+                    className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-slate-400 font-bold mb-1">
+                <label className="block text-slate-600 dark:text-slate-400 font-bold mb-1">
                   {isBangla ? "টাস্ক বিবরণ" : "Task Details & Requirements"}
                 </label>
                 <textarea
@@ -900,21 +900,21 @@ export const ProjectsTasksView: React.FC<ProjectsTasksViewProps> = ({
                   value={newTaskDesc}
                   onChange={(e) => setNewTaskDesc(e.target.value)}
                   placeholder="Specify task acceptance criteria..."
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white"
+                  className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white"
                 />
               </div>
 
-              <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
+              <div className="flex justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-800">
                 <button
                   type="button"
                   onClick={() => setShowTaskModal(false)}
-                  className="px-4 py-2 bg-slate-800 text-slate-300 rounded-xl font-bold"
+                  className="px-4 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl font-bold cursor-pointer"
                 >
                   {isBangla ? "বাতিল" : "Cancel"}
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-gradient-to-r from-teal-600 to-emerald-600 text-white rounded-xl font-bold shadow-lg shadow-teal-500/20"
+                  className="px-5 py-2 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white rounded-xl font-bold shadow-lg shadow-teal-500/20 cursor-pointer"
                 >
                   {isBangla ? "টাস্ক তৈরি করুন" : "Create Task"}
                 </button>

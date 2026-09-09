@@ -68,14 +68,14 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
   return (
     <div id="payroll-management-view" className="space-y-6 animate-in fade-in duration-300">
       {/* Header & Controls */}
-      <div className="p-6 rounded-2xl bg-slate-900 border border-slate-800 space-y-4">
+      <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h2 className="text-xl font-bold text-white tracking-tight flex items-center gap-2">
-              <CreditCard className="w-5 h-5 text-teal-400" />
+            <h2 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
+              <CreditCard className="w-5 h-5 text-teal-600 dark:text-teal-400" />
               <span>Automated Payroll & Salary Processing Engine</span>
             </h2>
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-slate-500 dark:text-slate-400">
               One-click calculation including Basic, House Rent, Allowances, PF, Tax, Attendance Deductions & Loan EMIs
             </p>
           </div>
@@ -83,7 +83,7 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
           <div className="flex flex-wrap items-center gap-3">
             <button
               onClick={() => onGeneratePayroll(selectedMonth)}
-              className="px-4 py-2 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-teal-500/20 flex items-center gap-1.5 transition-all"
+              className="px-4 py-2 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-teal-500/20 flex items-center gap-1.5 transition-all cursor-pointer"
             >
               <Sparkles className="w-4 h-4" />
               <span>Run {selectedMonth} Payroll</span>
@@ -91,17 +91,17 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
 
             <button
               onClick={() => onDisburseAll(selectedMonth)}
-              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-bold rounded-xl shadow flex items-center gap-1.5"
+              className="px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 text-xs font-bold rounded-xl shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer"
             >
-              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
               <span>Disburse All</span>
             </button>
 
             <button
               onClick={handleExportBankAdvice}
-              className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-bold rounded-xl shadow flex items-center gap-1.5"
+              className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 text-xs font-bold rounded-xl shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer"
             >
-              <Download className="w-3.5 h-3.5 text-teal-400" />
+              <Download className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
               <span>Bank Advice</span>
             </button>
           </div>
@@ -110,11 +110,11 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
         {/* Filters & Month Selector */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
           <div>
-            <label className="block text-slate-400 mb-1">Payroll Cycle Month</label>
+            <label className="block text-slate-600 dark:text-slate-400 mb-1">Payroll Cycle Month</label>
             <select
               value={selectedMonth}
               onChange={(e) => setSelectedMonth(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white"
+              className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white"
             >
               <option value="August 2026">August 2026 (Current Cycle)</option>
               <option value="July 2026">July 2026</option>
@@ -123,11 +123,11 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
           </div>
 
           <div>
-            <label className="block text-slate-400 mb-1">Filter by Branch</label>
+            <label className="block text-slate-600 dark:text-slate-400 mb-1">Filter by Branch</label>
             <select
               value={selectedBranch}
               onChange={(e) => setSelectedBranch(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white"
+              className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white"
             >
               <option value="ALL">All Branch Locations</option>
               {branches.map((b) => (
@@ -142,19 +142,19 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
 
       {/* Summary KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800">
-          <span className="text-xs text-slate-400 block font-medium">Total Gross Earnings</span>
-          <span className="text-2xl font-black text-white mt-1 block">
+        <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
+          <span className="text-xs text-slate-500 dark:text-slate-400 block font-medium">Total Gross Earnings</span>
+          <span className="text-2xl font-black text-slate-900 dark:text-white mt-1 block">
             ৳{(totalGross ?? 0).toLocaleString()}
           </span>
-          <span className="text-[10px] text-teal-400 mt-1 block">
+          <span className="text-[10px] text-teal-700 dark:text-teal-400 mt-1 block font-semibold">
             Across {filteredSlips.length} Staff Members
           </span>
         </div>
 
-        <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800">
-          <span className="text-xs text-slate-400 block font-medium">Total Deductions (PF, Tax, Late)</span>
-          <span className="text-2xl font-black text-red-400 mt-1 block">
+        <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
+          <span className="text-xs text-slate-500 dark:text-slate-400 block font-medium">Total Deductions (PF, Tax, Late)</span>
+          <span className="text-2xl font-black text-rose-600 dark:text-rose-400 mt-1 block">
             -৳{(totalDeductions ?? 0).toLocaleString()}
           </span>
           <span className="text-[10px] text-slate-500 mt-1 block">
@@ -162,22 +162,22 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
           </span>
         </div>
 
-        <div className="p-5 rounded-2xl bg-slate-900 border border-teal-500/30 bg-teal-500/5">
-          <span className="text-xs text-teal-300 block font-medium">Net Disbursed Amount</span>
-          <span className="text-2xl font-black text-emerald-400 mt-1 block">
+        <div className="p-5 rounded-2xl bg-emerald-500/5 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-500/30 shadow-xs">
+          <span className="text-xs text-emerald-800 dark:text-teal-300 block font-medium">Net Disbursed Amount</span>
+          <span className="text-2xl font-black text-emerald-700 dark:text-emerald-400 mt-1 block">
             ৳{(totalNet ?? 0).toLocaleString()}
           </span>
-          <span className="text-[10px] text-emerald-300 mt-1 block">
+          <span className="text-[10px] text-emerald-700 dark:text-emerald-300 mt-1 block font-semibold">
             100% Ready for Bank Transfer
           </span>
         </div>
       </div>
 
       {/* Payslips Table */}
-      <div className="p-6 rounded-2xl bg-slate-900 border border-slate-800 space-y-4">
+      <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
-            <thead className="bg-slate-800/80 text-slate-400 uppercase text-[10px] font-bold border-b border-slate-700">
+            <thead className="bg-slate-50 dark:bg-slate-800/80 text-slate-600 dark:text-slate-400 uppercase text-[10px] font-bold border-b border-slate-200 dark:border-slate-700">
               <tr>
                 <th className="p-3">Employee</th>
                 <th className="p-3">Branch</th>
@@ -189,29 +189,29 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
                 <th className="p-3 text-right">Action</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800 text-slate-300">
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-300">
               {filteredSlips.map((slip) => (
-                <tr key={slip.id} className="hover:bg-slate-800/40 transition-colors">
+                <tr key={slip.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
                   <td className="p-3">
-                    <div className="font-bold text-white">{slip.employeeName}</div>
-                    <div className="text-[10px] text-slate-400 font-mono">
+                    <div className="font-bold text-slate-900 dark:text-white">{slip.employeeName}</div>
+                    <div className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">
                       {slip.employeeCode} • {slip.departmentName}
                     </div>
                   </td>
 
-                  <td className="p-3">{(slip.branchName || "Main Office").split("(")[0]}</td>
+                  <td className="p-3 text-slate-800 dark:text-slate-300">{(slip.branchName || "Main Office").split("(")[0]}</td>
 
-                  <td className="p-3 font-mono font-semibold">৳{(slip.basicSalary ?? 0).toLocaleString()}</td>
+                  <td className="p-3 font-mono font-semibold text-slate-900 dark:text-slate-200">৳{(slip.basicSalary ?? 0).toLocaleString()}</td>
 
-                  <td className="p-3 font-mono text-teal-400">
+                  <td className="p-3 font-mono text-teal-700 dark:text-teal-400">
                     +৳{((slip.grossEarnings || 0) - (slip.basicSalary || 0)).toLocaleString()}
                   </td>
 
-                  <td className="p-3 font-mono text-red-400">
+                  <td className="p-3 font-mono text-rose-600 dark:text-rose-400">
                     -৳{(slip.totalDeductions ?? 0).toLocaleString()}
                   </td>
 
-                  <td className="p-3 font-mono font-bold text-emerald-400">
+                  <td className="p-3 font-mono font-bold text-emerald-700 dark:text-emerald-400">
                     ৳{(slip.netSalary ?? 0).toLocaleString()}
                   </td>
 
@@ -219,8 +219,8 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
                     <span
                       className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
                         slip.paymentStatus === "PAID"
-                          ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
-                          : "bg-amber-500/20 text-amber-300 border border-amber-500/30"
+                          ? "bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 border border-emerald-500/30"
+                          : "bg-amber-500/15 text-amber-800 dark:text-amber-300 border border-amber-500/30"
                       }`}
                     >
                       {slip.paymentStatus}
@@ -230,7 +230,7 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
                   <td className="p-3 text-right">
                     <button
                       onClick={() => setActiveSlip(slip)}
-                      className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white"
+                      className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white cursor-pointer transition-colors"
                       title="View & Print Official Payslip"
                     >
                       <Eye className="w-4 h-4" />
@@ -245,26 +245,26 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
 
       {/* Modal: Official Printable Payslip Document */}
       {activeSlip && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md overflow-y-auto">
-          <div className="bg-slate-900 border border-slate-700 rounded-2xl p-6 w-full max-w-2xl text-slate-100 shadow-2xl space-y-5 my-auto">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl p-6 w-full max-w-2xl text-slate-900 dark:text-slate-100 shadow-2xl space-y-5 my-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
               <div className="flex items-center gap-2">
-                <FileText className="w-5 h-5 text-teal-400" />
-                <h3 className="text-base font-bold text-white">
+                <FileText className="w-5 h-5 text-teal-600 dark:text-teal-400" />
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">
                   Official Salary Certificate / Payslip ({activeSlip.payrollMonth})
                 </h3>
               </div>
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => printPayslipDocument(activeSlip)}
-                  className="px-3 py-1.5 bg-teal-600 hover:bg-teal-500 text-white rounded-lg text-xs font-bold flex items-center gap-1 shadow"
+                  className="px-3 py-1.5 bg-teal-600 hover:bg-teal-500 text-white rounded-lg text-xs font-bold flex items-center gap-1 shadow-xs cursor-pointer"
                 >
                   <Printer className="w-3.5 h-3.5" />
                   <span>Print Document</span>
                 </button>
                 <button
                   onClick={() => setActiveSlip(null)}
-                  className="p-1.5 rounded-lg text-slate-400 hover:text-white"
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white cursor-pointer"
                 >
                   <X className="w-5 h-5" />
                 </button>
@@ -403,7 +403,7 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
             <div className="flex justify-end pt-2">
               <button
                 onClick={() => setActiveSlip(null)}
-                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-bold"
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-white rounded-xl text-xs font-bold cursor-pointer transition-colors"
               >
                 Close Preview
               </button>

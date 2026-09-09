@@ -24,7 +24,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
   return (
     <div
       id="mobile-bottom-navigation-bar"
-      className="fixed bottom-0 inset-x-0 z-40 lg:hidden bg-slate-900/95 backdrop-blur-xl border-t border-slate-800/90 px-3 py-1.5 flex items-center justify-around shadow-2xl safe-bottom"
+      className="fixed bottom-0 inset-x-0 z-40 lg:hidden bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border-t border-slate-200 dark:border-slate-800/90 px-3 py-1.5 flex items-center justify-around shadow-2xl safe-bottom text-slate-600 dark:text-slate-400"
     >
       {/* 1. Dashboard */}
       <button
@@ -32,8 +32,8 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
         onClick={() => onTabChange("dashboard")}
         className={`flex flex-col items-center justify-center p-1 rounded-xl transition-all cursor-pointer ${
           activeTab === "dashboard"
-            ? "text-teal-400 font-bold"
-            : "text-slate-400 hover:text-slate-200"
+            ? "text-teal-600 dark:text-teal-400 font-bold"
+            : "text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
         }`}
       >
         <LayoutDashboard className="w-5 h-5 mb-0.5" />
@@ -46,8 +46,8 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
         onClick={() => onTabChange("my-portal")}
         className={`flex flex-col items-center justify-center p-1 rounded-xl transition-all cursor-pointer ${
           activeTab === "my-portal"
-            ? "text-teal-400 font-bold"
-            : "text-slate-400 hover:text-slate-200"
+            ? "text-teal-600 dark:text-teal-400 font-bold"
+            : "text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
         }`}
       >
         <UserCheck className="w-5 h-5 mb-0.5" />
@@ -60,10 +60,10 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
         onClick={onOpenAttendance}
         className="relative -top-3 flex flex-col items-center justify-center cursor-pointer group"
       >
-        <div className="w-12 h-12 rounded-full bg-gradient-to-tr from-teal-600 via-teal-500 to-emerald-400 text-white flex items-center justify-center shadow-lg shadow-teal-500/30 border-2 border-slate-900 group-hover:scale-105 transition-transform active:scale-95">
+        <div className="w-12 h-12 rounded-full bg-gradient-to-tr from-teal-600 via-teal-500 to-emerald-400 text-white flex items-center justify-center shadow-lg shadow-teal-500/30 border-2 border-white dark:border-slate-900 group-hover:scale-105 transition-transform active:scale-95">
           <ScanFace className="w-6 h-6 animate-pulse" />
         </div>
-        <span className="text-[10px] font-bold text-teal-400 mt-0.5">Face Clock</span>
+        <span className="text-[10px] font-bold text-teal-600 dark:text-teal-400 mt-0.5">Face Clock</span>
       </button>
 
       {/* 4. Staff Directory */}
@@ -72,8 +72,8 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
         onClick={() => onTabChange("employees")}
         className={`flex flex-col items-center justify-center p-1 rounded-xl transition-all cursor-pointer ${
           activeTab === "employees"
-            ? "text-teal-400 font-bold"
-            : "text-slate-400 hover:text-slate-200"
+            ? "text-teal-600 dark:text-teal-400 font-bold"
+            : "text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
         }`}
       >
         <Users className="w-5 h-5 mb-0.5" />
@@ -84,7 +84,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
       <button
         type="button"
         onClick={onOpenMobileMenu}
-        className="flex flex-col items-center justify-center p-1 rounded-xl text-slate-400 hover:text-white transition-all cursor-pointer"
+        className="flex flex-col items-center justify-center p-1 rounded-xl text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-all cursor-pointer"
       >
         <Menu className="w-5 h-5 mb-0.5" />
         <span className="text-[10px]">Menu</span>

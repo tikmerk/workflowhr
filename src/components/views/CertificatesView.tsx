@@ -76,13 +76,13 @@ export const CertificatesView: React.FC<CertificatesViewProps> = ({
   return (
     <div id="certificates-generator-view" className="space-y-6 animate-in fade-in duration-300">
       {/* Top Banner */}
-      <div className="p-6 rounded-2xl bg-slate-900 border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-xl font-bold text-white tracking-tight flex items-center gap-2">
-            <FileCheck2 className="w-5 h-5 text-teal-400" />
+          <h2 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
+            <FileCheck2 className="w-5 h-5 text-teal-600 dark:text-teal-400" />
             <span>Official Corporate Certificate & Letter Generator</span>
           </h2>
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-slate-500 dark:text-slate-400">
             Generate 9+ government-compliant corporate letters, experience certificates, NOCs & appointment letters
           </p>
         </div>
@@ -90,7 +90,7 @@ export const CertificatesView: React.FC<CertificatesViewProps> = ({
         {previewCert && (
           <button
             onClick={handlePrintPreview}
-            className="px-4 py-2 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-teal-500/20 flex items-center gap-1.5 transition-all"
+            className="px-4 py-2 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-teal-500/20 flex items-center gap-1.5 transition-all cursor-pointer"
           >
             <Printer className="w-4 h-4" />
             <span>Print / Save as PDF</span>
@@ -102,18 +102,18 @@ export const CertificatesView: React.FC<CertificatesViewProps> = ({
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Left: Generator Form */}
         <div className="lg:col-span-4 space-y-4">
-          <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-4">
-            <h3 className="text-sm font-bold text-white flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-teal-400" /> Generate New Certificate
+          <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-teal-600 dark:text-teal-400" /> Generate New Certificate
             </h3>
 
             <form onSubmit={handleGenerateNew} className="space-y-3 text-xs">
               <div>
-                <label className="block text-slate-400 mb-1">Select Employee</label>
+                <label className="block text-slate-600 dark:text-slate-400 mb-1 font-medium">Select Employee</label>
                 <select
                   value={selectedEmpId}
                   onChange={(e) => setSelectedEmpId(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white"
+                  className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white"
                 >
                   {employees.map((e) => (
                     <option key={e.id} value={e.id}>
@@ -124,11 +124,11 @@ export const CertificatesView: React.FC<CertificatesViewProps> = ({
               </div>
 
               <div>
-                <label className="block text-slate-400 mb-1">Document Template Type</label>
+                <label className="block text-slate-600 dark:text-slate-400 mb-1 font-medium">Document Template Type</label>
                 <select
                   value={selectedType}
                   onChange={(e) => setSelectedType(e.target.value as any)}
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white"
+                  className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white"
                 >
                   {certTypes.map((t) => (
                     <option key={t.type} value={t.type}>
@@ -139,19 +139,19 @@ export const CertificatesView: React.FC<CertificatesViewProps> = ({
               </div>
 
               <div>
-                <label className="block text-slate-400 mb-1">Special Remarks / Note</label>
+                <label className="block text-slate-600 dark:text-slate-400 mb-1 font-medium">Special Remarks / Note</label>
                 <textarea
                   rows={2}
                   value={remarks}
                   onChange={(e) => setRemarks(e.target.value)}
                   placeholder="Optional custom addendum notes..."
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white"
+                  className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white"
                 />
               </div>
 
               <button
                 type="submit"
-                className="w-full py-2.5 bg-gradient-to-r from-teal-600 to-emerald-600 text-white font-bold rounded-xl shadow-lg shadow-teal-500/20"
+                className="w-full py-2.5 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white font-bold rounded-xl shadow-lg shadow-teal-500/20 cursor-pointer"
               >
                 Generate & Preview
               </button>
@@ -159,8 +159,8 @@ export const CertificatesView: React.FC<CertificatesViewProps> = ({
           </div>
 
           {/* Certificate Generation History */}
-          <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-3">
-            <h4 className="text-xs font-bold text-slate-300">Issued Certificates ({certificates.length})</h4>
+          <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-3">
+            <h4 className="text-xs font-bold text-slate-700 dark:text-slate-300">Issued Certificates ({certificates.length})</h4>
             <div className="space-y-2 max-h-[260px] overflow-y-auto">
               {certificates.map((cert) => (
                 <div
@@ -169,13 +169,13 @@ export const CertificatesView: React.FC<CertificatesViewProps> = ({
                   className={`p-3 rounded-xl border text-xs cursor-pointer transition-all ${
                     previewCert?.id === cert.id
                       ? "bg-teal-500/10 border-teal-500/50"
-                      : "bg-slate-800/60 border-slate-700/60 hover:bg-slate-800"
+                      : "bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700/60 hover:bg-slate-100 dark:hover:bg-slate-800"
                   }`}
                 >
-                  <div className="font-bold text-white">{(cert.title || "Certificate").split("(")[0]}</div>
-                  <div className="text-[10px] text-slate-400 flex justify-between mt-1">
+                  <div className="font-bold text-slate-900 dark:text-white">{(cert.title || "Certificate").split("(")[0]}</div>
+                  <div className="text-[10px] text-slate-500 dark:text-slate-400 flex justify-between mt-1">
                     <span>{cert.employeeName}</span>
-                    <span className="font-mono text-teal-300">{cert.issueDate}</span>
+                    <span className="font-mono text-teal-700 dark:text-teal-300">{cert.issueDate}</span>
                   </div>
                 </div>
               ))}
@@ -186,7 +186,7 @@ export const CertificatesView: React.FC<CertificatesViewProps> = ({
         {/* Right: Live Document Preview */}
         <div className="lg:col-span-8">
           {previewCert ? (
-            <div className="p-8 rounded-2xl bg-white text-slate-900 shadow-2xl border border-slate-300 min-h-[600px] flex flex-col justify-between">
+            <div className="p-8 rounded-2xl bg-white text-slate-900 shadow-xl border border-slate-300 min-h-[600px] flex flex-col justify-between">
               <div
                 className="prose max-w-none text-slate-900 leading-relaxed font-sans"
                 dangerouslySetInnerHTML={{ __html: previewCert.contentHtml }}
@@ -214,7 +214,7 @@ export const CertificatesView: React.FC<CertificatesViewProps> = ({
               </div>
             </div>
           ) : (
-            <div className="h-full flex items-center justify-center p-12 rounded-2xl bg-slate-900 border border-slate-800 text-slate-500 text-xs">
+            <div className="h-full flex items-center justify-center p-12 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-500 text-xs">
               Select or generate a certificate to preview document.
             </div>
           )}

@@ -26,6 +26,7 @@ import { Logo } from "./Logo";
 import { UserRole } from "../../types";
 import { useThemeLanguage } from "../../context/ThemeLanguageContext";
 import { useCompanyBranding } from "../../context/CompanyBrandingContext";
+import { APP_VERSION, APP_BUILD_NAME } from "../../version";
 
 export type NavTabId =
   | "dashboard"
@@ -363,23 +364,29 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Software Creator & Vendor Branding at Sidebar Bottom */}
       {(!isCollapsed || isMobileView) ? (
-        <div className="p-3 m-3 rounded-xl bg-slate-50 dark:bg-slate-950/80 border border-slate-200 dark:border-slate-800 text-[10.5px] text-slate-600 dark:text-slate-400 space-y-1">
+        <div className="p-3 m-3 rounded-xl bg-slate-50 dark:bg-slate-950/80 border border-slate-200 dark:border-slate-800 text-[10.5px] text-slate-600 dark:text-slate-400 space-y-1.5">
           <div className="flex items-center justify-between">
             <span className="font-bold text-slate-800 dark:text-slate-200">
               {softwareBranding.labelEn}
             </span>
-            <span className="flex items-center gap-1 text-[9.5px] text-emerald-600 dark:text-emerald-400 font-mono font-bold">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-              {t("অনলাইন", "Active")}
+            <span className="px-1.5 py-0.5 rounded-md bg-teal-500/15 text-teal-700 dark:text-teal-300 font-mono font-black text-[10px] border border-teal-500/30">
+              {APP_VERSION}
             </span>
           </div>
-          <p className="text-[9.5px] text-slate-400 dark:text-slate-500">
-            {t("মাল্টি-ব্রাঞ্চ এন্টারপ্রাইজ ক্লাউড সলিউশন", "Multi-Branch Enterprise Cloud Solution")}
-          </p>
+          <div className="flex items-center justify-between text-[9.5px] pt-0.5">
+            <span className="text-slate-500 dark:text-slate-400 truncate max-w-[120px]">
+              {t("ক্লাউড এন্টারপ্রাইজ", APP_BUILD_NAME)}
+            </span>
+            <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-mono font-bold shrink-0">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+              {t("অনলাইন", "Online")}
+            </span>
+          </div>
         </div>
       ) : (
-        <div className="p-2 flex justify-center text-slate-400">
+        <div className="p-2 flex flex-col items-center justify-center gap-1 text-slate-400">
           <div className="w-2 h-2 rounded-full bg-emerald-500" title="Workflow HR Online"></div>
+          <span className="text-[8.5px] font-mono font-bold text-teal-600 dark:text-teal-400">{APP_VERSION}</span>
         </div>
       )}
     </div>
