@@ -1,0 +1,11 @@
+{
+  "name": "Workflow HR",
+  "description": "Multi-Branch HR, Workforce Automation, Live Face & Anti-Spoofing Attendance, Automated Payroll, Recruitment, and Project Tracking SaaS",
+  "requestFramePermissions": [
+    "camera",
+    "geolocation"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

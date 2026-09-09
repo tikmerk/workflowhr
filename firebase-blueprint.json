@@ -1,0 +1,89 @@
+{
+  "entities": {
+    "Employee": {
+      "title": "Employee",
+      "description": "Employee record including photo and biometrics",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "employeeCode": { "type": "string" },
+        "fullName": { "type": "string" },
+        "avatarUrl": { "type": "string" },
+        "role": { "type": "string" },
+        "designationTitle": { "type": "string" },
+        "departmentName": { "type": "string" },
+        "branchId": { "type": "string" },
+        "branchName": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "faceRegisteredPhoto": { "type": "string" },
+        "faceTemplateRegistered": { "type": "boolean" },
+        "faceRegisteredAt": { "type": "string" },
+        "status": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "employeeCode", "fullName", "role"]
+    },
+    "AttendanceRecord": {
+      "title": "AttendanceRecord",
+      "description": "Clock in / Clock out attendance record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "employeeId": { "type": "string" },
+        "employeeName": { "type": "string" },
+        "date": { "type": "string" },
+        "checkInTime": { "type": "string" },
+        "status": { "type": "string" },
+        "branchName": { "type": "string" }
+      },
+      "required": ["id", "employeeId", "date"]
+    },
+    "LeaveApplication": {
+      "title": "LeaveApplication",
+      "description": "Employee leave request record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "employeeId": { "type": "string" },
+        "leaveType": { "type": "string" },
+        "status": { "type": "string" },
+        "startDate": { "type": "string" },
+        "endDate": { "type": "string" }
+      },
+      "required": ["id", "employeeId", "leaveType", "status"]
+    },
+    "CompanyBranding": {
+      "title": "CompanyBranding",
+      "description": "Company white-label branding, logo, and system settings",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "logoUrl": { "type": "string" },
+        "phone": { "type": "string" },
+        "email": { "type": "string" },
+        "primaryColor": { "type": "string" },
+        "isDemoModeEnabled": { "type": "boolean" },
+        "updatedAt": { "type": "string" }
+      }
+    }
+  },
+  "firestore": {
+    "/employees/{employeeId}": {
+      "schema": "Employee",
+      "description": "All organization employees and staff records"
+    },
+    "/attendance/{attendanceId}": {
+      "schema": "AttendanceRecord",
+      "description": "Daily biometric attendance logs"
+    },
+    "/leaves/{leaveId}": {
+      "schema": "LeaveApplication",
+      "description": "Employee leave applications"
+    },
+    "/settings/{settingId}": {
+      "schema": "CompanyBranding",
+      "description": "Organization branding and configuration"
+    }
+  }
+}
