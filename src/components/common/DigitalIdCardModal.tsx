@@ -11,13 +11,17 @@ import {
   ChevronLeft,
   ChevronRight,
   Share2,
-  FileCheck
+  FileCheck,
+  Camera,
+  Upload,
+  Loader2,
 } from "lucide-react";
 import { toPng } from "html-to-image";
 import { Employee } from "../../types";
 import { DigitalIdCard } from "./DigitalIdCard";
 import { useCompanyBranding } from "../../context/CompanyBrandingContext";
 import { useThemeLanguage } from "../../context/ThemeLanguageContext";
+import { compressAndOptimizeImage } from "../../utils/imageCompression";
 
 interface DigitalIdCardModalProps {
   isOpen: boolean;
@@ -25,6 +29,7 @@ interface DigitalIdCardModalProps {
   employee: Employee;
   allEmployees?: Employee[];
   onSelectEmployee?: (emp: Employee) => void;
+  onUpdateFacePhoto?: (employeeId: string, photoUrl: string) => void;
 }
 
 export const DigitalIdCardModal: React.FC<DigitalIdCardModalProps> = ({
@@ -33,6 +38,7 @@ export const DigitalIdCardModal: React.FC<DigitalIdCardModalProps> = ({
   employee,
   allEmployees = [],
   onSelectEmployee,
+  onUpdateFacePhoto,
 }) => {
   const { branding, getCompanyDisplayName } = useCompanyBranding();
   const { t, isBangla } = useThemeLanguage();
@@ -41,10 +47,33 @@ export const DigitalIdCardModal: React.FC<DigitalIdCardModalProps> = ({
   const [cardTheme, setCardTheme] = useState<"dark" | "light" | "navy">("dark");
   const [isDownloading, setIsDownloading] = useState(false);
   const [downloadSuccess, setDownloadSuccess] = useState(false);
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  const [photoUpdateSuccess, setPhotoUpdateSuccess] = useState(false);
 
   const cardRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   if (!isOpen || !employee) return null;
+
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      setIsUploadingPhoto(true);
+      setPhotoUpdateSuccess(false);
+      const optimized = await compressAndOptimizeImage(file, 480, 480, 0.85);
+      if (onUpdateFacePhoto) {
+        onUpdateFacePhoto(employee.id, optimized);
+      }
+      setPhotoUpdateSuccess(true);
+      setTimeout(() => setPhotoUpdateSuccess(false), 3500);
+    } catch (err) {
+      console.error("Failed to upload photo for ID badge:", err);
+    } finally {
+      setIsUploadingPhoto(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
 
   // High-Resolution PNG Exporter (3x DPI for crisp 300+ DPI print ready output)
   const handleDownloadHighResPng = async () => {
@@ -148,40 +177,98 @@ export const DigitalIdCardModal: React.FC<DigitalIdCardModalProps> = ({
         <div className="p-4 sm:p-6 overflow-y-auto flex-1 grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
           {/* Left Column: Customization Controls & Actions */}
           <div className="lg:col-span-6 space-y-4">
-            {/* Employee Quick Info Card */}
-            <div className="p-4 rounded-2xl bg-slate-950/60 border border-slate-800 flex items-center gap-3.5">
-              <img
-                src={employee.avatarUrl}
-                alt={employee.fullName}
-                className="w-12 h-12 rounded-xl object-cover border border-teal-500 shadow-sm shrink-0"
-              />
-              <div className="min-w-0 flex-1">
-                <h3 className="font-bold text-sm text-white truncate">{employee.fullName}</h3>
-                <p className="text-xs text-teal-400 font-medium truncate">{employee.designationTitle}</p>
-                <p className="text-[11px] text-slate-400 truncate">
-                  {employee.departmentName} • {employee.branchName}
-                </p>
+            {/* Employee Quick Info Card & Photo Upload Action */}
+            <div className="p-4 rounded-2xl bg-slate-950/60 border border-slate-800 space-y-3">
+              <div className="flex items-center gap-3.5">
+                <div className="relative shrink-0">
+                  <img
+                    src={employee.avatarUrl}
+                    alt={employee.fullName}
+                    className="w-13 h-13 rounded-xl object-cover border-2 border-teal-500 shadow-md shrink-0"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isUploadingPhoto}
+                    className="absolute -bottom-1 -right-1 p-1 rounded-lg bg-teal-600 hover:bg-teal-500 text-white shadow-md cursor-pointer transition-colors"
+                    title="আইডি কার্ডের ছবি পরিবর্তন করুন"
+                  >
+                    {isUploadingPhoto ? (
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                    ) : (
+                      <Camera className="w-3 h-3" />
+                    )}
+                  </button>
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h3 className="font-bold text-sm text-white truncate">{employee.fullName}</h3>
+                  <p className="text-xs text-teal-400 font-medium truncate">{employee.designationTitle}</p>
+                  <p className="text-[11px] text-slate-400 truncate">
+                    {employee.departmentName} • {employee.branchName}
+                  </p>
+                </div>
+
+                {/* Employee Navigator if allEmployees present */}
+                {allEmployees.length > 1 && onSelectEmployee && (
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      onClick={handlePrev}
+                      disabled={!hasPrev}
+                      className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-30 text-slate-300 transition-all cursor-pointer"
+                      title="Previous Employee"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={handleNext}
+                      disabled={!hasNext}
+                      className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-30 text-slate-300 transition-all cursor-pointer"
+                      title="Next Employee"
+                    >
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
               </div>
 
-              {/* Employee Navigator if allEmployees present */}
-              {allEmployees.length > 1 && onSelectEmployee && (
-                <div className="flex items-center gap-1 shrink-0">
-                  <button
-                    onClick={handlePrev}
-                    disabled={!hasPrev}
-                    className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-30 text-slate-300 transition-all cursor-pointer"
-                    title="Previous Employee"
-                  >
-                    <ChevronLeft className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={handleNext}
-                    disabled={!hasNext}
-                    className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-30 text-slate-300 transition-all cursor-pointer"
-                    title="Next Employee"
-                  >
-                    <ChevronRight className="w-4 h-4" />
-                  </button>
+              {/* Direct Photo Change / Upload Button for Persistent Storage */}
+              <div className="pt-2 border-t border-slate-800/80 flex flex-col sm:flex-row items-center gap-2">
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handlePhotoUpload}
+                  accept="image/*"
+                  className="hidden"
+                />
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isUploadingPhoto}
+                  className="w-full py-2 px-3 rounded-xl bg-teal-500/15 hover:bg-teal-500/25 border border-teal-500/40 text-teal-300 text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50"
+                >
+                  {isUploadingPhoto ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin text-teal-400" />
+                      <span>অপটিমাইজ ও ক্লাউড সেভ হচ্ছে...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="w-4 h-4 text-teal-400" />
+                      <span>{t("আইডি কার্ডের ছবি পরিবর্তন বা আপলোড", "Upload / Change ID Photo")}</span>
+                    </>
+                  )}
+                </button>
+              </div>
+
+              {photoUpdateSuccess && (
+                <div className="p-2.5 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-semibold flex items-center gap-2 animate-in fade-in duration-300">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span>
+                    {t(
+                      "ছবিটি সফলভাবে ক্লাউড ডাটাবেজ (Firestore) ও আইডি কার্ডে সংরক্ষিত হয়েছে!",
+                      "Photo successfully saved to cloud database & ID card!"
+                    )}
+                  </span>
                 </div>
               )}
             </div>

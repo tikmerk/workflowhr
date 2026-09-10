@@ -11,7 +11,7 @@ export const Footer: React.FC = () => {
   return (
     <footer
       id="workflow-hr-permanent-footer"
-      className="w-full bg-white/95 dark:bg-slate-950/95 border border-slate-200 dark:border-slate-800/80 rounded-2xl backdrop-blur-md px-4 sm:px-6 py-3.5 mt-auto transition-all text-xs text-slate-600 dark:text-slate-400 select-none z-30 shadow-xs"
+      className="w-full bg-white/95 dark:bg-slate-950/95 border border-slate-200 dark:border-slate-800/80 rounded-2xl backdrop-blur-md px-4 sm:px-6 py-4 mt-auto mb-24 sm:mb-28 md:mb-32 lg:mb-2 transition-all text-xs text-slate-600 dark:text-slate-400 select-none z-30 shadow-sm"
     >
       <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-3">
         {/* Software Identity & Creator Attributions */}

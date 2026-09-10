@@ -31,6 +31,7 @@ import {
   saveBulkCandidatesToFirestore,
   deleteCandidateFromFirestore,
   updateEmployeeFacePhotoInFirestore,
+  saveEmployeeToFirestore,
   saveAttendanceRecordToFirestore,
   saveLeaveApplicationToFirestore,
   updateLeaveStatusInFirestore,
@@ -39,6 +40,7 @@ import {
   savePayslipsToFirestore,
   saveAuditLogToFirestore,
 } from "./services/firestoreService";
+import { compressAndOptimizeImage } from "./utils/imageCompression";
 
 // Views
 import { LoginView } from "./components/views/LoginView";
@@ -162,14 +164,21 @@ function AppContent() {
   const [currentEmployee, setCurrentEmployee] = useState<Employee>(() => {
     try {
       const savedEmpId = localStorage.getItem("workflow_hr_logged_user_id");
-      if (savedEmpId) {
-        const found = mockEmployees.find((e) => e.id === savedEmpId);
-        if (found) return found;
+      const targetEmp = (savedEmpId && mockEmployees.find((e) => e.id === savedEmpId)) || mockEmployees[0];
+      const cachedAvatar = localStorage.getItem(`workflow_hr_cached_avatar_${targetEmp.id}`);
+      if (cachedAvatar) {
+        return {
+          ...targetEmp,
+          avatarUrl: cachedAvatar,
+          faceRegisteredPhoto: cachedAvatar,
+          faceTemplateRegistered: true,
+        };
       }
+      return targetEmp;
     } catch (e) {
       console.warn(e);
+      return mockEmployees[0];
     }
-    return mockEmployees[0];
   });
 
   // Realtime Firestore Database Subscriptions & Initialization
@@ -179,9 +188,27 @@ function AppContent() {
 
     // 2. Realtime Subscriptions
     const unsubEmployees = subscribeToEmployees((updatedEmps) => {
-      setEmployees(updatedEmps);
+      // Merge cached avatars for persistence across sessions
+      const hydrated = updatedEmps.map((emp) => {
+        try {
+          const cached = localStorage.getItem(`workflow_hr_cached_avatar_${emp.id}`);
+          if (cached && (!emp.avatarUrl || emp.avatarUrl.includes("unsplash"))) {
+            return {
+              ...emp,
+              avatarUrl: cached,
+              faceRegisteredPhoto: cached,
+              faceTemplateRegistered: true,
+            };
+          }
+        } catch (e) {
+          // ignore
+        }
+        return emp;
+      });
+
+      setEmployees(hydrated);
       setCurrentEmployee((prev) => {
-        const matching = updatedEmps.find((e) => e.id === prev.id);
+        const matching = hydrated.find((e) => e.id === prev.id);
         return matching || prev;
       });
     });
@@ -295,33 +322,64 @@ function AppContent() {
     );
   };
 
-  const handleUpdateFacePhoto = (employeeId: string, photoUrl: string) => {
+  const handleUpdateFacePhoto = async (employeeId: string, photoUrl: string) => {
+    // 1. Immediately compress & downscale photo (<50KB) to ensure full Firestore limit compliance
+    let optimized = photoUrl;
+    try {
+      optimized = await compressAndOptimizeImage(photoUrl, 480, 480, 0.85);
+    } catch (err) {
+      console.warn("Photo optimization notice:", err);
+    }
+
     setEmployees((prev) =>
       prev.map((e) =>
         e.id === employeeId
           ? {
               ...e,
-              faceRegisteredPhoto: photoUrl,
-              avatarUrl: photoUrl,
+              faceRegisteredPhoto: optimized,
+              avatarUrl: optimized,
               faceTemplateRegistered: true,
               faceRegisteredAt: new Date().toISOString().split("T")[0],
             }
           : e
       )
     );
+
     if (currentEmployee.id === employeeId) {
       setCurrentEmployee((prev) => ({
         ...prev,
-        faceRegisteredPhoto: photoUrl,
-        avatarUrl: photoUrl,
+        faceRegisteredPhoto: optimized,
+        avatarUrl: optimized,
         faceTemplateRegistered: true,
         faceRegisteredAt: new Date().toISOString().split("T")[0],
       }));
     }
-    updateEmployeeFacePhotoInFirestore(employeeId, photoUrl);
+
+    if (selectedIdCardEmployee && selectedIdCardEmployee.id === employeeId) {
+      setSelectedIdCardEmployee((prev) =>
+        prev
+          ? {
+              ...prev,
+              faceRegisteredPhoto: optimized,
+              avatarUrl: optimized,
+              faceTemplateRegistered: true,
+              faceRegisteredAt: new Date().toISOString().split("T")[0],
+            }
+          : null
+      );
+    }
+
+    // 2. Persist to Firestore cloud database & local fallback
+    const result = await updateEmployeeFacePhotoInFirestore(employeeId, optimized);
+    if (result.success) {
+      setToastMessage("ছবিটি ফায়ারবেস ক্লাউড ডাটাবেজে (Firestore) স্থায়ীভাবে সংরক্ষিত হয়েছে!");
+    } else {
+      setToastMessage("ছবিটি সংরক্ষিত হয়েছে (অফলাইন মোড)");
+    }
+
     notifyAndLog(
       "BIOMETRIC_ENROLLMENT",
-      "Biometric reference face photo successfully enrolled & vector template updated in cloud database",
+      `Biometric reference face photo successfully enrolled & synchronized to Firestore for: ${employeeId}`,
       "ATTENDANCE"
     );
   };
@@ -654,7 +712,7 @@ function AppContent() {
         />
 
         {/* Scrollable View Container */}
-        <main className="flex-1 overflow-y-auto p-3 sm:p-6 lg:p-8 pb-32 lg:pb-12 space-y-4 sm:space-y-6">
+        <main className="flex-1 overflow-y-auto p-3 sm:p-6 lg:p-8 pb-40 sm:pb-44 lg:pb-12 space-y-4 sm:space-y-6">
           {/* View Router */}
           {activeTab === "dashboard" && (
             <DashboardView
@@ -714,6 +772,7 @@ function AppContent() {
               shifts={shifts}
               onAddEmployee={(newEmp) => {
                 setEmployees((prev) => [newEmp, ...prev]);
+                saveEmployeeToFirestore(newEmp);
                 notifyAndLog(
                   "EMPLOYEE_ENROLLMENT",
                   `Enrolled new staff member: ${newEmp.fullName} (${newEmp.employeeCode})`,
@@ -724,6 +783,10 @@ function AppContent() {
                 setEmployees((prev) =>
                   prev.map((e) => (e.id === updatedEmp.id ? updatedEmp : e))
                 );
+                if (currentEmployee.id === updatedEmp.id) {
+                  setCurrentEmployee(updatedEmp);
+                }
+                saveEmployeeToFirestore(updatedEmp);
               }}
               onOpenDigitalIdCard={handleOpenIdCardModal}
             />
@@ -1043,6 +1106,7 @@ function AppContent() {
         employee={selectedIdCardEmployee || currentEmployee}
         allEmployees={employees}
         onSelectEmployee={(emp) => setSelectedIdCardEmployee(emp)}
+        onUpdateFacePhoto={handleUpdateFacePhoto}
       />
     </div>
   );

@@ -294,22 +294,22 @@ export const ShiftsHolidaysView: React.FC<ShiftsHolidaysViewProps> = ({
   return (
     <div id="shifts-holidays-view" className="space-y-6 animate-in fade-in duration-300">
       {/* Top Banner */}
-      <div className="p-6 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 border border-slate-800 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+      <div className="p-6 rounded-2xl bg-white dark:bg-gradient-to-r dark:from-slate-900 dark:via-slate-850 dark:to-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
-            <span className="px-2.5 py-1 rounded-lg bg-teal-500/20 text-teal-300 border border-teal-500/30 text-xs font-bold flex items-center gap-1.5">
+            <span className="px-2.5 py-1 rounded-lg bg-teal-500/15 text-teal-700 dark:text-teal-300 border border-teal-500/30 text-xs font-bold flex items-center gap-1.5">
               <CalendarDays className="w-3.5 h-3.5" />
               <span>{isBangla ? "রোস্টার ও ছুটির ক্যালেন্ডার" : "Shift Rosters & Holiday Calendar"}</span>
             </span>
-            <span className="text-slate-500 text-xs">•</span>
-            <span className="text-xs text-slate-400">
+            <span className="text-slate-400 dark:text-slate-500 text-xs">•</span>
+            <span className="text-xs text-slate-600 dark:text-slate-400">
               {isBangla ? "বাংলাদেশ সরকারি ছুটির গেজেট ও সাপ্তাহিক ছুটি নির্ধারণ" : "Bangladesh Gazetted Holidays & Weekend Rules"}
             </span>
           </div>
-          <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight mt-2">
+          <h2 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight mt-2">
             {isBangla ? "শিফট শিডিউলিং ও সার্বজনীন ছুটির তালিকা" : "Shift Scheduling & Universal Corporate Holidays"}
           </h2>
-          <p className="text-xs text-slate-400 mt-1">
+          <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
             {isBangla
               ? "অটোমেটিক বাংলাদেশ সরকারি ছুটি যুক্ত করুন, সাপ্তাহিক ছুটির দিন নির্ধারণ করুন এবং শিফট কনফিগার করুন"
               : "Auto-sync Bangladesh gazetted public holidays, set custom weekend days & configure flexible/rotational shifts"}
@@ -317,33 +317,33 @@ export const ShiftsHolidaysView: React.FC<ShiftsHolidaysViewProps> = ({
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          <div className="flex p-1 bg-slate-950 rounded-xl border border-slate-800 text-xs font-bold">
+          <div className="flex p-1 bg-slate-100 dark:bg-slate-950 rounded-xl border border-slate-200 dark:border-slate-800 text-xs font-bold">
             <button
               onClick={() => setActiveTab("SHIFTS")}
-              className={`px-3 py-1.5 rounded-lg transition-all ${
+              className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
                 activeTab === "SHIFTS"
                   ? "bg-teal-600 text-white shadow"
-                  : "text-slate-400 hover:text-slate-200"
+                  : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200"
               }`}
             >
               {isBangla ? `শিফট রস্টার (${shifts.length})` : `Shifts (${shifts.length})`}
             </button>
             <button
               onClick={() => setActiveTab("HOLIDAYS")}
-              className={`px-3 py-1.5 rounded-lg transition-all ${
+              className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
                 activeTab === "HOLIDAYS"
                   ? "bg-teal-600 text-white shadow"
-                  : "text-slate-400 hover:text-slate-200"
+                  : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200"
               }`}
             >
               {isBangla ? `ছুটির ক্যালেন্ডার (${holidays.length})` : `Holidays (${holidays.length})`}
             </button>
             <button
               onClick={() => setActiveTab("WEEKEND_RULES")}
-              className={`px-3 py-1.5 rounded-lg transition-all ${
+              className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
                 activeTab === "WEEKEND_RULES"
                   ? "bg-teal-600 text-white shadow"
-                  : "text-slate-400 hover:text-slate-200"
+                  : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200"
               }`}
             >
               {isBangla ? "সাপ্তাহিক ছুটি কনফিগ" : "Weekend Rules"}
@@ -353,7 +353,7 @@ export const ShiftsHolidaysView: React.FC<ShiftsHolidaysViewProps> = ({
           {activeTab === "HOLIDAYS" && (
             <button
               onClick={handleAutoSyncBangladeshHolidays}
-              className="px-4 py-2 bg-emerald-700/80 hover:bg-emerald-600 text-white text-xs font-bold rounded-xl border border-emerald-500/40 shadow flex items-center gap-1.5 transition-all"
+              className="px-4 py-2 bg-emerald-700/80 hover:bg-emerald-600 text-white text-xs font-bold rounded-xl border border-emerald-500/40 shadow flex items-center gap-1.5 transition-all cursor-pointer"
             >
               <RefreshCw className="w-4 h-4 text-emerald-300" />
               <span>{isBangla ? "🇧🇩 বাংলাদেশ ছুটি অটো-সিঙ্ক" : "🇧🇩 Auto-Sync BD Holidays"}</span>
@@ -376,12 +376,12 @@ export const ShiftsHolidaysView: React.FC<ShiftsHolidaysViewProps> = ({
 
       {/* Sync Success Alert */}
       {syncStatusMsg && (
-        <div className="p-4 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs font-bold flex items-center justify-between gap-3 animate-in fade-in">
+        <div className="p-4 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-700 dark:text-emerald-300 text-xs font-bold flex items-center justify-between gap-3 animate-in fade-in">
           <div className="flex items-center gap-2">
-            <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+            <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
             <span>{syncStatusMsg}</span>
           </div>
-          <button onClick={() => setSyncStatusMsg(null)} className="text-slate-400 hover:text-white">
+          <button onClick={() => setSyncStatusMsg(null)} className="text-slate-400 hover:text-slate-600 dark:hover:text-white cursor-pointer">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -393,58 +393,58 @@ export const ShiftsHolidaysView: React.FC<ShiftsHolidaysViewProps> = ({
           {shifts.map((s) => (
             <div
               key={s.id}
-              className="p-5 rounded-2xl bg-slate-900 border border-slate-800 hover:border-teal-500/40 transition-all space-y-4 shadow-md"
+              className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-teal-500/40 transition-all space-y-4 shadow-xs dark:shadow-md"
             >
               <div className="flex items-start justify-between">
                 <div>
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-teal-500/10 text-teal-300 border border-teal-500/20">
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-teal-500/15 text-teal-700 dark:text-teal-300 border border-teal-500/30">
                     {s.isFlexible
                       ? isBangla ? "ফ্লেক্সিবল সময়" : "Flexible Hours"
                       : s.isRotational
                       ? isBangla ? "ঘূর্ণায়মান রোস্টার" : "Rotational Shift"
                       : isBangla ? "ফিক্সড রেগুলার" : "Fixed Regular"}
                   </span>
-                  <h3 className="text-base font-bold text-white mt-1.5">{s.name}</h3>
+                  <h3 className="text-base font-bold text-slate-900 dark:text-white mt-1.5">{s.name}</h3>
                 </div>
-                <div className="p-2 rounded-xl bg-slate-800 text-teal-400">
+                <div className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-teal-600 dark:text-teal-400">
                   <Clock className="w-5 h-5" />
                 </div>
               </div>
 
-              <div className="p-3 rounded-xl bg-slate-800/60 border border-slate-700/60 flex items-center justify-between text-xs font-mono">
+              <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60 flex items-center justify-between text-xs font-mono">
                 <div>
-                  <span className="text-[10px] text-slate-400 block font-sans">
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 block font-sans">
                     {isBangla ? "শুরুর সময়" : "Start Time"}
                   </span>
-                  <span className="font-bold text-emerald-400 text-sm">{s.startTime}</span>
+                  <span className="font-bold text-emerald-600 dark:text-emerald-400 text-sm">{s.startTime}</span>
                 </div>
-                <span className="text-slate-500 font-bold">to</span>
+                <span className="text-slate-400 dark:text-slate-500 font-bold">to</span>
                 <div className="text-right">
-                  <span className="text-[10px] text-slate-400 block font-sans">
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 block font-sans">
                     {isBangla ? "শেষের সময়" : "End Time"}
                   </span>
-                  <span className="font-bold text-blue-400 text-sm">{s.endTime}</span>
+                  <span className="font-bold text-blue-600 dark:text-blue-400 text-sm">{s.endTime}</span>
                 </div>
               </div>
 
-              <div className="space-y-1.5 text-xs text-slate-300 pt-1">
+              <div className="space-y-1.5 text-xs text-slate-600 dark:text-slate-300 pt-1">
                 <div className="flex justify-between">
-                  <span className="text-slate-400">{isBangla ? "গ্রেস পিরিয়ড:" : "Grace Period:"}</span>
-                  <span className="font-semibold text-teal-300">{s.gracePeriodMinutes} {isBangla ? "মিনিট" : "Minutes"}</span>
+                  <span className="text-slate-500 dark:text-slate-400">{isBangla ? "গ্রেস পিরিয়ড:" : "Grace Period:"}</span>
+                  <span className="font-semibold text-teal-700 dark:text-teal-300">{s.gracePeriodMinutes} {isBangla ? "মিনিট" : "Minutes"}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-400">{isBangla ? "হাফ-ডে কাটঅফ:" : "Half-Day Threshold:"}</span>
+                  <span className="text-slate-500 dark:text-slate-400">{isBangla ? "হাফ-ডে কাটঅফ:" : "Half-Day Threshold:"}</span>
                   <span>{isBangla ? `${s.halfDayAfterMinutes} মিনিট পর` : `After ${s.halfDayAfterMinutes} Mins`}</span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-slate-400">{isBangla ? "সাপ্তাহিক ছুটি:" : "Weekend Days:"}</span>
+                  <span className="text-slate-500 dark:text-slate-400">{isBangla ? "সাপ্তাহিক ছুটি:" : "Weekend Days:"}</span>
                   <div className="flex items-center gap-1">
                     {(s.weekendDays || [5, 6]).map((dayIdx) => {
                       const dayObj = WEEKDAY_NAMES.find((w) => w.dayIndex === dayIdx);
                       return (
                         <span
                           key={dayIdx}
-                          className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-emerald-400 border border-emerald-500/20"
+                          className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20"
                         >
                           {isBangla ? dayObj?.labelBn : dayObj?.short}
                         </span>
@@ -455,14 +455,14 @@ export const ShiftsHolidaysView: React.FC<ShiftsHolidaysViewProps> = ({
               </div>
 
               {onDeleteShift && (
-                <div className="pt-2 border-t border-slate-800 flex justify-end">
+                <div className="pt-2 border-t border-slate-200 dark:border-slate-800 flex justify-end">
                   <button
                     onClick={() => {
                       if (confirm(isBangla ? "এই শিফটটি মুছে ফেলতে চান?" : "Delete this shift?")) {
                         onDeleteShift(s.id);
                       }
                     }}
-                    className="text-[11px] text-red-400 hover:text-red-300 flex items-center gap-1"
+                    className="text-[11px] text-red-500 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300 flex items-center gap-1 cursor-pointer"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                     <span>{isBangla ? "মুছে ফেলুন" : "Delete Shift"}</span>
@@ -478,16 +478,16 @@ export const ShiftsHolidaysView: React.FC<ShiftsHolidaysViewProps> = ({
       {activeTab === "HOLIDAYS" && (
         <div className="space-y-4">
           {/* Year & Search Filters */}
-          <div className="flex flex-wrap items-center justify-between gap-3 p-4 rounded-xl bg-slate-900 border border-slate-800 text-xs">
+          <div className="flex flex-wrap items-center justify-between gap-3 p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs shadow-xs">
             <div className="flex items-center gap-3">
-              <span className="font-bold text-slate-300 flex items-center gap-1.5">
-                <Filter className="w-3.5 h-3.5 text-teal-400" />
+              <span className="font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                <Filter className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
                 <span>{isBangla ? "বছর ফিল্টার:" : "Filter by Year:"}</span>
               </span>
               <select
                 value={holidayYearFilter}
                 onChange={(e) => setHolidayYearFilter(e.target.value)}
-                className="bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-white"
+                className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-1.5 text-slate-900 dark:text-white cursor-pointer"
               >
                 <option value="ALL">{isBangla ? "সকল বছর (All Years)" : "All Years"}</option>
                 <option value="2026">2026</option>
@@ -495,7 +495,7 @@ export const ShiftsHolidaysView: React.FC<ShiftsHolidaysViewProps> = ({
               </select>
             </div>
 
-            <span className="text-slate-400 text-xs">
+            <span className="text-slate-500 dark:text-slate-400 text-xs">
               {isBangla ? `মোট তালিকাভুক্ত ছুটি: ${filteredHolidays.length} টি` : `Total Holidays: ${filteredHolidays.length}`}
             </span>
           </div>
@@ -504,16 +504,16 @@ export const ShiftsHolidaysView: React.FC<ShiftsHolidaysViewProps> = ({
             {filteredHolidays.map((h) => (
               <div
                 key={h.id}
-                className="p-5 rounded-2xl bg-slate-900 border border-slate-800 hover:border-teal-500/40 transition-all space-y-3 shadow-md"
+                className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-teal-500/40 transition-all space-y-3 shadow-xs dark:shadow-md"
               >
                 <div className="flex items-start justify-between gap-2">
                   <span
                     className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
                       h.type === "FESTIVAL"
-                        ? "bg-purple-500/20 text-purple-300 border border-purple-500/30"
+                        ? "bg-purple-500/15 text-purple-700 dark:text-purple-300 border border-purple-500/30"
                         : h.type === "NATIONAL"
-                        ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
-                        : "bg-blue-500/20 text-blue-300 border border-blue-500/30"
+                        ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30"
+                        : "bg-blue-500/15 text-blue-700 dark:text-blue-300 border border-blue-500/30"
                     }`}
                   >
                     {h.type === "FESTIVAL"
@@ -523,23 +523,23 @@ export const ShiftsHolidaysView: React.FC<ShiftsHolidaysViewProps> = ({
                       : isBangla ? "কর্পোরেট ছুটি" : "Corporate"}
                   </span>
 
-                  <span className="px-2 py-0.5 rounded bg-slate-800 text-teal-300 font-bold text-[10px] font-mono">
+                  <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-teal-700 dark:text-teal-300 font-bold text-[10px] font-mono">
                     {h.totalDays} {isBangla ? "দিন" : "Days"}
                   </span>
                 </div>
 
-                <h3 className="text-sm font-bold text-white leading-snug">{h.name}</h3>
-                <p className="text-xs text-slate-400 line-clamp-2">{h.description}</p>
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white leading-snug">{h.name}</h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2">{h.description}</p>
 
-                <div className="p-3 rounded-xl bg-slate-800/60 border border-slate-700/60 flex items-center justify-between text-xs font-mono">
-                  <div className="flex items-center gap-1.5 text-slate-300">
-                    <Calendar className="w-3.5 h-3.5 text-teal-400" />
+                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60 flex items-center justify-between text-xs font-mono">
+                  <div className="flex items-center gap-1.5 text-slate-700 dark:text-slate-300">
+                    <Calendar className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
                     <span>{h.startDate}</span>
                   </div>
                   {h.startDate !== h.endDate && (
                     <>
-                      <span className="text-slate-500 font-bold">➔</span>
-                      <div className="flex items-center gap-1.5 text-slate-300">
+                      <span className="text-slate-400 dark:text-slate-500 font-bold">➔</span>
+                      <div className="flex items-center gap-1.5 text-slate-700 dark:text-slate-300">
                         <span>{h.endDate}</span>
                       </div>
                     </>
@@ -547,14 +547,14 @@ export const ShiftsHolidaysView: React.FC<ShiftsHolidaysViewProps> = ({
                 </div>
 
                 {onDeleteHoliday && (
-                  <div className="pt-2 border-t border-slate-800/80 flex justify-end">
+                  <div className="pt-2 border-t border-slate-200 dark:border-slate-800/80 flex justify-end">
                     <button
                       onClick={() => {
                         if (confirm(isBangla ? "এই ছুটিটি মুছে ফেলতে চান?" : "Delete this holiday?")) {
                           onDeleteHoliday(h.id);
                         }
                       }}
-                      className="text-[11px] text-red-400 hover:text-red-300 flex items-center gap-1"
+                      className="text-[11px] text-red-500 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300 flex items-center gap-1 cursor-pointer"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                       <span>{isBangla ? "মুছুন" : "Delete"}</span>
@@ -569,13 +569,13 @@ export const ShiftsHolidaysView: React.FC<ShiftsHolidaysViewProps> = ({
 
       {/* Weekend Rules Tab Content */}
       {activeTab === "WEEKEND_RULES" && (
-        <div className="p-6 rounded-2xl bg-slate-900 border border-slate-800 space-y-6">
+        <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-6">
           <div>
-            <h3 className="text-base font-bold text-white flex items-center gap-2">
-              <Calendar className="w-5 h-5 text-teal-400" />
+            <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <Calendar className="w-5 h-5 text-teal-600 dark:text-teal-400" />
               <span>{isBangla ? "কোম্পানির সাপ্তাহিক ছুটির দিন নির্ধারণ (Weekly Weekend Config)" : "Company Weekly Weekend Configuration"}</span>
             </h3>
-            <p className="text-xs text-slate-400 mt-0.5">
+            <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
               {isBangla
                 ? "বাংলাদেশে সাধারণত শুক্রবার ও শনিবার বা শুধু শুক্রবার সাপ্তাহিক ছুটি হিসেবে গণ্য হয়। আপনার প্রতিষ্ঠানের নিয়ম অনুযায়ী সিলেক্ট করুন।"
                 : "Configure standard company weekend days. Attendance records will automatically recognize these as non-working holidays."}
@@ -583,31 +583,31 @@ export const ShiftsHolidaysView: React.FC<ShiftsHolidaysViewProps> = ({
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="p-4 rounded-xl bg-slate-950 border border-teal-500/40 space-y-2">
+            <div className="p-4 rounded-xl bg-teal-50/50 dark:bg-slate-950 border border-teal-500/40 space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-teal-300">🇧🇩 Bangladesh Standard</span>
-                <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                <span className="text-xs font-bold text-teal-700 dark:text-teal-300">🇧🇩 Bangladesh Standard</span>
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
               </div>
-              <h4 className="font-bold text-white text-sm">Friday & Saturday (শুক্রবার ও শনিবার)</h4>
-              <p className="text-[11px] text-slate-400">2 days weekly weekend for corporate & banks.</p>
+              <h4 className="font-bold text-slate-900 dark:text-white text-sm">Friday & Saturday (শুক্রবার ও শনিবার)</h4>
+              <p className="text-[11px] text-slate-600 dark:text-slate-400">2 days weekly weekend for corporate & banks.</p>
             </div>
 
-            <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-2">
-              <span className="text-xs font-bold text-slate-400">Single Day Weekend</span>
-              <h4 className="font-bold text-white text-sm">Friday Only (শুধুমাত্র শুক্রবার)</h4>
-              <p className="text-[11px] text-slate-400">6-day work week for factories & retail outlets.</p>
+            <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 space-y-2">
+              <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Single Day Weekend</span>
+              <h4 className="font-bold text-slate-900 dark:text-white text-sm">Friday Only (শুধুমাত্র শুক্রবার)</h4>
+              <p className="text-[11px] text-slate-600 dark:text-slate-400">6-day work week for factories & retail outlets.</p>
             </div>
 
-            <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-2">
-              <span className="text-xs font-bold text-slate-400">International Standard</span>
-              <h4 className="font-bold text-white text-sm">Saturday & Sunday</h4>
-              <p className="text-[11px] text-slate-400">For global offshore client teams & IT exporters.</p>
+            <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 space-y-2">
+              <span className="text-xs font-bold text-slate-500 dark:text-slate-400">International Standard</span>
+              <h4 className="font-bold text-slate-900 dark:text-white text-sm">Saturday & Sunday</h4>
+              <p className="text-[11px] text-slate-600 dark:text-slate-400">For global offshore client teams & IT exporters.</p>
             </div>
 
-            <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-2">
-              <span className="text-xs font-bold text-slate-400">Custom Shift Roster</span>
-              <h4 className="font-bold text-white text-sm">Rotational Day Off</h4>
-              <p className="text-[11px] text-slate-400">Configured individually per shift profile.</p>
+            <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 space-y-2">
+              <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Custom Shift Roster</span>
+              <h4 className="font-bold text-slate-900 dark:text-white text-sm">Rotational Day Off</h4>
+              <p className="text-[11px] text-slate-600 dark:text-slate-400">Configured individually per shift profile.</p>
             </div>
           </div>
         </div>
@@ -615,48 +615,48 @@ export const ShiftsHolidaysView: React.FC<ShiftsHolidaysViewProps> = ({
 
       {/* Modal: Add Shift */}
       {showShiftModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
-          <div className="bg-slate-900 border border-slate-700 rounded-2xl p-6 w-full max-w-md text-slate-100 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between pb-2 border-b border-slate-800">
-              <h3 className="text-base font-bold text-white flex items-center gap-2">
-                <Clock className="w-5 h-5 text-teal-400" /> {isBangla ? "নতুন শিফট তৈরি করুন" : "Add Shift Roster"}
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-md">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl p-6 w-full max-w-md text-slate-900 dark:text-slate-100 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-slate-800">
+              <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <Clock className="w-5 h-5 text-teal-600 dark:text-teal-400" /> {isBangla ? "নতুন শিফট তৈরি করুন" : "Add Shift Roster"}
               </h3>
-              <button onClick={() => setShowShiftModal(false)} className="text-slate-400 hover:text-white">
+              <button onClick={() => setShowShiftModal(false)} className="text-slate-400 hover:text-slate-700 dark:hover:text-white cursor-pointer">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             <form onSubmit={handleShiftSubmit} className="space-y-3 text-xs">
               <div>
-                <label className="block text-slate-400 mb-1">{isBangla ? "শিফটের নাম *" : "Shift Name *"}</label>
+                <label className="block text-slate-600 dark:text-slate-400 mb-1">{isBangla ? "শিফটের নাম *" : "Shift Name *"}</label>
                 <input
                   type="text"
                   value={newShiftName}
                   onChange={(e) => setNewShiftName(e.target.value)}
                   placeholder="e.g. Morning Regular / General Day Shift"
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white"
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-teal-500"
                   required
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block text-slate-400 mb-1">{isBangla ? "শুরুর সময় *" : "Start Time *"}</label>
+                  <label className="block text-slate-600 dark:text-slate-400 mb-1">{isBangla ? "শুরুর সময় *" : "Start Time *"}</label>
                   <input
                     type="time"
                     value={newStartTime}
                     onChange={(e) => setNewStartTime(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white"
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white focus:outline-none focus:border-teal-500"
                     required
                   />
                 </div>
                 <div>
-                  <label className="block text-slate-400 mb-1">{isBangla ? "শেষের সময় *" : "End Time *"}</label>
+                  <label className="block text-slate-600 dark:text-slate-400 mb-1">{isBangla ? "শেষের সময় *" : "End Time *"}</label>
                   <input
                     type="time"
                     value={newEndTime}
                     onChange={(e) => setNewEndTime(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white"
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white focus:outline-none focus:border-teal-500"
                     required
                   />
                 </div>
@@ -664,28 +664,28 @@ export const ShiftsHolidaysView: React.FC<ShiftsHolidaysViewProps> = ({
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block text-slate-400 mb-1">{isBangla ? "গ্রেস পিরিয়ড (মিনিট)" : "Grace Period (Mins)"}</label>
+                  <label className="block text-slate-600 dark:text-slate-400 mb-1">{isBangla ? "গ্রেস পিরিয়ড (মিনিট)" : "Grace Period (Mins)"}</label>
                   <input
                     type="number"
                     value={newGraceMins}
                     onChange={(e) => setNewGraceMins(Number(e.target.value))}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white"
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white focus:outline-none focus:border-teal-500"
                   />
                 </div>
                 <div>
-                  <label className="block text-slate-400 mb-1">{isBangla ? "হাফ-ডে (মিনিট পর)" : "Half-Day After (Mins)"}</label>
+                  <label className="block text-slate-600 dark:text-slate-400 mb-1">{isBangla ? "হাফ-ডে (মিনিট পর)" : "Half-Day After (Mins)"}</label>
                   <input
                     type="number"
                     value={newHalfDayMins}
                     onChange={(e) => setNewHalfDayMins(Number(e.target.value))}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white"
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white focus:outline-none focus:border-teal-500"
                   />
                 </div>
               </div>
 
               {/* Weekend Days Selector */}
               <div>
-                <label className="block text-slate-400 mb-1.5 font-bold">
+                <label className="block text-slate-600 dark:text-slate-400 mb-1.5 font-bold">
                   {isBangla ? "সাপ্তাহিক ছুটির দিন নির্বাচন করুন:" : "Select Weekend Days for this Shift:"}
                 </label>
                 <div className="grid grid-cols-7 gap-1">
@@ -696,10 +696,10 @@ export const ShiftsHolidaysView: React.FC<ShiftsHolidaysViewProps> = ({
                         key={wd.dayIndex}
                         type="button"
                         onClick={() => toggleWeekendDay(wd.dayIndex)}
-                        className={`py-1.5 text-[11px] font-bold rounded-lg transition-colors text-center ${
+                        className={`py-1.5 text-[11px] font-bold rounded-lg transition-colors text-center cursor-pointer ${
                           isSelected
                             ? "bg-teal-600 text-white shadow"
-                            : "bg-slate-950 text-slate-400 hover:bg-slate-800"
+                            : "bg-slate-100 dark:bg-slate-950 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800"
                         }`}
                       >
                         {isBangla ? wd.labelBn.slice(0, 2) : wd.short}
@@ -709,22 +709,22 @@ export const ShiftsHolidaysView: React.FC<ShiftsHolidaysViewProps> = ({
                 </div>
               </div>
 
-              <div className="space-y-2 pt-2 border-t border-slate-800">
-                <label className="flex items-center gap-2 text-slate-300 cursor-pointer">
+              <div className="space-y-2 pt-2 border-t border-slate-200 dark:border-slate-800">
+                <label className="flex items-center gap-2 text-slate-700 dark:text-slate-300 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={newIsFlexible}
                     onChange={(e) => setNewIsFlexible(e.target.checked)}
-                    className="rounded border-slate-700 text-teal-600"
+                    className="rounded border-slate-300 dark:border-slate-700 text-teal-600"
                   />
                   <span>{isBangla ? "ফ্লেক্সিবল ওয়ার্কিং আওয়ারস (Flexible Working Hours)" : "Flexible Working Hours"}</span>
                 </label>
-                <label className="flex items-center gap-2 text-slate-300 cursor-pointer">
+                <label className="flex items-center gap-2 text-slate-700 dark:text-slate-300 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={newIsRotational}
                     onChange={(e) => setNewIsRotational(e.target.checked)}
-                    className="rounded border-slate-700 text-teal-600"
+                    className="rounded border-slate-300 dark:border-slate-700 text-teal-600"
                   />
                   <span>{isBangla ? "ঘূর্ণায়মান শিফট রোস্টার (Rotational Roster)" : "Rotational Shift Roster"}</span>
                 </label>
@@ -734,13 +734,13 @@ export const ShiftsHolidaysView: React.FC<ShiftsHolidaysViewProps> = ({
                 <button
                   type="button"
                   onClick={() => setShowShiftModal(false)}
-                  className="px-4 py-2 bg-slate-800 text-slate-300 rounded-xl font-bold"
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl font-bold cursor-pointer"
                 >
                   {isBangla ? "বাতিল" : "Cancel"}
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-gradient-to-r from-teal-600 to-emerald-600 text-white rounded-xl font-bold"
+                  className="px-5 py-2 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white rounded-xl font-bold shadow-lg shadow-teal-500/20 cursor-pointer"
                 >
                   {isBangla ? "শিফট সংরক্ষণ" : "Save Shift"}
                 </button>
@@ -752,36 +752,36 @@ export const ShiftsHolidaysView: React.FC<ShiftsHolidaysViewProps> = ({
 
       {/* Modal: Add Holiday */}
       {showHolidayModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
-          <div className="bg-slate-900 border border-slate-700 rounded-2xl p-6 w-full max-w-md text-slate-100 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between pb-2 border-b border-slate-800">
-              <h3 className="text-base font-bold text-white flex items-center gap-2">
-                <Calendar className="w-5 h-5 text-teal-400" /> {isBangla ? "কর্পোরেট ছুটির তালিকাভুক্ত করুন" : "Add Corporate Holiday"}
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-md">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl p-6 w-full max-w-md text-slate-900 dark:text-slate-100 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-slate-800">
+              <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <Calendar className="w-5 h-5 text-teal-600 dark:text-teal-400" /> {isBangla ? "কর্পোরেট ছুটির তালিকাভুক্ত করুন" : "Add Corporate Holiday"}
               </h3>
-              <button onClick={() => setShowHolidayModal(false)} className="text-slate-400 hover:text-white">
+              <button onClick={() => setShowHolidayModal(false)} className="text-slate-400 hover:text-slate-700 dark:hover:text-white cursor-pointer">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             <form onSubmit={handleHolidaySubmit} className="space-y-3 text-xs">
               <div>
-                <label className="block text-slate-400 mb-1">{isBangla ? "ছুটির শিরোনাম *" : "Holiday Title *"}</label>
+                <label className="block text-slate-600 dark:text-slate-400 mb-1">{isBangla ? "ছুটির শিরোনাম *" : "Holiday Title *"}</label>
                 <input
                   type="text"
                   value={newHolName}
                   onChange={(e) => setNewHolName(e.target.value)}
                   placeholder="e.g. পবিত্র ঈদুল আযহা / Corporate Annual Gala"
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white"
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-teal-500"
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-slate-400 mb-1">{isBangla ? "ছুটির ক্যাটাগরি" : "Holiday Classification"}</label>
+                <label className="block text-slate-600 dark:text-slate-400 mb-1">{isBangla ? "ছুটির ক্যাটাগরি" : "Holiday Classification"}</label>
                 <select
                   value={newHolType}
                   onChange={(e) => setNewHolType(e.target.value as any)}
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white"
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white focus:outline-none focus:border-teal-500 cursor-pointer"
                 >
                   <option value="FESTIVAL">Festival Holiday (উৎসব ছুটি)</option>
                   <option value="NATIONAL">National Holiday (জাতীয় দিবস)</option>
@@ -791,49 +791,49 @@ export const ShiftsHolidaysView: React.FC<ShiftsHolidaysViewProps> = ({
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block text-slate-400 mb-1">{isBangla ? "শুরুর তারিখ *" : "Start Date *"}</label>
+                  <label className="block text-slate-600 dark:text-slate-400 mb-1">{isBangla ? "শুরুর তারিখ *" : "Start Date *"}</label>
                   <input
                     type="date"
                     value={newHolStart}
                     onChange={(e) => setNewHolStart(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white"
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white focus:outline-none focus:border-teal-500"
                     required
                   />
                 </div>
                 <div>
-                  <label className="block text-slate-400 mb-1">{isBangla ? "শেষের তারিখ *" : "End Date *"}</label>
+                  <label className="block text-slate-600 dark:text-slate-400 mb-1">{isBangla ? "শেষের তারিখ *" : "End Date *"}</label>
                   <input
                     type="date"
                     value={newHolEnd}
                     onChange={(e) => setNewHolEnd(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white"
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white focus:outline-none focus:border-teal-500"
                     required
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-slate-400 mb-1">{isBangla ? "বিবরণ" : "Holiday Circular Details"}</label>
+                <label className="block text-slate-600 dark:text-slate-400 mb-1">{isBangla ? "বিবরণ" : "Holiday Circular Details"}</label>
                 <textarea
                   rows={2}
                   value={newHolDesc}
                   onChange={(e) => setNewHolDesc(e.target.value)}
                   placeholder="Official office closure announcement..."
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white"
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-teal-500"
                 />
               </div>
 
-              <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
+              <div className="flex justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-800">
                 <button
                   type="button"
                   onClick={() => setShowHolidayModal(false)}
-                  className="px-4 py-2 bg-slate-800 text-slate-300 rounded-xl font-bold"
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl font-bold cursor-pointer"
                 >
                   {isBangla ? "বাতিল" : "Cancel"}
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-gradient-to-r from-teal-600 to-emerald-600 text-white rounded-xl font-bold"
+                  className="px-5 py-2 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white rounded-xl font-bold shadow-lg shadow-teal-500/20 cursor-pointer"
                 >
                   {isBangla ? "ছুটি যুক্ত করুন" : "Publish Holiday"}
                 </button>

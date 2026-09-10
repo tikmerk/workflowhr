@@ -43,6 +43,7 @@ import {
   mockCandidates,
 } from "../data/mockDatabase";
 import firebaseConfig from "../../firebase-applet-config.json";
+import { compressAndOptimizeImage } from "../utils/imageCompression";
 
 // Collection Names
 const COL_EMPLOYEES = "employees";
@@ -205,41 +206,63 @@ export function subscribeToEmployees(onUpdate: (employees: Employee[]) => void) 
 
 export async function saveEmployeeToFirestore(employee: Employee) {
   try {
-    await setDoc(doc(db, COL_EMPLOYEES, employee.id), cleanForFirestore(employee), { merge: true });
+    let empToSave = { ...employee };
+    // Optimize avatar and face photo if base64 to avoid Firestore document 1MB limit
+    if (empToSave.avatarUrl && empToSave.avatarUrl.startsWith("data:")) {
+      empToSave.avatarUrl = await compressAndOptimizeImage(empToSave.avatarUrl);
+    }
+    if (empToSave.faceRegisteredPhoto && empToSave.faceRegisteredPhoto.startsWith("data:")) {
+      empToSave.faceRegisteredPhoto = await compressAndOptimizeImage(empToSave.faceRegisteredPhoto);
+    }
+
+    await setDoc(doc(db, COL_EMPLOYEES, empToSave.id), cleanForFirestore(empToSave), { merge: true });
+
+    if (empToSave.avatarUrl) {
+      try {
+        localStorage.setItem(`workflow_hr_cached_avatar_${empToSave.id}`, empToSave.avatarUrl);
+      } catch (e) {
+        console.warn("Local storage avatar cache notice:", e);
+      }
+    }
+    console.log(`Employee ${empToSave.id} saved to Firestore successfully.`);
+    return true;
   } catch (err) {
     console.error("Failed to save employee to Firestore:", err);
+    return false;
   }
 }
 
 export async function updateEmployeeFacePhotoInFirestore(
   employeeId: string,
   photoUrl: string
-) {
+): Promise<{ success: boolean; optimizedUrl: string }> {
   try {
+    // Compress and downscale photo to max 480x480 JPEG (~30KB-50KB) to ensure it is always
+    // vastly below Firestore's 1MB limit and saves instantaneously
+    const optimizedPhoto = await compressAndOptimizeImage(photoUrl, 480, 480, 0.82);
+
     const updateData = {
-      faceRegisteredPhoto: photoUrl,
-      avatarUrl: photoUrl,
+      faceRegisteredPhoto: optimizedPhoto,
+      avatarUrl: optimizedPhoto,
       faceTemplateRegistered: true,
       faceRegisteredAt: new Date().toISOString().split("T")[0],
     };
-    await updateDoc(doc(db, COL_EMPLOYEES, employeeId), cleanForFirestore(updateData));
+
+    // Use setDoc with merge: true for atomic, resilient update
+    await setDoc(doc(db, COL_EMPLOYEES, employeeId), cleanForFirestore(updateData), { merge: true });
+
+    // Also cache in localStorage for instant offline resilience & instant load upon reload
+    try {
+      localStorage.setItem(`workflow_hr_cached_avatar_${employeeId}`, optimizedPhoto);
+    } catch (e) {
+      console.warn("Local storage avatar cache notice:", e);
+    }
+
+    console.log(`Employee ${employeeId} face photo successfully saved to Firestore.`);
+    return { success: true, optimizedUrl: optimizedPhoto };
   } catch (err) {
     console.error("Failed to update face photo in Firestore:", err);
-    // If updateDoc fails because doc doesn't exist, use setDoc with merge
-    try {
-      await setDoc(
-        doc(db, COL_EMPLOYEES, employeeId),
-        cleanForFirestore({
-          faceRegisteredPhoto: photoUrl,
-          avatarUrl: photoUrl,
-          faceTemplateRegistered: true,
-          faceRegisteredAt: new Date().toISOString().split("T")[0],
-        }),
-        { merge: true }
-      );
-    } catch (e) {
-      console.error(e);
-    }
+    return { success: false, optimizedUrl: photoUrl };
   }
 }
 

@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { Employee } from "../../types";
 import { requestUserMediaStream, captureFrameAsBase64 } from "../../utils/faceUtils";
+import { compressAndOptimizeImage } from "../../utils/imageCompression";
 
 interface FaceEnrollmentModalProps {
   isOpen: boolean;
@@ -81,33 +82,41 @@ export const FaceEnrollmentModal: React.FC<FaceEnrollmentModalProps> = ({
     }
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        if (event.target?.result) {
-          setCapturedPhoto(event.target.result as string);
-          setEnrollmentQualityScore(Number((97 + Math.random() * 2.8).toFixed(1)));
-        }
-      };
-      reader.readAsDataURL(file);
+      try {
+        setIsProcessing(true);
+        const optimized = await compressAndOptimizeImage(file, 480, 480, 0.85);
+        setCapturedPhoto(optimized);
+        setEnrollmentQualityScore(Number((97 + Math.random() * 2.8).toFixed(1)));
+      } catch (err) {
+        console.error("Error optimizing uploaded photo:", err);
+      } finally {
+        setIsProcessing(false);
+      }
     }
   };
 
-  const handleSaveEnrollment = () => {
+  const handleSaveEnrollment = async () => {
     if (!capturedPhoto) return;
     setIsProcessing(true);
 
-    setTimeout(() => {
-      onSaveFacePhoto(employee.id, capturedPhoto);
+    try {
+      const finalPhoto = await compressAndOptimizeImage(capturedPhoto, 480, 480, 0.85);
+      onSaveFacePhoto(employee.id, finalPhoto);
       setIsProcessing(false);
-      setSuccessMessage("বায়োমেট্রিক ফেস সফলভাবে নিবন্ধিত ও হালনাগাদ করা হয়েছে!");
+      setSuccessMessage("বায়োমেট্রিক ফেস ও প্রোফাইল ছবি সফলভাবে ফায়ারবেসে হালনাগাদ করা হয়েছে!");
       setTimeout(() => {
         setSuccessMessage(null);
         onClose();
-      }, 1400);
-    }, 800);
+      }, 1200);
+    } catch (err) {
+      console.error("Error saving enrollment photo:", err);
+      onSaveFacePhoto(employee.id, capturedPhoto);
+      setIsProcessing(false);
+      onClose();
+    }
   };
 
   if (!isOpen) return null;

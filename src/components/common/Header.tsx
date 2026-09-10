@@ -300,21 +300,6 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Right Action Controls: Language, Theme, Branding Settings, Clock-In, AI, Notifications, Persona */}
         <div className="flex items-center gap-1.5 sm:gap-2">
-          {/* Firebase Database Live Health & Sync Indicator */}
-          <button
-            type="button"
-            onClick={() => setShowDbStatusModal(true)}
-            className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-800 dark:text-emerald-300 border border-emerald-500/30 text-xs font-bold transition-all cursor-pointer shrink-0"
-            title={t("ফায়ারবেস ক্লাউড ডাটাবেজ লাইভ স্ট্যাটাস", "Firebase Cloud Database Live Status")}
-          >
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-            </span>
-            <Database className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-            <span className="hidden xl:inline">{t("ডাটাবেজ সিঙ্কড", "DB Synced")}</span>
-          </button>
-
           {/* Desktop/Tablet Only: Super Admin Company Branding & White-Label Setup */}
           {isSuperAdmin && (
             <button
@@ -573,6 +558,35 @@ export const Header: React.FC<HeaderProps> = ({
                       <Sparkles className="w-3.5 h-3.5 text-purple-500 shrink-0" />
                     </button>
                   )}
+
+                  {/* Firebase Database Live Health & Sync Diagnostics (Personal Settings) */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowRoleMenu(false);
+                      setShowDbStatusModal(true);
+                    }}
+                    className="w-full flex items-center justify-between p-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/25 transition-all text-left cursor-pointer mt-1 group"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <div className="relative flex h-3 w-3 shrink-0 ml-0.5 items-center justify-center">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                      </div>
+                      <div>
+                        <div className="text-[11px] font-bold flex items-center gap-1.5">
+                          <Database className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                          <span>{t("ফায়ারবেস ডাটাবেজ লাইভ স্ট্যাটাস", "Firebase Database Live Status")}</span>
+                        </div>
+                        <div className="text-[9px] text-emerald-600/80 dark:text-emerald-300/80">
+                          {t("ক্লাউড সিঙ্ক স্থিতি, লেটেন্সি ও পিং টেস্ট", "Cloud sync health, latency & verify status")}
+                        </div>
+                      </div>
+                    </div>
+                    <span className="px-1.5 py-0.5 rounded text-[9.5px] font-bold bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 shrink-0">
+                      {t("সিঙ্কড", "Synced")}
+                    </span>
+                  </button>
                 </div>
 
                 {/* Account Security Notice */}
