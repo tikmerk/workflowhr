@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import {
   Layers,
   Building2,
@@ -17,7 +17,10 @@ import {
   CheckCircle2,
   UserCheck,
   Search,
-  X
+  X,
+  TrendingUp,
+  Award,
+  DollarSign
 } from "lucide-react";
 import { Department, Designation, Employee } from "../../types";
 import { useThemeLanguage } from "../../context/ThemeLanguageContext";
@@ -27,8 +30,10 @@ interface DepartmentsDesignationsViewProps {
   designations: Designation[];
   employees?: Employee[];
   onAddDepartment: (dept: Department) => void;
-  onAddDesignation: (desig: Designation) => void;
+  onUpdateDepartment?: (dept: Department) => void;
   onDeleteDepartment?: (id: string) => void;
+  onAddDesignation: (desig: Designation) => void;
+  onUpdateDesignation?: (desig: Designation) => void;
   onDeleteDesignation?: (id: string) => void;
   onViewEmployee?: (emp: Employee) => void;
   onEditEmployee?: (emp: Employee) => void;
@@ -39,27 +44,43 @@ export const DepartmentsDesignationsView: React.FC<DepartmentsDesignationsViewPr
   designations,
   employees = [],
   onAddDepartment,
-  onAddDesignation,
+  onUpdateDepartment,
   onDeleteDepartment,
+  onAddDesignation,
+  onUpdateDesignation,
   onDeleteDesignation,
   onViewEmployee,
   onEditEmployee,
 }) => {
-  const { t, isBangla } = useThemeLanguage();
+  const { isBangla } = useThemeLanguage();
 
   const [activeTab, setActiveTab] = useState<"DEPARTMENTS" | "DESIGNATIONS">("DEPARTMENTS");
   const [showDeptModal, setShowDeptModal] = useState(false);
   const [showDesigModal, setShowDesigModal] = useState(false);
 
-  // Selected Department for viewing members modal
+  // Edit Modals
+  const [editingDept, setEditingDept] = useState<Department | null>(null);
+  const [editingDesig, setEditingDesig] = useState<Designation | null>(null);
+
+  // Department Members Modal
   const [selectedDeptForMembers, setSelectedDeptForMembers] = useState<Department | null>(null);
   const [memberSearchTerm, setMemberSearchTerm] = useState("");
+
+  // Designation Members Modal
+  const [selectedDesigForMembers, setSelectedDesigForMembers] = useState<Designation | null>(null);
+  const [desigMemberSearchTerm, setDesigMemberSearchTerm] = useState("");
 
   // New Department Form
   const [newDeptName, setNewDeptName] = useState("");
   const [newDeptCode, setNewDeptCode] = useState("");
   const [newDeptDesc, setNewDeptDesc] = useState("");
   const [newDeptBudget, setNewDeptBudget] = useState(1500000);
+
+  // Edit Department Form
+  const [editDeptName, setEditDeptName] = useState("");
+  const [editDeptCode, setEditDeptCode] = useState("");
+  const [editDeptDesc, setEditDeptDesc] = useState("");
+  const [editDeptBudget, setEditDeptBudget] = useState(1500000);
 
   // New Designation Form
   const [newDesigTitle, setNewDesigTitle] = useState("");
@@ -70,6 +91,105 @@ export const DepartmentsDesignationsView: React.FC<DepartmentsDesignationsViewPr
   const [newDesigMaxSal, setNewDesigMaxSal] = useState(120000);
   const [newDesigDesc, setNewDesigDesc] = useState("");
 
+  // Edit Designation Form
+  const [editDesigTitle, setEditDesigTitle] = useState("");
+  const [editDesigCode, setEditDesigCode] = useState("");
+  const [editDesigDeptId, setEditDesigDeptId] = useState("");
+  const [editDesigLevel, setEditDesigLevel] = useState<any>("SENIOR");
+  const [editDesigMinSal, setEditDesigMinSal] = useState(70000);
+  const [editDesigMaxSal, setEditDesigMaxSal] = useState(120000);
+  const [editDesigDesc, setEditDesigDesc] = useState("");
+
+  // Department helper: get members for any department
+  const getDeptEmployees = (dept: Department) => {
+    return employees.filter((e) => {
+      const matchId = e.departmentId === dept.id;
+      const matchName = e.departmentName === dept.name;
+      const matchFuzzy =
+        Boolean(e.departmentName && dept.name) &&
+        (e.departmentName.toLowerCase().includes(dept.name.toLowerCase()) ||
+          dept.name.toLowerCase().includes(e.departmentName.toLowerCase()));
+      const matchCode =
+        Boolean(dept.code) &&
+        (e.departmentId?.toUpperCase() === dept.code.toUpperCase() ||
+          e.departmentName?.toUpperCase() === dept.code.toUpperCase());
+      const matchAdditional = Boolean(
+        e.additionalDepartments &&
+        e.additionalDepartments.some((ad) =>
+          ad.toLowerCase().includes(dept.name.toLowerCase()) ||
+          dept.name.toLowerCase().includes(ad.toLowerCase()) ||
+          (dept.code && ad.toUpperCase().includes(dept.code.toUpperCase()))
+        )
+      );
+
+      return matchId || matchName || matchFuzzy || matchCode || matchAdditional;
+    });
+  };
+
+  // Designation helper: get employees for any designation
+  const getDesigEmployees = (desig: Designation) => {
+    return employees.filter((e) => {
+      const matchId = e.designationId === desig.id;
+      const matchTitle = e.designationTitle?.toLowerCase() === desig.title.toLowerCase();
+      const matchPartial =
+        Boolean(e.designationTitle && desig.title) &&
+        (e.designationTitle.toLowerCase().includes(desig.title.toLowerCase()) ||
+          desig.title.toLowerCase().includes(e.designationTitle.toLowerCase()));
+      const matchCode =
+        Boolean(desig.code) && e.designationId?.toUpperCase() === desig.code.toUpperCase();
+      const matchAdditional = Boolean(
+        e.additionalDesignations &&
+        e.additionalDesignations.some((ades) =>
+          ades.toLowerCase().includes(desig.title.toLowerCase()) ||
+          desig.title.toLowerCase().includes(ades.toLowerCase()) ||
+          (desig.code && ades.toUpperCase().includes(desig.code.toUpperCase()))
+        )
+      );
+
+      return matchId || matchTitle || matchPartial || matchCode || matchAdditional;
+    });
+  };
+
+  // Filtered members in department modal
+  const deptMembers = useMemo(() => {
+    if (!selectedDeptForMembers) return [];
+    const base = getDeptEmployees(selectedDeptForMembers);
+    if (!memberSearchTerm) return base;
+    return base.filter(
+      (e) =>
+        e.fullName.toLowerCase().includes(memberSearchTerm.toLowerCase()) ||
+        e.employeeCode.toLowerCase().includes(memberSearchTerm.toLowerCase()) ||
+        e.designationTitle.toLowerCase().includes(memberSearchTerm.toLowerCase())
+    );
+  }, [selectedDeptForMembers, employees, memberSearchTerm]);
+
+  // Filtered members in designation modal
+  const desigMembers = useMemo(() => {
+    if (!selectedDesigForMembers) return [];
+    const base = getDesigEmployees(selectedDesigForMembers);
+    if (!desigMemberSearchTerm) return base;
+    return base.filter(
+      (e) =>
+        e.fullName.toLowerCase().includes(desigMemberSearchTerm.toLowerCase()) ||
+        e.employeeCode.toLowerCase().includes(desigMemberSearchTerm.toLowerCase()) ||
+        e.departmentName.toLowerCase().includes(desigMemberSearchTerm.toLowerCase()) ||
+        e.branchName?.toLowerCase().includes(desigMemberSearchTerm.toLowerCase())
+    );
+  }, [selectedDesigForMembers, employees, desigMemberSearchTerm]);
+
+  // Overview stats for designations
+  const desigStats = useMemo(() => {
+    const totalDesigs = designations.length;
+    const totalAssignedStaff = employees.filter((e) => Boolean(e.designationTitle || e.designationId)).length;
+    const maxSalaryBand = Math.max(...designations.map((d) => d.maxSalary || 0), 0);
+    const executiveRoles = designations.filter(
+      (d) => d.level === "EXECUTIVE" || d.level === "LEAD"
+    ).length;
+
+    return { totalDesigs, totalAssignedStaff, maxSalaryBand, executiveRoles };
+  }, [designations, employees]);
+
+  // Handle Add Department
   const handleDeptSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onAddDepartment({
@@ -86,6 +206,54 @@ export const DepartmentsDesignationsView: React.FC<DepartmentsDesignationsViewPr
     setNewDeptDesc("");
   };
 
+  // Open Edit Department Modal
+  const openEditDeptModal = (dept: Department) => {
+    setEditingDept(dept);
+    setEditDeptName(dept.name);
+    setEditDeptCode(dept.code || "");
+    setEditDeptDesc(dept.description || "");
+    setEditDeptBudget(dept.budgetAllocated || 1500000);
+  };
+
+  // Handle Edit Department Submit
+  const handleEditDeptSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingDept) return;
+
+    const updated: Department = {
+      ...editingDept,
+      name: editDeptName,
+      code: editDeptCode.toUpperCase(),
+      description: editDeptDesc,
+      budgetAllocated: Number(editDeptBudget),
+    };
+
+    if (onUpdateDepartment) {
+      onUpdateDepartment(updated);
+    }
+    setEditingDept(null);
+  };
+
+  // Handle Delete Department with confirmation
+  const handleDeleteDept = (dept: Department) => {
+    const assignedCount = getDeptEmployees(dept).length;
+    const msg =
+      assignedCount > 0
+        ? isBangla
+          ? `সতর্কতা: "${dept.name}" ডিপার্টমেন্টে ${assignedCount} জন কর্মকর্তা-কর্মচারী নিযুক্ত আছেন। আপনি কি ডিপার্টমেন্টটি মুছে ফেলতে চান?`
+          : `Warning: ${assignedCount} employees are assigned to "${dept.name}". Are you sure you want to delete this department?`
+        : isBangla
+          ? `আপনি কি "${dept.name}" ডিপার্টমেন্টটি মুছে ফেলতে চান?`
+          : `Are you sure you want to delete department "${dept.name}"?`;
+
+    if (window.confirm(msg)) {
+      if (onDeleteDepartment) {
+        onDeleteDepartment(dept.id);
+      }
+    }
+  };
+
+  // Handle Add Designation
   const handleDesigSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const dept = departments.find((d) => d.id === newDesigDeptId) || departments[0];
@@ -105,23 +273,64 @@ export const DepartmentsDesignationsView: React.FC<DepartmentsDesignationsViewPr
     setNewDesigCode("");
   };
 
-  // Get department members
-  const deptMembers = selectedDeptForMembers
-    ? employees.filter((e) => {
-        const matchDept =
-          e.departmentId === selectedDeptForMembers.id ||
-          e.departmentName?.toLowerCase() === selectedDeptForMembers.name.toLowerCase() ||
-          selectedDeptForMembers.name.toLowerCase().includes(e.departmentName?.toLowerCase() || "");
-        
-        const matchSearch =
-          memberSearchTerm === "" ||
-          e.fullName.toLowerCase().includes(memberSearchTerm.toLowerCase()) ||
-          e.employeeCode.toLowerCase().includes(memberSearchTerm.toLowerCase()) ||
-          e.designationTitle.toLowerCase().includes(memberSearchTerm.toLowerCase());
+  // Open Edit Designation Modal
+  const openEditDesigModal = (desig: Designation) => {
+    setEditingDesig(desig);
+    setEditDesigTitle(desig.title);
+    setEditDesigCode(desig.code || "");
+    setEditDesigDeptId(desig.departmentId || departments[0]?.id || "");
+    setEditDesigLevel(desig.level || "SENIOR");
+    setEditDesigMinSal(desig.minSalary || 70000);
+    setEditDesigMaxSal(desig.maxSalary || 120000);
+    setEditDesigDesc(desig.description || "");
+  };
 
-        return matchDept && matchSearch;
-      })
-    : [];
+  // Handle Edit Designation Submit
+  const handleEditDesigSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingDesig) return;
+
+    const dept = departments.find((d) => d.id === editDesigDeptId) || {
+      id: editingDesig.departmentId,
+      name: editingDesig.departmentName,
+    };
+
+    const updated: Designation = {
+      ...editingDesig,
+      title: editDesigTitle,
+      code: editDesigCode.toUpperCase(),
+      departmentId: dept.id,
+      departmentName: dept.name,
+      level: editDesigLevel,
+      minSalary: Number(editDesigMinSal),
+      maxSalary: Number(editDesigMaxSal),
+      description: editDesigDesc,
+    };
+
+    if (onUpdateDesignation) {
+      onUpdateDesignation(updated);
+    }
+    setEditingDesig(null);
+  };
+
+  // Handle Delete Designation with confirmation
+  const handleDeleteDesig = (desig: Designation) => {
+    const assignedCount = getDesigEmployees(desig).length;
+    const msg =
+      assignedCount > 0
+        ? isBangla
+          ? `সতর্কতা: "${desig.title}" পদবিতে ${assignedCount} জন কর্মকর্তা কর্মরত আছেন। আপনি কি পদবিটি মুছে ফেলতে চান?`
+          : `Warning: ${assignedCount} employees hold the "${desig.title}" designation. Are you sure you want to delete it?`
+        : isBangla
+          ? `আপনি কি "${desig.title}" পদবিটি মুছে ফেলতে চান?`
+          : `Are you sure you want to delete designation "${desig.title}"?`;
+
+    if (window.confirm(msg)) {
+      if (onDeleteDesignation) {
+        onDeleteDesignation(desig.id);
+      }
+    }
+  };
 
   return (
     <div id="departments-designations-view" className="space-y-6 animate-in fade-in duration-300">
@@ -131,7 +340,7 @@ export const DepartmentsDesignationsView: React.FC<DepartmentsDesignationsViewPr
           <div className="flex items-center gap-2">
             <span className="px-2.5 py-1 rounded-lg bg-teal-500/15 text-teal-700 dark:text-teal-300 border border-teal-500/30 text-xs font-bold flex items-center gap-1.5">
               <Layers className="w-3.5 h-3.5" />
-              <span>{isBangla ? "সাংগঠনিক কাঠামো" : "Organizational Hierarchy"}</span>
+              <span>{isBangla ? "সাংগঠনিক কাঠামো ও পদবি" : "Organizational Hierarchy"}</span>
             </span>
           </div>
           <h2 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight mt-2">
@@ -139,8 +348,8 @@ export const DepartmentsDesignationsView: React.FC<DepartmentsDesignationsViewPr
           </h2>
           <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
             {isBangla
-              ? "ডিপার্টমেন্ট ভিত্তিক সকল কর্মকর্তা-কর্মচারীদের তালিকা দেখুন, প্রোফাইল পরীক্ষা করুন ও পদবি কনফিগার করুন"
-              : "Inspect department member rosters, review staff profiles, salary bands and organizational designations"}
+              ? "ডিপার্টমেন্ট ও পদবি অনুযায়ী কর্মরত কর্মীদের তালিকা দেখুন, সম্পাদনা করুন এবং বাজেট ও পে-স্কেল কনফিগার করুন"
+              : "Inspect department & designation rosters, edit structure, and calibrate pay scales and budgets"}
           </p>
         </div>
 
@@ -164,67 +373,93 @@ export const DepartmentsDesignationsView: React.FC<DepartmentsDesignationsViewPr
                   : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
               }`}
             >
-              {isBangla ? `পদবি তালিকা (${designations.length})` : `Designations (${designations.length})`}
+              {isBangla ? `পদবি ও পে-স্কেল (${designations.length})` : `Designations (${designations.length})`}
             </button>
           </div>
 
-          <button
-            onClick={() => (activeTab === "DEPARTMENTS" ? setShowDeptModal(true) : setShowDesigModal(true))}
-            className="px-4 py-2 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-teal-500/20 flex items-center gap-1.5 transition-all cursor-pointer"
-          >
-            <Plus className="w-4 h-4" />
-            <span>
-              {activeTab === "DEPARTMENTS"
-                ? isBangla ? "+ নতুন ডিপার্টমেন্ট" : "+ Add Department"
-                : isBangla ? "+ নতুন পদবি" : "+ Add Designation"}
-            </span>
-          </button>
+          {activeTab === "DEPARTMENTS" ? (
+            <button
+              onClick={() => setShowDeptModal(true)}
+              className="px-4 py-2 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-teal-500/20 flex items-center gap-2 transition-all cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>{isBangla ? "+ ডিপার্টমেন্ট যোগ করুন" : "+ Add Department"}</span>
+            </button>
+          ) : (
+            <button
+              onClick={() => setShowDesigModal(true)}
+              className="px-4 py-2 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-teal-500/20 flex items-center gap-2 transition-all cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>{isBangla ? "+ পদবি তৈরি করুন" : "+ Add Designation"}</span>
+            </button>
+          )}
         </div>
       </div>
 
       {/* Departments Tab Content */}
       {activeTab === "DEPARTMENTS" && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {departments.map((dept) => {
-            const actualStaffCount = employees.filter(
-              (e) =>
-                e.departmentId === dept.id ||
-                e.departmentName?.toLowerCase() === dept.name.toLowerCase() ||
-                dept.name.toLowerCase().includes(e.departmentName?.toLowerCase() || "")
-            ).length;
+            const actualStaffList = getDeptEmployees(dept);
+            const actualStaffCount = actualStaffList.length;
 
             return (
               <div
                 key={dept.id}
-                className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-teal-500/40 transition-all space-y-4 shadow-xs flex flex-col justify-between"
+                className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-teal-500/40 transition-all flex flex-col justify-between space-y-4 shadow-xs"
               >
                 <div className="space-y-3">
-                  <div className="flex items-start justify-between">
+                  <div className="flex items-start justify-between gap-2">
                     <div>
                       <span className="text-[10px] font-bold font-mono text-teal-700 dark:text-teal-400 bg-teal-500/10 px-2 py-0.5 rounded border border-teal-500/20">
                         {dept.code}
                       </span>
                       <h3 className="text-base font-bold text-slate-900 dark:text-white mt-1.5">{dept.name}</h3>
                     </div>
-                    <div className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-teal-600 dark:text-teal-400">
-                      <Building2 className="w-4 h-4" />
+
+                    <div className="flex items-center gap-1">
+                      {onUpdateDepartment && (
+                        <button
+                          type="button"
+                          onClick={() => openEditDeptModal(dept)}
+                          className="p-1.5 rounded-lg bg-slate-100 hover:bg-teal-500/20 dark:bg-slate-800 dark:hover:bg-teal-500/30 text-slate-600 dark:text-slate-300 hover:text-teal-700 dark:hover:text-teal-300 transition-colors cursor-pointer"
+                          title={isBangla ? "ডিপার্টমেন্ট এডিট করুন" : "Edit Department"}
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                      {onDeleteDepartment && (
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteDept(dept)}
+                          className="p-1.5 rounded-lg bg-slate-100 hover:bg-rose-500/20 dark:bg-slate-800 dark:hover:bg-rose-500/30 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 transition-colors cursor-pointer"
+                          title={isBangla ? "ডিপার্টমেন্ট মুছে ফেলুন" : "Delete Department"}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                     </div>
                   </div>
 
                   <p className="text-xs text-slate-600 dark:text-slate-400 line-clamp-2">{dept.description}</p>
 
                   <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100 dark:border-slate-800 text-xs">
-                    <div className="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-transparent">
-                      <span className="text-[10px] text-slate-500 dark:text-slate-400 block">{isBangla ? "মোট সদস্য" : "Total Staff"}</span>
+                    <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-transparent">
+                      <span className="text-[10px] text-slate-500 dark:text-slate-400 block font-semibold">
+                        {isBangla ? "মোট কর্মরত কর্মী" : "Assigned Staff"}
+                      </span>
                       <span className="font-bold text-slate-900 dark:text-white text-sm flex items-center gap-1 mt-0.5">
                         <Users className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
-                        <span>{actualStaffCount || dept.totalEmployees || 0} {isBangla ? "জন" : "Members"}</span>
+                        <span>{actualStaffCount} {isBangla ? "জন" : "Members"}</span>
                       </span>
                     </div>
 
-                    <div className="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-transparent">
-                      <span className="text-[10px] text-slate-500 dark:text-slate-400 block">{isBangla ? "বাজেট বরাদ্দ" : "Budget"}</span>
-                      <span className="font-bold text-emerald-600 dark:text-emerald-400 text-xs font-mono mt-0.5 block">
+                    <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-transparent">
+                      <span className="text-[10px] text-slate-500 dark:text-slate-400 block font-semibold">
+                        {isBangla ? "বাজেট বরাদ্দ" : "Budget Allocated"}
+                      </span>
+                      <span className="font-bold text-emerald-600 dark:text-emerald-400 text-xs font-mono mt-1 block">
                         ৳{((dept.budgetAllocated ?? 1500000) / 100000).toFixed(1)}L BDT
                       </span>
                     </div>
@@ -232,33 +467,18 @@ export const DepartmentsDesignationsView: React.FC<DepartmentsDesignationsViewPr
                 </div>
 
                 {/* View Members Button */}
-                <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2">
+                <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
                   <button
                     type="button"
                     onClick={() => {
                       setSelectedDeptForMembers(dept);
                       setMemberSearchTerm("");
                     }}
-                    className="flex-1 py-2 px-3 rounded-xl bg-teal-500/10 hover:bg-teal-500/20 text-teal-700 dark:text-teal-300 border border-teal-500/30 font-bold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                    className="w-full py-2.5 px-3 rounded-xl bg-teal-500/10 hover:bg-teal-500/20 text-teal-800 dark:text-teal-300 border border-teal-500/30 font-bold text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer"
                   >
-                    <Users className="w-3.5 h-3.5" />
-                    <span>{isBangla ? "সদস্যদের তালিকা দেখুন ➔" : "View Department Members ➔"}</span>
+                    <Users className="w-4 h-4" />
+                    <span>{isBangla ? `সদস্যদের তালিকা দেখুন (${actualStaffCount} জন) ➔` : `View Members (${actualStaffCount}) ➔`}</span>
                   </button>
-
-                  {onDeleteDepartment && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (confirm(isBangla ? "এই ডিপার্টমেন্ট মুছে ফেলতে চান?" : "Delete this department?")) {
-                          onDeleteDepartment(dept.id);
-                        }
-                      }}
-                      className="p-2 rounded-xl text-slate-400 hover:text-red-500 hover:bg-red-500/10 transition-colors cursor-pointer"
-                      title="Delete Department"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  )}
                 </div>
               </div>
             );
@@ -266,55 +486,169 @@ export const DepartmentsDesignationsView: React.FC<DepartmentsDesignationsViewPr
         </div>
       )}
 
-      {/* Designations Tab Content */}
+      {/* Designations Tab Content with Requested Top Dashboard Overview */}
       {activeTab === "DESIGNATIONS" && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {designations.map((desig) => (
-            <div
-              key={desig.id}
-              className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-teal-500/40 transition-all space-y-3 shadow-xs"
-            >
-              <div className="flex items-start justify-between">
-                <div>
-                  <span className="text-[10px] font-bold font-mono text-blue-700 dark:text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded border border-blue-500/20">
-                    {desig.code}
-                  </span>
-                  <h3 className="text-base font-bold text-slate-900 dark:text-white mt-1.5">{desig.title}</h3>
-                  <span className="text-xs text-teal-600 dark:text-teal-400 font-semibold">{desig.departmentName}</span>
-                </div>
-                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
-                  {desig.level}
-                </span>
+        <div className="space-y-6">
+          {/* Top Dashboard Overview Field for Designations */}
+          <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                  <TrendingUp className="w-4 h-4 text-teal-600 dark:text-teal-400" />
+                  <span>{isBangla ? "পদবি ও জনবল কাঠামো ড্যাশবোর্ড ওভারভিউ" : "Designation & Job Architecture Overview"}</span>
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  {isBangla
+                    ? "কোম্পানির মোট পদবি, কর্মরত জনবল বণ্টন এবং সর্বোচ্চ বেতন সীমার সংক্ষিপ্ত পরিসংখ্যান"
+                    : "Executive summary of designations, assigned workforce headcount, and salary tiers"}
+                </p>
               </div>
-
-              <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60 space-y-1 text-xs">
-                <span className="text-[10px] text-slate-500 dark:text-slate-400 block">{isBangla ? "বেতন কাঠামো রেঞ্জ (Salary Band):" : "Salary Band Range:"}</span>
-                <div className="flex justify-between font-mono font-bold text-slate-900 dark:text-white">
-                  <span>৳{(desig.minSalary ?? 0).toLocaleString()}</span>
-                  <span className="text-slate-400 dark:text-slate-500">to</span>
-                  <span className="text-emerald-600 dark:text-emerald-400">৳{(desig.maxSalary ?? 0).toLocaleString()} BDT</span>
-                </div>
-              </div>
-
-              <p className="text-xs text-slate-600 dark:text-slate-400 line-clamp-2">{desig.description}</p>
-
-              {onDeleteDesignation && (
-                <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex justify-end">
-                  <button
-                    onClick={() => {
-                      if (confirm(isBangla ? "এই পদবি মুছে ফেলতে চান?" : "Delete designation?")) {
-                        onDeleteDesignation(desig.id);
-                      }
-                    }}
-                    className="text-[11px] text-red-500 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300 flex items-center gap-1 cursor-pointer"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                    <span>{isBangla ? "মুছে ফেলুন" : "Delete"}</span>
-                  </button>
-                </div>
-              )}
             </div>
-          ))}
+
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-700/60">
+                <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block">
+                  {isBangla ? "মোট পদবি সংখ্যা" : "Total Designations"}
+                </span>
+                <div className="text-xl font-black text-slate-900 dark:text-white mt-1 flex items-center gap-1.5">
+                  <Briefcase className="w-4 h-4 text-teal-600" />
+                  <span>{desigStats.totalDesigs}</span>
+                  <span className="text-xs text-slate-400 font-normal">{isBangla ? "টি" : "Roles"}</span>
+                </div>
+              </div>
+
+              <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-700/60">
+                <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block">
+                  {isBangla ? "পদবিভুক্ত মোট কর্মী" : "Assigned Employees"}
+                </span>
+                <div className="text-xl font-black text-emerald-600 dark:text-emerald-400 mt-1 flex items-center gap-1.5">
+                  <Users className="w-4 h-4" />
+                  <span>{desigStats.totalAssignedStaff}</span>
+                  <span className="text-xs text-slate-400 font-normal">{isBangla ? "জন কর্মরত" : "Staff"}</span>
+                </div>
+              </div>
+
+              <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-700/60">
+                <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block">
+                  {isBangla ? "শীর্ষ পে-স্কেল সর্বোচ্চ বেতন" : "Top Salary Tier Band"}
+                </span>
+                <div className="text-xl font-black text-slate-900 dark:text-white font-mono mt-1 flex items-center gap-1">
+                  <span className="text-teal-600 text-sm">৳</span>
+                  <span>{desigStats.maxSalaryBand.toLocaleString()}</span>
+                </div>
+              </div>
+
+              <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-700/60">
+                <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block">
+                  {isBangla ? "লিডারশিপ ও এক্সিকিউটিভ রোল" : "Lead & Executive Roles"}
+                </span>
+                <div className="text-xl font-black text-blue-600 dark:text-blue-400 mt-1 flex items-center gap-1.5">
+                  <Award className="w-4 h-4" />
+                  <span>{desigStats.executiveRoles}</span>
+                  <span className="text-xs text-slate-400 font-normal">{isBangla ? "টি পদবি" : "Senior Roles"}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Designations Cards Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            {designations.map((desig) => {
+              const actualStaffList = getDesigEmployees(desig);
+              const actualStaffCount = actualStaffList.length;
+
+              return (
+                <div
+                  key={desig.id}
+                  className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-teal-500/40 transition-all flex flex-col justify-between space-y-4 shadow-xs"
+                >
+                  <div className="space-y-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="text-[10px] font-bold font-mono text-blue-700 dark:text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded border border-blue-500/20">
+                            {desig.code}
+                          </span>
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                            {desig.level}
+                          </span>
+                        </div>
+                        <h3 className="text-base font-bold text-slate-900 dark:text-white mt-1.5">{desig.title}</h3>
+                        <span className="text-xs text-teal-600 dark:text-teal-400 font-semibold">{desig.departmentName}</span>
+                      </div>
+
+                      <div className="flex items-center gap-1 shrink-0">
+                        {onUpdateDesignation && (
+                          <button
+                            type="button"
+                            onClick={() => openEditDesigModal(desig)}
+                            className="p-1.5 rounded-lg bg-slate-100 hover:bg-teal-500/20 dark:bg-slate-800 dark:hover:bg-teal-500/30 text-slate-600 dark:text-slate-300 hover:text-teal-700 dark:hover:text-teal-300 transition-colors cursor-pointer"
+                            title={isBangla ? "পদবি এডিট করুন" : "Edit Designation"}
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                        {onDeleteDesignation && (
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteDesig(desig)}
+                            className="p-1.5 rounded-lg bg-slate-100 hover:bg-rose-500/20 dark:bg-slate-800 dark:hover:bg-rose-500/30 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 transition-colors cursor-pointer"
+                            title={isBangla ? "পদবি মুছে ফেলুন" : "Delete Designation"}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Active Employee Counter on Designation Card */}
+                    <div className="p-2.5 rounded-xl bg-teal-500/10 border border-teal-500/20 flex items-center justify-between">
+                      <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                        {isBangla ? "বর্তমানে কর্মরত:" : "Currently Assigned:"}
+                      </span>
+                      <span className="font-bold text-teal-800 dark:text-teal-300 text-xs flex items-center gap-1 font-mono">
+                        <Users className="w-3.5 h-3.5" />
+                        <span>{actualStaffCount} {isBangla ? "জন কর্মী" : "Staff"}</span>
+                      </span>
+                    </div>
+
+                    {/* Salary Band Range */}
+                    <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60 space-y-1 text-xs">
+                      <span className="text-[10px] text-slate-500 dark:text-slate-400 block font-semibold">
+                        {isBangla ? "বেতন কাঠামো রেঞ্জ (Salary Band):" : "Salary Band Range:"}
+                      </span>
+                      <div className="flex justify-between font-mono font-bold text-slate-900 dark:text-white">
+                        <span>৳{(desig.minSalary ?? 0).toLocaleString()}</span>
+                        <span className="text-slate-400 dark:text-slate-500">to</span>
+                        <span className="text-emerald-600 dark:text-emerald-400">৳{(desig.maxSalary ?? 0).toLocaleString()} BDT</span>
+                      </div>
+                    </div>
+
+                    <p className="text-xs text-slate-600 dark:text-slate-400 line-clamp-2">{desig.description}</p>
+                  </div>
+
+                  {/* View Employees holding this designation */}
+                  <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedDesigForMembers(desig);
+                        setDesigMemberSearchTerm("");
+                      }}
+                      className="w-full py-2.5 px-3 rounded-xl bg-slate-100 hover:bg-teal-500/15 dark:bg-slate-800 dark:hover:bg-teal-500/20 text-slate-800 dark:text-slate-200 hover:text-teal-800 dark:hover:text-teal-300 font-bold text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                    >
+                      <Users className="w-4 h-4 text-teal-600 dark:text-teal-400" />
+                      <span>
+                        {isBangla
+                          ? `এই পদবির কর্মীদের তালিকা দেখুন (${actualStaffCount} জন) ➔`
+                          : `View Employees in this Role (${actualStaffCount}) ➔`}
+                      </span>
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 
@@ -330,7 +664,7 @@ export const DepartmentsDesignationsView: React.FC<DepartmentsDesignationsViewPr
                   </span>
                   <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
                     <Building2 className="w-5 h-5 text-teal-600 dark:text-teal-400" />
-                    <span>{selectedDeptForMembers.name} - {isBangla ? "সদস্য তালিকা" : "Staff Roster"}</span>
+                    <span>{selectedDeptForMembers.name} - {isBangla ? "কর্মকর্তা-কর্মচারী তালিকা" : "Staff Roster"}</span>
                   </h3>
                 </div>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
@@ -348,97 +682,75 @@ export const DepartmentsDesignationsView: React.FC<DepartmentsDesignationsViewPr
               </button>
             </div>
 
-            {/* Member Search Bar */}
-            <div className="relative text-xs">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+            {/* Search within department */}
+            <div className="relative">
+              <Search className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
               <input
                 type="text"
                 value={memberSearchTerm}
                 onChange={(e) => setMemberSearchTerm(e.target.value)}
-                placeholder={isBangla ? "নাম, আইডি বা পদবি দিয়ে খুঁজুন..." : "Search employee by name, ID or designation..."}
-                className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl pl-9 pr-3 py-2.5 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-teal-500"
+                placeholder={isBangla ? "নাম, পদবি বা এমপ্লয়ি কোড দিয়ে খুঁজুন..." : "Filter by name, designation, or ID..."}
+                className="w-full pl-9 pr-4 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white focus:outline-none focus:border-teal-500"
               />
             </div>
 
-            {/* Members List */}
-            <div className="flex-1 overflow-y-auto space-y-2.5 pr-1 max-h-[55vh]">
+            {/* Department Members List */}
+            <div className="divide-y divide-slate-100 dark:divide-slate-800 overflow-y-auto flex-1 max-h-[55vh] pr-1">
               {deptMembers.length === 0 ? (
-                <div className="py-12 text-center text-slate-400 dark:text-slate-500 text-xs">
-                  {isBangla ? "এই ডিপার্টমেন্টে কোনো কর্মী পাওয়া যায়নি" : "No employees found in this department"}
+                <div className="p-8 text-center text-slate-400">
+                  <Users className="w-10 h-10 mx-auto opacity-30 text-teal-500 mb-2" />
+                  <p className="font-bold text-sm text-slate-600 dark:text-slate-400">
+                    {isBangla ? "এই ডিপার্টমেন্টে কোনো কর্মী পাওয়া যায়নি" : "No employees found in this department"}
+                  </p>
+                  <p className="text-xs text-slate-400 mt-1">
+                    {isBangla ? "এমপ্লয়ি ডিরেক্টরি থেকে কর্মীদের ডিপার্টমেন্ট অ্যাসাইন করুন" : "Assign employees from the Employee Directory"}
+                  </p>
                 </div>
               ) : (
                 deptMembers.map((emp) => (
                   <div
                     key={emp.id}
-                    className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/80 hover:border-teal-500/40 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs"
+                    className="py-3 px-2 flex items-center justify-between gap-3 hover:bg-slate-50 dark:hover:bg-slate-800/50 rounded-xl transition-colors"
                   >
                     <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 rounded-xl overflow-hidden border border-teal-500/40 bg-slate-100 dark:bg-slate-900 shrink-0">
-                        <img
-                          src={emp.avatarUrl}
-                          alt={emp.fullName}
-                          className="w-full h-full object-cover aspect-square"
-                        />
-                      </div>
-
-                      <div className="space-y-0.5">
-                        <div className="flex items-center gap-2">
-                          <h4 className="font-bold text-slate-900 dark:text-white text-sm">{emp.fullName}</h4>
-                          <span className="px-1.5 py-0.2 rounded text-[10px] font-mono bg-slate-200 dark:bg-slate-900 text-teal-700 dark:text-teal-300 font-bold">
-                            {emp.employeeCode}
-                          </span>
-                          <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30">
-                            {emp.status}
+                      <img
+                        src={emp.avatarUrl}
+                        alt={emp.fullName}
+                        className="w-11 h-11 rounded-xl object-cover border border-slate-200 dark:border-slate-700"
+                      />
+                      <div>
+                        <div className="font-bold text-slate-900 dark:text-white text-xs sm:text-sm flex items-center gap-1.5">
+                          <span>{emp.fullName}</span>
+                          <span className="font-mono text-[10px] text-slate-400 dark:text-slate-500 font-normal">
+                            ({emp.employeeCode})
                           </span>
                         </div>
-
-                        <p className="text-xs text-teal-600 dark:text-teal-400 font-semibold">{emp.designationTitle}</p>
-
-                        <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-500 dark:text-slate-400">
-                          <span className="flex items-center gap-1">
-                            <Building2 className="w-3 h-3 text-slate-400 dark:text-slate-500" />
-                            {emp.branchName}
-                          </span>
+                        <div className="text-xs text-teal-700 dark:text-teal-400 font-semibold">
+                          {emp.designationTitle}
+                        </div>
+                        <div className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-2 mt-0.5">
+                          <span>{emp.branchName || "Main Office"}</span>
                           <span>•</span>
-                          <span className="flex items-center gap-1">
-                            <Phone className="w-3 h-3 text-slate-400 dark:text-slate-500" />
-                            {emp.phone}
-                          </span>
-                          <span>•</span>
-                          <span className="flex items-center gap-1">
-                            <Mail className="w-3 h-3 text-slate-400 dark:text-slate-500" />
-                            {emp.email}
-                          </span>
+                          <span>{emp.phone}</span>
                         </div>
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2 shrink-0 pt-2 sm:pt-0 border-t sm:border-0 border-slate-200 dark:border-slate-700">
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/15 text-emerald-700 dark:text-emerald-300">
+                        {emp.status}
+                      </span>
                       {onViewEmployee && (
                         <button
                           type="button"
                           onClick={() => {
+                            setSelectedDeptForMembers(null);
                             onViewEmployee(emp);
-                            setSelectedDeptForMembers(null);
                           }}
-                          className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-800 dark:text-slate-200 text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer"
+                          className="px-2.5 py-1.5 rounded-lg bg-teal-500/10 hover:bg-teal-500/20 text-teal-700 dark:text-teal-400 text-xs font-bold flex items-center gap-1 cursor-pointer"
                         >
-                          <Eye className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
-                          <span>{isBangla ? "প্রোফাইল" : "View Profile"}</span>
-                        </button>
-                      )}
-
-                      {onEditEmployee && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            onEditEmployee(emp);
-                            setSelectedDeptForMembers(null);
-                          }}
-                          className="px-3 py-1.5 rounded-lg bg-teal-600 hover:bg-teal-500 text-white text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer"
-                        >
-                          <Edit2 className="w-3.5 h-3.5" />
-                          <span>{isBangla ? "এডিট" : "Edit"}</span>
+                          <Eye className="w-3.5 h-3.5" />
+                          <span className="hidden sm:inline">{isBangla ? "প্রোফাইল" : "View"}</span>
                         </button>
                       )}
                     </div>
@@ -460,13 +772,360 @@ export const DepartmentsDesignationsView: React.FC<DepartmentsDesignationsViewPr
         </div>
       )}
 
+      {/* Modal: View Designation Members Roster (As requested: see who holds this designation) */}
+      {selectedDesigForMembers && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-md overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl p-6 w-full max-w-3xl text-slate-900 dark:text-slate-100 shadow-2xl space-y-4 my-8 max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-xl bg-teal-500/15 text-teal-700 dark:text-teal-300">
+                  <Briefcase className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                    <span>{selectedDesigForMembers.title}</span>
+                    <span className="text-xs px-2 py-0.5 rounded font-mono bg-blue-500/15 text-blue-700 dark:text-blue-300 border border-blue-500/20">
+                      {selectedDesigForMembers.code}
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                    {isBangla
+                      ? `এই পদবিতে কর্মরত মোট কর্মী: ${desigMembers.length} জন | ${selectedDesigForMembers.departmentName}`
+                      : `Currently ${desigMembers.length} employees assigned to this role | ${selectedDesigForMembers.departmentName}`}
+                  </p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setSelectedDesigForMembers(null)}
+                className="text-slate-400 hover:text-slate-700 dark:hover:text-white p-1 rounded-lg cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Search within designation members */}
+            <div className="relative">
+              <Search className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
+              <input
+                type="text"
+                value={desigMemberSearchTerm}
+                onChange={(e) => setDesigMemberSearchTerm(e.target.value)}
+                placeholder={isBangla ? "নাম, ব্রাঞ্চ বা এমপ্লয়ি কোড দিয়ে খুঁজুন..." : "Search by name, branch, or ID..."}
+                className="w-full pl-9 pr-4 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white focus:outline-none focus:border-teal-500"
+              />
+            </div>
+
+            {/* Designation Members List */}
+            <div className="divide-y divide-slate-100 dark:divide-slate-800 overflow-y-auto flex-1 max-h-[55vh] pr-1">
+              {desigMembers.length === 0 ? (
+                <div className="p-8 text-center text-slate-400">
+                  <Users className="w-10 h-10 mx-auto opacity-30 text-teal-500 mb-2" />
+                  <p className="font-bold text-sm text-slate-600 dark:text-slate-400">
+                    {isBangla ? "এই পদবিতে বর্তমানে কোনো কর্মী নিযুক্ত নেই" : "No employees assigned to this designation"}
+                  </p>
+                  <p className="text-xs text-slate-400 mt-1">
+                    {isBangla ? "এমপ্লয়ি ডিরেক্টরি থেকে নতুন কর্মীকে এই পদবিতে যুক্ত করতে পারেন" : "Assign employees to this designation from Directory"}
+                  </p>
+                </div>
+              ) : (
+                desigMembers.map((emp) => (
+                  <div
+                    key={emp.id}
+                    className="py-3 px-2 flex items-center justify-between gap-3 hover:bg-slate-50 dark:hover:bg-slate-800/50 rounded-xl transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <img
+                        src={emp.avatarUrl}
+                        alt={emp.fullName}
+                        className="w-11 h-11 rounded-xl object-cover border border-slate-200 dark:border-slate-700"
+                      />
+                      <div>
+                        <div className="font-bold text-slate-900 dark:text-white text-xs sm:text-sm flex items-center gap-1.5">
+                          <span>{emp.fullName}</span>
+                          <span className="font-mono text-[10px] text-slate-400 dark:text-slate-500 font-normal">
+                            ({emp.employeeCode})
+                          </span>
+                        </div>
+                        <div className="text-xs text-teal-700 dark:text-teal-400 font-semibold">
+                          {emp.branchName || "Main Campus"} • {emp.departmentName}
+                        </div>
+                        <div className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-2 mt-0.5">
+                          <span>{emp.phone}</span>
+                          <span>•</span>
+                          <span>{emp.email}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/15 text-emerald-700 dark:text-emerald-300">
+                        {emp.status}
+                      </span>
+                      {onViewEmployee && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedDesigForMembers(null);
+                            onViewEmployee(emp);
+                          }}
+                          className="px-2.5 py-1.5 rounded-lg bg-teal-500/10 hover:bg-teal-500/20 text-teal-700 dark:text-teal-400 text-xs font-bold flex items-center gap-1 cursor-pointer"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                          <span className="hidden sm:inline">{isBangla ? "প্রোফাইল" : "View"}</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="pt-3 border-t border-slate-200 dark:border-slate-800 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setSelectedDesigForMembers(null)}
+                className="px-5 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl font-bold text-xs cursor-pointer"
+              >
+                {isBangla ? "বন্ধ করুন" : "Close"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Edit Department */}
+      {editingDept && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-md">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl p-6 w-full max-w-md text-slate-900 dark:text-slate-100 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-slate-800">
+              <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <Edit2 className="w-5 h-5 text-teal-600 dark:text-teal-400" />
+                <span>{isBangla ? "ডিপার্টমেন্টের তথ্য সম্পাদনা করুন" : "Edit Department"}</span>
+              </h3>
+              <button
+                onClick={() => setEditingDept(null)}
+                className="text-slate-400 hover:text-slate-700 dark:hover:text-white cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleEditDeptSubmit} className="space-y-3 text-xs">
+              <div>
+                <label className="block text-slate-600 dark:text-slate-400 mb-1">
+                  {isBangla ? "ডিপার্টমেন্টের নাম *" : "Department Name *"}
+                </label>
+                <input
+                  type="text"
+                  value={editDeptName}
+                  onChange={(e) => setEditDeptName(e.target.value)}
+                  required
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white focus:outline-none focus:border-teal-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-600 dark:text-slate-400 mb-1">
+                  {isBangla ? "ডিপার্টমেন্ট কোড *" : "Department Code *"}
+                </label>
+                <input
+                  type="text"
+                  value={editDeptCode}
+                  onChange={(e) => setEditDeptCode(e.target.value)}
+                  required
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white uppercase font-mono focus:outline-none focus:border-teal-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-600 dark:text-slate-400 mb-1">
+                  {isBangla ? "বার্ষিক বাজেট বরাদ্দ (BDT ৳)" : "Allocated Budget (BDT ৳)"}
+                </label>
+                <input
+                  type="number"
+                  value={editDeptBudget}
+                  onChange={(e) => setEditDeptBudget(Number(e.target.value))}
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white font-mono focus:outline-none focus:border-teal-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-600 dark:text-slate-400 mb-1">
+                  {isBangla ? "বিবরণ ও দায়িত্ব" : "Description & Scope"}
+                </label>
+                <textarea
+                  rows={3}
+                  value={editDeptDesc}
+                  onChange={(e) => setEditDeptDesc(e.target.value)}
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white focus:outline-none focus:border-teal-500"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setEditingDept(null)}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl font-bold cursor-pointer"
+                >
+                  {isBangla ? "বাতিল" : "Cancel"}
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white rounded-xl font-bold cursor-pointer shadow-sm"
+                >
+                  {isBangla ? "আপডেট সংরক্ষণ করুন" : "Save Changes"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Edit Designation */}
+      {editingDesig && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-md">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl p-6 w-full max-w-md text-slate-900 dark:text-slate-100 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-slate-800">
+              <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <Edit2 className="w-5 h-5 text-teal-600 dark:text-teal-400" />
+                <span>{isBangla ? "পদবির তথ্য ও পে-স্কেল সম্পাদনা" : "Edit Designation & Pay Scale"}</span>
+              </h3>
+              <button
+                onClick={() => setEditingDesig(null)}
+                className="text-slate-400 hover:text-slate-700 dark:hover:text-white cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleEditDesigSubmit} className="space-y-3 text-xs">
+              <div>
+                <label className="block text-slate-600 dark:text-slate-400 mb-1">
+                  {isBangla ? "পদবির নাম *" : "Designation Title *"}
+                </label>
+                <input
+                  type="text"
+                  value={editDesigTitle}
+                  onChange={(e) => setEditDesigTitle(e.target.value)}
+                  required
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white focus:outline-none focus:border-teal-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-slate-600 dark:text-slate-400 mb-1">
+                    {isBangla ? "পদবি কোড" : "Role Code"}
+                  </label>
+                  <input
+                    type="text"
+                    value={editDesigCode}
+                    onChange={(e) => setEditDesigCode(e.target.value)}
+                    required
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white uppercase font-mono focus:outline-none focus:border-teal-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-600 dark:text-slate-400 mb-1">
+                    {isBangla ? "হায়ারার্কি লেভেল" : "Seniority Level"}
+                  </label>
+                  <select
+                    value={editDesigLevel}
+                    onChange={(e) => setEditDesigLevel(e.target.value as any)}
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white focus:outline-none focus:border-teal-500"
+                  >
+                    <option value="ENTRY">Entry Level</option>
+                    <option value="MID">Mid Level</option>
+                    <option value="SENIOR">Senior Level</option>
+                    <option value="LEAD">Lead / Specialist</option>
+                    <option value="EXECUTIVE">Executive / C-Level</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-slate-600 dark:text-slate-400 mb-1">
+                  {isBangla ? "ডিপার্টমেন্ট" : "Department"}
+                </label>
+                <select
+                  value={editDesigDeptId}
+                  onChange={(e) => setEditDesigDeptId(e.target.value)}
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white focus:outline-none focus:border-teal-500"
+                >
+                  {departments.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.name} ({d.code})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-slate-600 dark:text-slate-400 mb-1">
+                    {isBangla ? "সর্বনিম্ন বেতন (৳)" : "Min Salary (৳)"}
+                  </label>
+                  <input
+                    type="number"
+                    value={editDesigMinSal}
+                    onChange={(e) => setEditDesigMinSal(Number(e.target.value))}
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white font-mono focus:outline-none focus:border-teal-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-600 dark:text-slate-400 mb-1">
+                    {isBangla ? "সর্বোচ্চ বেতন (৳)" : "Max Salary (৳)"}
+                  </label>
+                  <input
+                    type="number"
+                    value={editDesigMaxSal}
+                    onChange={(e) => setEditDesigMaxSal(Number(e.target.value))}
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white font-mono focus:outline-none focus:border-teal-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-slate-600 dark:text-slate-400 mb-1">
+                  {isBangla ? "বিবরণ" : "Description"}
+                </label>
+                <textarea
+                  rows={2}
+                  value={editDesigDesc}
+                  onChange={(e) => setEditDesigDesc(e.target.value)}
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white focus:outline-none focus:border-teal-500"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setEditingDesig(null)}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl font-bold cursor-pointer"
+                >
+                  {isBangla ? "বাতিল" : "Cancel"}
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white rounded-xl font-bold cursor-pointer shadow-sm"
+                >
+                  {isBangla ? "আপডেট সংরক্ষণ করুন" : "Save Changes"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Modal: Add Department */}
       {showDeptModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-md">
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl p-6 w-full max-w-md text-slate-900 dark:text-slate-100 shadow-2xl space-y-4">
             <div className="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-slate-800">
               <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                <Building2 className="w-5 h-5 text-teal-600 dark:text-teal-400" /> {isBangla ? "নতুন ডিপার্টমেন্ট তৈরি করুন" : "Add Department"}
+                <Building2 className="w-5 h-5 text-teal-600 dark:text-teal-400" />
+                <span>{isBangla ? "নতুন ডিপার্টমেন্ট তৈরি করুন" : "Add Department"}</span>
               </h3>
               <button onClick={() => setShowDeptModal(false)} className="text-slate-400 hover:text-slate-700 dark:hover:text-white cursor-pointer">
                 <X className="w-5 h-5" />
@@ -545,7 +1204,8 @@ export const DepartmentsDesignationsView: React.FC<DepartmentsDesignationsViewPr
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl p-6 w-full max-w-md text-slate-900 dark:text-slate-100 shadow-2xl space-y-4">
             <div className="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-slate-800">
               <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                <Briefcase className="w-5 h-5 text-teal-600 dark:text-teal-400" /> {isBangla ? "নতুন পদবি ও পে-স্কেল তৈরি" : "Add Designation"}
+                <Briefcase className="w-5 h-5 text-teal-600 dark:text-teal-400" />
+                <span>{isBangla ? "নতুন পদবি ও পে-স্কেল তৈরি" : "Add Designation"}</span>
               </h3>
               <button onClick={() => setShowDesigModal(false)} className="text-slate-400 hover:text-slate-700 dark:hover:text-white cursor-pointer">
                 <X className="w-5 h-5" />

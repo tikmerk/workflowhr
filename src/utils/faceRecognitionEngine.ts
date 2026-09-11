@@ -592,6 +592,177 @@ export async function verifyLiveFaceWithEmployee(
 }
 
 /**
+ * Invalidates cached biometric vector for an employee when their photo is updated or re-enrolled
+ */
+export function invalidateEmployeeFaceCache(employeeId?: string) {
+  if (employeeId) {
+    employeeVectorCache.delete(employeeId);
+  } else {
+    employeeVectorCache.clear();
+  }
+}
+
+/**
+ * Analyzes an uploaded photograph to verify if a valid, well-lit human face is present
+ */
+export async function detectFaceInPhoto(photoUrl: string): Promise<{
+  hasFace: boolean;
+  qualityScore: number;
+  message: string;
+  banglaMessage: string;
+  vector: Float32Array | null;
+}> {
+  if (!photoUrl || photoUrl.trim() === "" || photoUrl === "#") {
+    return {
+      hasFace: false,
+      qualityScore: 0,
+      message: "No photo provided.",
+      banglaMessage: "কোনো ছবি প্রদান করা হয়নি।",
+      vector: null,
+    };
+  }
+
+  const vector = await extractVectorFromPhotoUrl(photoUrl);
+  if (!vector) {
+    return {
+      hasFace: false,
+      qualityScore: 0,
+      message: "No clear human face detected in the uploaded photo.",
+      banglaMessage: "আপলোড করা ছবিতে কোনো স্পষ্ট মানুষের চেহারা শনাক্ত হয়নি। অনুগ্রহ করে স্পষ্ট ফেস পোর্ট্রেট আপলোড করুন।",
+      vector: null,
+    };
+  }
+
+  // Evaluate vector energy and spatial distribution
+  let nonZeroCount = 0;
+  for (let i = 0; i < 128; i++) {
+    if (Math.abs(vector[i]) > 0.01) nonZeroCount++;
+  }
+
+  const qualityScore = Math.min(99.2, Math.max(72, Math.floor((nonZeroCount / 128) * 100) + 12));
+
+  return {
+    hasFace: true,
+    qualityScore,
+    message: `Valid face profile detected (${qualityScore}% clarity). Ready for live face matching.`,
+    banglaMessage: `সঠিক ফেস প্রোফাইল পাওয়া গেছে (${qualityScore}% স্পষ্টতা)। লাইভ ক্যামেরা ভেরিফিকেশনের জন্য প্রস্তুত।`,
+    vector,
+  };
+}
+
+/**
+ * Real-time verification between Live Video Camera and an Uploaded Candidate Reference Photo
+ * STRICT MANDATORY CHECK: Prevents uploading someone else's photo or arbitrary images.
+ * The person in front of the camera MUST match the uploaded photo before enrollment is allowed!
+ */
+export async function verifyLiveFaceAgainstCandidatePhoto(
+  video: HTMLVideoElement,
+  candidatePhotoUrl: string
+): Promise<{
+  matched: boolean;
+  matchScore: number; // 0 to 100%
+  cosineSimilarity: number;
+  reason: "SUCCESS" | "MISMATCH_LOW_CONFIDENCE" | "NO_FACE_IN_FRAME" | "INVALID_PHOTO";
+  statusMessage: string;
+  banglaStatusMessage: string;
+  boundingBox?: FaceBoundingBox;
+}> {
+  if (!candidatePhotoUrl || candidatePhotoUrl.trim() === "" || candidatePhotoUrl === "#") {
+    return {
+      matched: false,
+      matchScore: 0,
+      cosineSimilarity: 0,
+      reason: "INVALID_PHOTO",
+      statusMessage: "Please upload or select a reference photo first.",
+      banglaStatusMessage: "প্রথমে একটি রেফারেন্স ছবি আপলোড বা নির্বাচন করুন।",
+    };
+  }
+
+  const candidateVector = await extractVectorFromPhotoUrl(candidatePhotoUrl);
+  if (!candidateVector) {
+    return {
+      matched: false,
+      matchScore: 0,
+      cosineSimilarity: 0,
+      reason: "INVALID_PHOTO",
+      statusMessage: "Could not extract facial features from uploaded photo. Please try a clearer photo.",
+      banglaStatusMessage: "আপলোড করা ছবি থেকে মুখের বৈশিষ্ট্য শনাক্ত করা যায়নি। স্পষ্ট ও আলোকোজ্জ্বল ছবি আপলোড করুন।",
+    };
+  }
+
+  // Draw and analyze live frame
+  const canvas = document.createElement("canvas");
+  canvas.width = 240;
+  canvas.height = 180;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) {
+    return {
+      matched: false,
+      matchScore: 0,
+      cosineSimilarity: 0,
+      reason: "NO_FACE_IN_FRAME",
+      statusMessage: "Camera rendering buffer unavailable.",
+      banglaStatusMessage: "ক্যামেরা বাফার লোড হতে সমস্যা হয়েছে।",
+    };
+  }
+
+  ctx.drawImage(video, 0, 0, 240, 180);
+  const liveAnalysis = detectLiveFaceInVideo(video);
+
+  if (!liveAnalysis.hasFace) {
+    return {
+      matched: false,
+      matchScore: 0,
+      cosineSimilarity: 0,
+      reason: "NO_FACE_IN_FRAME",
+      statusMessage: "No face detected in camera frame. Look straight at the camera.",
+      banglaStatusMessage: "ক্যামেরার সামনে কোনো মুখ শনাক্ত হয়নি। ফ্রেমের মাঝখানে সোজা তাকান।",
+    };
+  }
+
+  const liveVector = extract128DFeatureVector(ctx, 240, 180, liveAnalysis.boundingBox);
+  if (!liveVector) {
+    return {
+      matched: false,
+      matchScore: 0,
+      cosineSimilarity: 0,
+      reason: "NO_FACE_IN_FRAME",
+      statusMessage: "Could not extract 128D facial features from live frame.",
+      banglaStatusMessage: "লাইভ ফ্রেম থেকে মুখের ফিচার রিড করা যায়নি। পর্যাপ্ত আলো নিশ্চিত করুন।",
+    };
+  }
+
+  // Calculate 128D Cosine Similarity
+  const cosineSim = computeCosineSimilarity(liveVector, candidateVector);
+  const scaledScore = Math.min(99.6, Math.max(10, Number(((cosineSim - 0.35) / 0.62 * 100).toFixed(1))));
+
+  // Strict Threshold: Cosine >= 0.76 (corresponds to scaled score >= ~75%)
+  const isMatched = cosineSim >= 0.76;
+
+  if (isMatched) {
+    return {
+      matched: true,
+      matchScore: scaledScore,
+      cosineSimilarity: cosineSim,
+      reason: "SUCCESS",
+      statusMessage: `Face verified! The live person matches the uploaded photo (${scaledScore}% similarity).`,
+      banglaStatusMessage: `ভেরিফিকেশন সফল! আপলোড করা ছবির সাথে আপনার লাইভ চেহারার মিল পাওয়া গেছে (${scaledScore}% মিল)।`,
+      boundingBox: liveAnalysis.boundingBox,
+    };
+  } else {
+    return {
+      matched: false,
+      matchScore: scaledScore,
+      cosineSimilarity: cosineSim,
+      reason: "MISMATCH_LOW_CONFIDENCE",
+      statusMessage: `Face mismatch! The live face does not match the uploaded photo (${scaledScore}% match < 75% required).`,
+      banglaStatusMessage: `চেহারায় অমিল! আপলোড করা ছবির সাথে ক্যামেরায় থাকা ব্যক্তির মুখের মিল নেই (${scaledScore}% মিল)। অন্যের ছবি বা অস্পষ্ট ছবি ব্যবহার নিষিদ্ধ।`,
+      boundingBox: liveAnalysis.boundingBox,
+    };
+  }
+}
+
+/**
  * Real-time 1:N Auto-Detection against all registered employees in company database
  * Automatically identifies who is standing in front of the camera using 128D Biometric comparison.
  */

@@ -18,6 +18,13 @@ import {
   Building2,
   Calendar,
   Camera,
+  AlertTriangle,
+  Upload,
+  Edit2,
+  Layers,
+  X,
+  Briefcase,
+  Shield,
 } from "lucide-react";
 import {
   Employee,
@@ -42,8 +49,9 @@ interface EmployeeSelfServiceViewProps {
   onApplyLeave: (leave: Partial<LeaveApplication>) => void;
   onApplyLoan: (loan: Partial<EmployeeLoan>) => void;
   onViewPayslip: (slip: Payslip) => void;
-  onUpdateFacePhoto?: (employeeId: string, photoUrl: string) => void;
+  onUpdateFacePhoto?: (employeeId: string, photoUrl: string, verificationScore?: number) => void;
   onOpenDigitalIdCard?: () => void;
+  onUpdateEmployee?: (emp: Employee) => void;
 }
 
 export const EmployeeSelfServiceView: React.FC<EmployeeSelfServiceViewProps> = ({
@@ -60,11 +68,41 @@ export const EmployeeSelfServiceView: React.FC<EmployeeSelfServiceViewProps> = (
   onViewPayslip,
   onUpdateFacePhoto,
   onOpenDigitalIdCard,
+  onUpdateEmployee,
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<
     "overview" | "attendance" | "payslips" | "leaves" | "loans" | "assets"
   >("overview");
   const [showFaceEnrollModal, setShowFaceEnrollModal] = useState<boolean>(false);
+  const [candidateUploadedPhoto, setCandidateUploadedPhoto] = useState<string | null>(null);
+  const fileInputRef = React.useRef<HTMLInputElement | null>(null);
+
+  const isFaceVerified = Boolean(
+    currentEmployee.faceTemplateRegistered &&
+    currentEmployee.faceVerified &&
+    typeof currentEmployee.faceVerificationScore === "number" &&
+    currentEmployee.faceVerificationScore > 0
+  );
+
+  const handleDirectPhotoFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const dataUrl = event.target?.result as string;
+      if (!dataUrl) return;
+
+      // Mark verification as pending immediately
+      if (onUpdateFacePhoto) {
+        onUpdateFacePhoto(currentEmployee.id, dataUrl, undefined);
+      }
+      setCandidateUploadedPhoto(dataUrl);
+      setShowFaceEnrollModal(true);
+    };
+    reader.readAsDataURL(file);
+    e.target.value = "";
+  };
 
   // Apply Leave Modal State
   const [showLeaveModal, setShowLeaveModal] = useState(false);
@@ -78,6 +116,83 @@ export const EmployeeSelfServiceView: React.FC<EmployeeSelfServiceViewProps> = (
   const [loanAmount, setLoanAmount] = useState(30000);
   const [loanMonths, setLoanMonths] = useState(6);
   const [loanReason, setLoanReason] = useState("");
+
+  // Profile & Designation Edit Modal State
+  const [showEditProfileModal, setShowEditProfileModal] = useState(false);
+  const [editFullName, setEditFullName] = useState(currentEmployee.fullName);
+  const [editDesignationTitle, setEditDesignationTitle] = useState(currentEmployee.designationTitle);
+  const [editDepartmentName, setEditDepartmentName] = useState(currentEmployee.departmentName);
+  const [editPhone, setEditPhone] = useState(currentEmployee.phone);
+  const [editEmergencyPhone, setEditEmergencyPhone] = useState(currentEmployee.emergencyPhone || "");
+  const [editPresentAddress, setEditPresentAddress] = useState(currentEmployee.presentAddress || "");
+  const [editBloodGroup, setEditBloodGroup] = useState(currentEmployee.bloodGroup || "O+");
+  const [editAvatarUrl, setEditAvatarUrl] = useState(currentEmployee.avatarUrl);
+  const [editAdditionalDesignations, setEditAdditionalDesignations] = useState<string[]>(
+    currentEmployee.additionalDesignations || []
+  );
+  const [editAdditionalDepartments, setEditAdditionalDepartments] = useState<string[]>(
+    currentEmployee.additionalDepartments || []
+  );
+  const [newDesigInput, setNewDesigInput] = useState("");
+  const [newDeptInput, setNewDeptInput] = useState("");
+
+  const isCeoOrAdmin = Boolean(
+    currentEmployee.isCeoOrOwner ||
+    currentEmployee.role === "SUPER_ADMIN" ||
+    currentEmployee.role === "COMPANY_ADMIN" ||
+    currentEmployee.role === "BRANCH_MANAGER" ||
+    currentEmployee.designationTitle.toLowerCase().includes("ceo") ||
+    currentEmployee.designationTitle.toLowerCase().includes("executive officer") ||
+    currentEmployee.designationTitle.toLowerCase().includes("director") ||
+    currentEmployee.designationTitle.toLowerCase().includes("founder") ||
+    currentEmployee.designationTitle.toLowerCase().includes("head") ||
+    currentEmployee.designationTitle.toLowerCase().includes("manager")
+  );
+
+  const handleAddAdditionalDesignation = (titleToAdd: string) => {
+    const trimmed = titleToAdd.trim();
+    if (trimmed && !editAdditionalDesignations.includes(trimmed)) {
+      setEditAdditionalDesignations([...editAdditionalDesignations, trimmed]);
+    }
+    setNewDesigInput("");
+  };
+
+  const handleRemoveAdditionalDesignation = (index: number) => {
+    setEditAdditionalDesignations(editAdditionalDesignations.filter((_, i) => i !== index));
+  };
+
+  const handleAddAdditionalDepartment = (deptToAdd: string) => {
+    const trimmed = deptToAdd.trim();
+    if (trimmed && !editAdditionalDepartments.includes(trimmed)) {
+      setEditAdditionalDepartments([...editAdditionalDepartments, trimmed]);
+    }
+    setNewDeptInput("");
+  };
+
+  const handleRemoveAdditionalDepartment = (index: number) => {
+    setEditAdditionalDepartments(editAdditionalDepartments.filter((_, i) => i !== index));
+  };
+
+  const handleProfileSave = (e: React.FormEvent) => {
+    e.preventDefault();
+    const updated: Employee = {
+      ...currentEmployee,
+      fullName: editFullName,
+      designationTitle: isCeoOrAdmin ? editDesignationTitle : currentEmployee.designationTitle,
+      departmentName: isCeoOrAdmin ? editDepartmentName : currentEmployee.departmentName,
+      phone: editPhone,
+      emergencyPhone: editEmergencyPhone,
+      presentAddress: editPresentAddress,
+      bloodGroup: editBloodGroup as any,
+      avatarUrl: editAvatarUrl,
+      additionalDesignations: isCeoOrAdmin ? editAdditionalDesignations : (currentEmployee.additionalDesignations || []),
+      additionalDepartments: isCeoOrAdmin ? editAdditionalDepartments : (currentEmployee.additionalDepartments || []),
+    };
+    if (onUpdateEmployee) {
+      onUpdateEmployee(updated);
+    }
+    setShowEditProfileModal(false);
+  };
 
   const handleLeaveSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -131,31 +246,40 @@ export const EmployeeSelfServiceView: React.FC<EmployeeSelfServiceViewProps> = (
 
   return (
     <div id="employee-self-service-portal" className="space-y-6 animate-in fade-in duration-300">
+      {/* Hidden File Input for direct photo upload */}
+      <input
+        type="file"
+        ref={fileInputRef}
+        onChange={handleDirectPhotoFileChange}
+        accept="image/*"
+        className="hidden"
+      />
+
       {/* Profile Header Banner - Optimized for Tablet, Mobile & Desktop */}
       <div className="p-5 sm:p-6 rounded-3xl bg-white dark:bg-gradient-to-r dark:from-slate-900 dark:via-slate-850 dark:to-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col xl:flex-row items-center xl:items-center justify-between gap-5">
         <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-5 text-center sm:text-left w-full xl:w-auto">
           <div className="relative shrink-0 group">
             <div className="w-20 h-20 sm:w-24 sm:h-24 md:w-28 md:h-28 rounded-2xl overflow-hidden border-2 border-teal-500 shadow-xl shadow-teal-500/20 bg-slate-100 dark:bg-slate-800 flex items-center justify-center relative">
               <img
-                src={currentEmployee.avatarUrl}
+                src={candidateUploadedPhoto || currentEmployee.avatarUrl}
                 alt={currentEmployee.fullName}
                 className="w-full h-full object-cover aspect-square"
               />
               <button
                 type="button"
-                onClick={() => setShowFaceEnrollModal(true)}
+                onClick={() => fileInputRef.current?.click()}
                 className="absolute inset-0 bg-slate-950/60 text-white flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer p-1"
-                title="বায়োমেট্রিক ফেস ও প্রোফাইল ছবি পরিবর্তন করুন"
+                title="নতুন ছবি আপলোড করুন"
               >
-                <Camera className="w-5 h-5 text-teal-300 mb-0.5" />
-                <span className="text-[10px] font-bold">ছবি পরিবর্তন</span>
+                <Upload className="w-5 h-5 text-teal-300 mb-0.5" />
+                <span className="text-[10px] font-bold">ছবি আপলোড</span>
               </button>
             </div>
             <button
               type="button"
-              onClick={() => setShowFaceEnrollModal(true)}
+              onClick={() => fileInputRef.current?.click()}
               className="absolute -bottom-2 -right-2 bg-white dark:bg-slate-900 hover:bg-teal-50 dark:hover:bg-teal-950 border border-slate-200 dark:border-slate-700 p-1.5 rounded-xl shadow-lg cursor-pointer transition-colors"
-              title="বায়োমেট্রিক ফেস ও আইডি ছবি পরিবর্তন"
+              title="নতুন ছবি আপলোড করুন"
             >
               <Camera className="w-4 h-4 text-teal-600 dark:text-emerald-400" />
             </button>
@@ -169,11 +293,67 @@ export const EmployeeSelfServiceView: React.FC<EmployeeSelfServiceViewProps> = (
               <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-teal-500/15 text-teal-700 dark:text-teal-300 border border-teal-500/30">
                 {currentEmployee.role.replace("_", " ")}
               </span>
+
+              {/* Biometric Face Verification Status Badge */}
+              {isFaceVerified ? (
+                <button
+                  type="button"
+                  onClick={() => setShowFaceEnrollModal(true)}
+                  className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 flex items-center gap-1 hover:bg-emerald-500/25 transition-colors cursor-pointer"
+                  title="বায়োমেট্রিক ফেস ভেরিফাইড (পুনরায় ভেরিফাই বা ছবি পরিবর্তন করতে ক্লিক করুন)"
+                >
+                  <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+                  <span>বায়োমেট্রিক ফেস ভেরিফাইড ({currentEmployee.faceVerificationScore}%)</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setShowFaceEnrollModal(true)}
+                  className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-800 dark:text-amber-200 border border-amber-500/40 flex items-center gap-1 hover:bg-amber-500/30 transition-colors cursor-pointer animate-pulse"
+                  title="বায়োমেট্রিক ফেস ভেরিফিকেশন প্রয়োজন (যাচাই করতে ক্লিক করুন)"
+                >
+                  <AlertTriangle className="w-3 h-3 text-amber-500" />
+                  <span>ভেরিফিকেশন প্রয়োজন</span>
+                </button>
+              )}
             </div>
 
-            <p className="text-xs sm:text-sm font-semibold text-teal-600 dark:text-teal-400">
-              {currentEmployee.designationTitle} • {currentEmployee.departmentName}
-            </p>
+            <div className="flex flex-wrap items-center gap-1.5 justify-center sm:justify-start">
+              <p className="text-xs sm:text-sm font-bold text-teal-600 dark:text-teal-400">
+                {currentEmployee.designationTitle}
+              </p>
+              <span className="text-xs text-slate-400">•</span>
+              <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                {currentEmployee.departmentName}
+              </span>
+            </div>
+
+            {/* Multi-Role & Additional Portfolios Badges */}
+            {((currentEmployee.additionalDesignations && currentEmployee.additionalDesignations.length > 0) ||
+              (currentEmployee.additionalDepartments && currentEmployee.additionalDepartments.length > 0)) && (
+              <div className="flex flex-wrap items-center gap-1.5 pt-0.5 justify-center sm:justify-start">
+                <span className="text-[10px] text-teal-800 dark:text-teal-300 font-bold flex items-center gap-1">
+                  <Layers className="w-3 h-3 text-teal-600" />
+                  অতিরিক্ত দায়িত্ব:
+                </span>
+                {currentEmployee.additionalDesignations?.map((d) => (
+                  <span
+                    key={d}
+                    className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-teal-500/15 text-teal-800 dark:text-teal-300 border border-teal-500/30"
+                  >
+                    + {d}
+                  </span>
+                ))}
+                {currentEmployee.additionalDepartments?.map((dept) => (
+                  <span
+                    key={dept}
+                    className="px-2 py-0.5 rounded-md text-[10px] font-medium bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800"
+                  >
+                    {dept}
+                  </span>
+                ))}
+              </div>
+            )}
 
             <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-xs text-slate-500 dark:text-slate-400 justify-center sm:justify-start mt-1">
               <span>Employee Code: <strong className="text-slate-900 dark:text-white">{currentEmployee.employeeCode}</strong></span>
@@ -198,6 +378,33 @@ export const EmployeeSelfServiceView: React.FC<EmployeeSelfServiceViewProps> = (
               <span className="whitespace-nowrap">ডিজিটাল আইডি কার্ড</span>
             </button>
           )}
+
+          {/* Edit My Profile & Portfolios Button */}
+          {onUpdateEmployee && (
+            <button
+              type="button"
+              id="ess-edit-profile-btn"
+              onClick={() => {
+                setEditFullName(currentEmployee.fullName);
+                setEditDesignationTitle(currentEmployee.designationTitle);
+                setEditDepartmentName(currentEmployee.departmentName);
+                setEditPhone(currentEmployee.phone);
+                setEditEmergencyPhone(currentEmployee.emergencyPhone || "");
+                setEditPresentAddress(currentEmployee.presentAddress || "");
+                setEditBloodGroup(currentEmployee.bloodGroup || "O+");
+                setEditAvatarUrl(currentEmployee.avatarUrl);
+                setEditAdditionalDesignations(currentEmployee.additionalDesignations || []);
+                setEditAdditionalDepartments(currentEmployee.additionalDepartments || []);
+                setShowEditProfileModal(true);
+              }}
+              className="px-3.5 py-2.5 bg-slate-100 hover:bg-teal-500/20 dark:bg-slate-800 dark:hover:bg-teal-500/30 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white text-xs font-bold rounded-xl shadow-xs flex items-center gap-2 transition-all cursor-pointer grow sm:grow-0 justify-center"
+              title="নিজের প্রোফাইল ও পদবী এডিট করুন"
+            >
+              <Edit2 className="w-4 h-4 text-teal-600 dark:text-teal-400 shrink-0" />
+              <span className="whitespace-nowrap">এডিট প্রোফাইল ও পদবী</span>
+            </button>
+          )}
+
           <button
             type="button"
             id="ess-clock-in-out-btn"
@@ -218,6 +425,48 @@ export const EmployeeSelfServiceView: React.FC<EmployeeSelfServiceViewProps> = (
           </button>
         </div>
       </div>
+
+      {/* Verification Required Alert Banner if face is not verified */}
+      {!isFaceVerified && (
+        <div className="p-3.5 sm:p-4 rounded-2xl bg-gradient-to-r from-amber-500/15 via-amber-500/10 to-orange-500/15 border border-amber-500/35 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-xl bg-amber-500/20 text-amber-600 dark:text-amber-400 shrink-0">
+              <AlertTriangle className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h4 className="font-bold text-xs sm:text-sm text-slate-900 dark:text-white">
+                  ছবির বায়োমেট্রিক ফেস ভেরিফিকেশন প্রয়োজন (অপেক্ষমান)
+                </h4>
+                <span className="px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-amber-500/25 text-amber-800 dark:text-amber-200">
+                  জরুরি
+                </span>
+              </div>
+              <p className="text-[11px] sm:text-xs text-slate-600 dark:text-slate-300 mt-0.5">
+                আপনার আপলোডকৃত ছবির সাথে লাইভ ক্যামেরা ফেস এখনো যাচাই করা হয়নি। স্মার্ট উপস্থিতি দেওয়ার জন্য লাইভ ফেস ভেরিফিকেশন সম্পন্ন করুন।
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 w-full sm:w-auto shrink-0">
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="px-3.5 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 cursor-pointer flex items-center gap-1.5"
+            >
+              <Upload className="w-3.5 h-3.5" />
+              <span>ছবি পরিবর্তন</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowFaceEnrollModal(true)}
+              className="px-3.5 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold shrink-0 transition-colors shadow-xs cursor-pointer flex items-center justify-center gap-1.5"
+            >
+              <ScanFace className="w-3.5 h-3.5" />
+              <span>ক্যামেরা দিয়ে ভেরিফাই করুন</span>
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Sub-Tab Navigation Bar - Tablet scroll-friendly */}
       <div className="flex items-center gap-2 border-b border-slate-200 dark:border-slate-800 pb-2 overflow-x-auto text-xs font-bold scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-700">
@@ -823,16 +1072,421 @@ export const EmployeeSelfServiceView: React.FC<EmployeeSelfServiceViewProps> = (
         </div>
       )}
 
+      {/* Profile & Designation / Multi-Portfolios Edit Modal */}
+      {showEditProfileModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 w-full max-w-2xl text-slate-900 dark:text-slate-100 shadow-2xl space-y-4 my-auto max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2.5 rounded-2xl bg-teal-500/10 dark:bg-teal-500/20 text-teal-700 dark:text-teal-300 border border-teal-500/30">
+                  <Edit2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base sm:text-lg font-black text-slate-900 dark:text-white">
+                    প্রোফাইল ও পদবী হালনাগাদ (Edit Profile & Portfolios)
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    {currentEmployee.fullName} • {currentEmployee.employeeCode}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowEditProfileModal(false)}
+                className="p-2 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {isCeoOrAdmin ? (
+              <div className="p-3 rounded-2xl bg-teal-50/80 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-800/80 text-xs text-teal-950 dark:text-teal-200 flex items-start gap-2.5">
+                <Shield className="w-4 h-4 text-teal-600 dark:text-teal-400 shrink-0 mt-0.5" />
+                <div>
+                  <strong className="font-bold">এক্সিকিউটিভ ও সিইও অনুমোদন সুবিধা:</strong>
+                  <p className="text-[11px] mt-0.5 text-teal-800 dark:text-teal-300 leading-relaxed">
+                    সংস্থার প্রধান / সিইও হিসেবে আপনি নিজের নাম, মূল পদবী এবং অতিরিক্ত একাধিক পদবী (যেমন: আইটি ম্যানেজার এবং হেড অব এইচআর) ও বিভাগসমূহ এখানে সরাসরি যুক্ত ও পরিচালনা করতে পারেন।
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="p-3 rounded-2xl bg-amber-50/80 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/80 text-xs text-amber-950 dark:text-amber-200 flex items-start gap-2.5">
+                <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                <div>
+                  <strong className="font-bold">ব্যক্তিগত প্রোফাইল এডিট:</strong>
+                  <p className="text-[11px] mt-0.5 text-amber-800 dark:text-amber-300">
+                    আপনি আপনার নাম, মোবাইল নম্বর, বর্তমান ঠিকানা এবং ছবি পরিবর্তন করতে পারবেন। পদবী ও বিভাগের পরিবর্তনের জন্য সিইও বা এইচআর ম্যানেজারের সাথে যোগাযোগ করুন।
+                  </p>
+                </div>
+              </div>
+            )}
+
+            <form onSubmit={handleProfileSave} className="space-y-4 text-xs">
+              {/* Basic Details */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
+                    পূর্ণ নাম (Full Name) *
+                  </label>
+                  <input
+                    type="text"
+                    value={editFullName}
+                    onChange={(e) => setEditFullName(e.target.value)}
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white font-medium focus:outline-none focus:border-teal-500"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
+                    মোবাইল নম্বর (Phone) *
+                  </label>
+                  <input
+                    type="tel"
+                    value={editPhone}
+                    onChange={(e) => setEditPhone(e.target.value)}
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white font-medium focus:outline-none focus:border-teal-500"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
+                    জরুরি যোগাযোগের নম্বর (Emergency Phone)
+                  </label>
+                  <input
+                    type="tel"
+                    value={editEmergencyPhone}
+                    onChange={(e) => setEditEmergencyPhone(e.target.value)}
+                    placeholder="+880 17XX-XXXXXX"
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white font-medium focus:outline-none focus:border-teal-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
+                    রক্তের গ্রুপ (Blood Group)
+                  </label>
+                  <select
+                    value={editBloodGroup}
+                    onChange={(e) => setEditBloodGroup(e.target.value)}
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white font-medium focus:outline-none focus:border-teal-500"
+                  >
+                    {["A+", "A-", "B+", "B-", "O+", "O-", "AB+", "AB-"].map((bg) => (
+                      <option key={bg} value={bg}>
+                        {bg}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Present Address */}
+              <div>
+                <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
+                  বর্তমান ঠিকানা (Present Address)
+                </label>
+                <input
+                  type="text"
+                  value={editPresentAddress}
+                  onChange={(e) => setEditPresentAddress(e.target.value)}
+                  placeholder="বাড়ি/রোড নং, এলাকা, থানা, জেলা"
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white font-medium focus:outline-none focus:border-teal-500"
+                />
+              </div>
+
+              {/* Avatar URL */}
+              <div>
+                <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
+                  প্রোফাইল ছবির লিংক (Photo URL)
+                </label>
+                <div className="flex items-center gap-3">
+                  <img
+                    src={editAvatarUrl}
+                    alt="Preview"
+                    className="w-11 h-11 rounded-xl object-cover border border-slate-200 dark:border-slate-700 shrink-0"
+                  />
+                  <input
+                    type="url"
+                    value={editAvatarUrl}
+                    onChange={(e) => setEditAvatarUrl(e.target.value)}
+                    placeholder="https://..."
+                    className="flex-1 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white font-medium focus:outline-none focus:border-teal-500"
+                  />
+                </div>
+              </div>
+
+              {/* Primary Designation & Department Section */}
+              <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 space-y-3">
+                <h4 className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                  <Briefcase className="w-4 h-4 text-teal-600" />
+                  <span>মূল পদবী ও বিভাগ (Primary Designation & Department)</span>
+                </h4>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
+                      মূল পদবী (Designation Title)
+                    </label>
+                    {isCeoOrAdmin ? (
+                      <input
+                        type="text"
+                        value={editDesignationTitle}
+                        onChange={(e) => setEditDesignationTitle(e.target.value)}
+                        placeholder="যেমন: Chief Executive Officer / IT Manager"
+                        className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white font-medium focus:outline-none focus:border-teal-500"
+                        required
+                      />
+                    ) : (
+                      <div className="w-full bg-slate-100 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-xl p-2.5 text-slate-500 font-medium">
+                        {currentEmployee.designationTitle}
+                        <span className="text-[10px] text-amber-600 dark:text-amber-400 block font-normal mt-0.5">
+                          🔒 শুধুমাত্র সিইও দ্বারা পরিবর্তনযোগ্য
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
+                      মূল বিভাগ (Primary Department)
+                    </label>
+                    {isCeoOrAdmin ? (
+                      <input
+                        type="text"
+                        value={editDepartmentName}
+                        onChange={(e) => setEditDepartmentName(e.target.value)}
+                        placeholder="যেমন: Executive Management / IT & Systems"
+                        className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white font-medium focus:outline-none focus:border-teal-500"
+                        required
+                      />
+                    ) : (
+                      <div className="w-full bg-slate-100 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-xl p-2.5 text-slate-500 font-medium">
+                        {currentEmployee.departmentName}
+                        <span className="text-[10px] text-amber-600 dark:text-amber-400 block font-normal mt-0.5">
+                          🔒 শুধুমাত্র সিইও দ্বারা পরিবর্তনযোগ্য
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Multi-Role / Additional Portfolios Section (For CEO / Admins) */}
+              {isCeoOrAdmin && (
+                <div className="p-4 rounded-2xl bg-teal-50/60 dark:bg-teal-950/30 border border-teal-200 dark:border-teal-800/60 space-y-3.5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Layers className="w-4 h-4 text-teal-600 dark:text-teal-400" />
+                      <h4 className="font-bold text-teal-950 dark:text-teal-100">
+                        একাধিক পদবী ও অতিরিক্ত দায়িত্ব (Multi-Designations & Portfolios)
+                      </h4>
+                    </div>
+                    <span className="text-[10px] px-2 py-0.5 rounded-md font-bold bg-teal-500/20 text-teal-800 dark:text-teal-200 border border-teal-500/30">
+                      ইব্রাহিম হোসেন: IT Manager + Head of HR
+                    </span>
+                  </div>
+
+                  {/* Additional Designations */}
+                  <div className="space-y-2">
+                    <label className="block text-slate-700 dark:text-slate-300 font-semibold text-[11px]">
+                      অতিরিক্ত পদবীসমূহ (Additional Designations):
+                    </label>
+
+                    {editAdditionalDesignations.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 p-2 rounded-xl bg-white dark:bg-slate-900 border border-teal-200 dark:border-teal-800/80">
+                        {editAdditionalDesignations.map((desig, idx) => (
+                          <span
+                            key={desig}
+                            className="px-2.5 py-1 rounded-lg text-xs font-bold bg-teal-500/15 text-teal-800 dark:text-teal-200 border border-teal-500/30 flex items-center gap-1.5"
+                          >
+                            <span>+ {desig}</span>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveAdditionalDesignation(idx)}
+                              className="text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
+                              title="বাদ দিন"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Quick Add Suggestions */}
+                    <div className="flex flex-wrap items-center gap-1 text-[11px]">
+                      <span className="text-slate-400 text-[10px] font-medium mr-1">দ্রুত যোগ করুন:</span>
+                      {[
+                        "Head of HR",
+                        "IT Manager",
+                        "Project Director",
+                        "Microfinance Lead",
+                        "Program Officer",
+                        "Accounts Head",
+                        "Branch In-Charge",
+                      ].map((item) => (
+                        <button
+                          key={item}
+                          type="button"
+                          onClick={() => handleAddAdditionalDesignation(item)}
+                          className="px-2 py-0.5 rounded-md bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-teal-500 text-slate-700 dark:text-slate-300 text-[10px] transition-colors cursor-pointer font-medium"
+                        >
+                          + {item}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Custom Input */}
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={newDesigInput}
+                        onChange={(e) => setNewDesigInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            handleAddAdditionalDesignation(newDesigInput);
+                          }
+                        }}
+                        placeholder="কাস্টম পদবী লিখুন এবং এন্টার চাপুন..."
+                        className="flex-1 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2 text-slate-900 dark:text-white text-xs font-medium focus:outline-none focus:border-teal-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleAddAdditionalDesignation(newDesigInput)}
+                        className="px-3.5 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                      >
+                        + যোগ করুন
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Additional Departments */}
+                  <div className="space-y-2 pt-2 border-t border-teal-200/60 dark:border-teal-800/40">
+                    <label className="block text-slate-700 dark:text-slate-300 font-semibold text-[11px]">
+                      অতিরিক্ত বিভাগসমূহ (Additional Departments):
+                    </label>
+
+                    {editAdditionalDepartments.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 p-2 rounded-xl bg-white dark:bg-slate-900 border border-teal-200 dark:border-teal-800/80">
+                        {editAdditionalDepartments.map((dept, idx) => (
+                          <span
+                            key={dept}
+                            className="px-2.5 py-1 rounded-lg text-xs font-medium bg-blue-500/15 text-blue-800 dark:text-blue-200 border border-blue-500/30 flex items-center gap-1.5"
+                          >
+                            <span>{dept}</span>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveAdditionalDepartment(idx)}
+                              className="text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
+                              title="বাদ দিন"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Quick Add Suggestions for Dept */}
+                    <div className="flex flex-wrap items-center gap-1 text-[11px]">
+                      <span className="text-slate-400 text-[10px] font-medium mr-1">দ্রুত যোগ করুন:</span>
+                      {[
+                        "Human Resources",
+                        "IT & Technology",
+                        "Field Relief & Operations",
+                        "Accounts & Finance",
+                        "Vocational Training & Skills",
+                      ].map((item) => (
+                        <button
+                          key={item}
+                          type="button"
+                          onClick={() => handleAddAdditionalDepartment(item)}
+                          className="px-2 py-0.5 rounded-md bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-blue-500 text-slate-700 dark:text-slate-300 text-[10px] transition-colors cursor-pointer font-medium"
+                        >
+                          + {item}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Custom Dept Input */}
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={newDeptInput}
+                        onChange={(e) => setNewDeptInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            handleAddAdditionalDepartment(newDeptInput);
+                          }
+                        }}
+                        placeholder="কাস্টম বিভাগ লিখুন এবং এন্টার চাপুন..."
+                        className="flex-1 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2 text-slate-900 dark:text-white text-xs font-medium focus:outline-none focus:border-teal-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleAddAdditionalDepartment(newDeptInput)}
+                        className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                      >
+                        + যোগ করুন
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Fixed Salary Explanation Banner */}
+                  <div className="p-2.5 rounded-xl bg-teal-100/70 dark:bg-teal-900/30 border border-teal-300 dark:border-teal-700/60 text-[11px] text-teal-900 dark:text-teal-200 flex items-center gap-2">
+                    <span className="font-bold">💡 ফিক্সড একক বেতন নীতি:</span>
+                    <span>একাধিক পদবী বা অতিরিক্ত বিভাগ তদারকি করলেও মূল বেতন ফিক্সড একক প্রোফাইল হিসেবে সংরক্ষিত থাকে।</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Form Action Buttons */}
+              <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-200 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setShowEditProfileModal(false)}
+                  className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl font-bold transition-colors cursor-pointer"
+                >
+                  বাতিল (Cancel)
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white rounded-xl font-bold shadow-lg shadow-teal-500/20 transition-all cursor-pointer flex items-center gap-2"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>তথ্য সংরক্ষণ করুন (Save)</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Biometric Face Photo Enrollment Modal */}
       {showFaceEnrollModal && (
         <FaceEnrollmentModal
           isOpen={showFaceEnrollModal}
           onClose={() => setShowFaceEnrollModal(false)}
-          employee={currentEmployee}
-          onSaveFacePhoto={(empId, photoUrl) => {
+          employee={
+            candidateUploadedPhoto
+              ? {
+                  ...currentEmployee,
+                  faceRegisteredPhoto: candidateUploadedPhoto,
+                  avatarUrl: candidateUploadedPhoto,
+                  faceTemplateRegistered: false,
+                  faceVerified: false,
+                  faceVerificationScore: undefined,
+                }
+              : currentEmployee
+          }
+          onSaveFacePhoto={(empId, photoUrl, verificationScore) => {
             if (onUpdateFacePhoto) {
-              onUpdateFacePhoto(empId, photoUrl);
+              onUpdateFacePhoto(empId, photoUrl, verificationScore);
             }
+            setCandidateUploadedPhoto(null);
             setShowFaceEnrollModal(false);
           }}
         />

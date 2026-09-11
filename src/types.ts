@@ -6,6 +6,7 @@ export type UserRole =
   | "HR_MANAGER"
   | "ACCOUNTS_MANAGER"
   | "BRANCH_MANAGER"
+  | "DEPARTMENT_HEAD"
   | "PROJECT_MANAGER"
   | "TEAM_LEADER"
   | "EMPLOYEE"
@@ -18,6 +19,9 @@ export type NavigationTab =
   | "employees"
   | "departments-designations"
   | "branches-geofence"
+  | "ngo-programs-training"
+  | "meetings-conferences"
+  | "roles-permissions"
   | "attendance-logs"
   | "shifts-holidays"
   | "leaves"
@@ -76,6 +80,11 @@ export interface Branch {
   ipWhitelist?: string[];
   totalEmployees: number;
   activeStatus: "ACTIVE" | "INACTIVE";
+  // District Training Center attached to this Branch
+  hasTrainingCenter?: boolean;
+  trainingCenterName?: string;
+  trainingCourses?: string[];
+  traineesCount?: number;
 }
 
 export interface Department {
@@ -147,6 +156,20 @@ export interface Employee {
   designationTitle: string;
   role: UserRole;
   
+  // Multiple Designations & Department Portfolios (NGO Multi-Role Allocation)
+  additionalDesignations?: string[];
+  additionalDepartments?: string[];
+  secondaryRoleTitle?: string;
+  isCeoOrOwner?: boolean;
+  isSuperAdmin?: boolean;
+
+  // Attendance & Salary Penalty Policies (Flexible for Field Staff & Fixed Salary)
+  isAttendancePenaltyExempt?: boolean; // True = no late/early punch fine; flexible hours for field/volunteer staff
+  salaryStructureType?: "FIXED" | "STANDARD_ALLOWANCES" | "CUSTOM";
+  bonusEligibility?: "TWO_EIDS_FIXED" | "PERCENTAGE_BASIC" | "PERFORMANCE" | "NONE";
+  fixedBonusAmount?: number;
+  bonusPercentage?: number;
+  
   // Personal Details
   fullName: string;
   email: string;
@@ -183,6 +206,10 @@ export interface Employee {
   faceTemplateRegistered?: boolean;
   faceRegisteredAt?: string;
   faceRegisteredPhoto?: string;
+  faceVerifiedAt?: string;
+  faceVerificationScore?: number;
+  faceVerified?: boolean;
+  faceVerificationRequired?: boolean;
   deviceBindingEnabled?: boolean;
   boundDeviceId?: string;
   boundDeviceModel?: string;
@@ -714,3 +741,145 @@ export interface SystemNotification {
   read: boolean;
   link?: string;
 }
+
+// NGO Humanitarian & Relief Aid Program Scope
+export interface ReliefProgram {
+  id: string;
+  name: string;
+  nameBn: string;
+  category: "WATER_WELL" | "WINTER_AID" | "FOOD_DISTRIBUTION" | "EDUCATION_SUPPORT" | "SHELTER_HOUSING" | "OTHER";
+  code: string;
+  projectManagerId?: string;
+  projectManagerName?: string;
+  fieldOperationsManagerId?: string;
+  fieldOperationsManagerName?: string;
+  fieldStaffNames?: string[];
+  targetDistricts: string[];
+  allocatedBudget: number;
+  spentBudget: number;
+  targetBeneficiaries: number;
+  servedBeneficiaries: number;
+  startDate: string;
+  endDate?: string;
+  status: "PLANNING" | "ACTIVE" | "COMPLETED";
+  description: string;
+  unitsCompleted?: number;
+  targetUnits?: number;
+  unitLabel?: string; // e.g. "টি গভীর নলকূপ", "পরিবার", "টি কম্বল"
+}
+
+// NGO District Vocational Training Center attached to Branches
+export interface TrainingCenter {
+  id: string;
+  branchId: string;
+  branchName: string;
+  district: string;
+  name: string;
+  nameBn: string;
+  code: string;
+  leadInstructorId?: string;
+  leadInstructorName?: string;
+  status: "ACTIVE" | "UPCOMING" | "INACTIVE";
+  totalEnrolled: number;
+  totalGraduated: number;
+  jobsFacilitated: number; // কর্মসংস্থান সংখ্যা
+  contactPhone: string;
+  address: string;
+  courses: {
+    id: string;
+    title: string;
+    titleBn: string;
+    duration: string;
+    capacity: number;
+    currentBatchTrainees: number;
+    instructorName: string;
+    jobPlacementPartner?: string;
+  }[];
+}
+
+// NGO Microfinance & Savings Project
+export interface MicrofinanceProject {
+  id: string;
+  name: string;
+  nameBn: string;
+  code: string;
+  branchId: string;
+  branchName: string;
+  managerName: string;
+  totalDisbursedLoan: number;
+  totalSavingsDeposits: number;
+  activeBorrowers: number;
+  recoveryRatePercent: number;
+  status: "ACTIVE" | "EXPANDING";
+}
+
+// Special Meeting, Conference, Seminar & Field Programs
+export interface MeetingAttendeeRecord {
+  employeeId: string;
+  employeeName: string;
+  designationTitle: string;
+  departmentName: string;
+  date: string;
+  checkInTime?: string;
+  status: "ON_TIME" | "LATE" | "ABSENT" | "EXCUSED";
+  engagementRating?: number; // 1-5 rating of focus and participation
+  feedbackNotes?: string;
+}
+
+export interface MeetingConference {
+  id: string;
+  title: string;
+  titleBn: string;
+  type: "MEETING" | "CONFERENCE" | "SEMINAR" | "FIELD_PROGRAM" | "WORKSHOP";
+  durationPreset: "SINGLE_DAY" | "THREE_DAYS" | "ONE_WEEK" | "FIFTEEN_DAYS" | "THIRTY_DAYS" | "CUSTOM";
+  startDate: string; // YYYY-MM-DD
+  endDate: string; // YYYY-MM-DD
+  totalDays: number;
+  startTime: string; // "10:00" or "12:00"
+  reportingTime: string; // "09:30" or "11:30"
+  location: string;
+  branchId?: string;
+  branchName?: string;
+  leadOrganizerName: string;
+  leadOrganizerDesignation?: string;
+  description: string;
+  participatingDepartments?: string[];
+  assignedEmployeeIds?: string[];
+  status: "SCHEDULED" | "IN_PROGRESS" | "COMPLETED" | "POSTPONED";
+  attendanceRecords: MeetingAttendeeRecord[];
+}
+
+// System Role Permissions Matrix Definition
+export interface RolePermissionConfig {
+  role: UserRole;
+  roleTitleBn: string;
+  roleTitleEn: string;
+  descriptionBn: string;
+  canAccessAllBranches: boolean;
+  allowedNavTabs: NavigationTab[];
+  canEditEmployees: boolean;
+  canDeleteEmployees: boolean;
+  canManageDepartments: boolean;
+  canManageBranches: boolean;
+  canApproveLeaves: boolean;
+  canManagePayroll: boolean;
+  canConfigurePolicies: boolean;
+  canViewAuditLogs: boolean;
+}
+
+// Global Super Admin Payroll & Attendance Penalty Policy
+export interface PayrollPolicyConfig {
+  id: string;
+  twoEidsFixedBonusAmount: number; // e.g. ৳15,000 per Eid
+  percentageBonusRate: number; // e.g. 50% of Basic
+  bonusMaxCap: number; // e.g. ৳50,000 max cap
+  isBonusFixedAmount: boolean; // True = fixed amount, False = percentage
+  activeBonusTitle: string; // e.g. "বাৎসরিক ২ ঈদ ফিক্সড বোনাস (Two Eids Fixed Festival Bonus)"
+  latePenaltyEnabled: boolean; // Whether penalty is cut
+  latePenaltyPercentage: number; // e.g. 1% or 2% per late arrival
+  lateGracePeriodMinutes: number; // e.g. 15 minutes
+  exemptFieldStaffFromPenalty: boolean; // Default true: Field and flexible staff have no penalty
+  fixedSalaryStaffNoDeductions: boolean; // Default true: staff on fixed salary get no deductions
+  effectiveYear: number;
+}
+

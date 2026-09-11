@@ -145,6 +145,18 @@ export const DigitalIdCard = forwardRef<HTMLDivElement, DigitalIdCardProps>(
                 <p className="text-xs font-bold text-teal-400">
                   {employee.designationTitle}
                 </p>
+                {employee.additionalDesignations && employee.additionalDesignations.length > 0 && (
+                  <div className="flex flex-wrap items-center justify-center gap-1 pt-0.5">
+                    {employee.additionalDesignations.map((desig) => (
+                      <span
+                        key={desig}
+                        className="px-1.5 py-0.2 rounded-md text-[9px] font-bold bg-teal-500/20 text-teal-300 border border-teal-500/40"
+                      >
+                        + {desig}
+                      </span>
+                    ))}
+                  </div>
+                )}
                 <div className="flex items-center justify-center gap-1.5 text-[10px] text-slate-400 font-medium">
                   <span className="px-2 py-0.5 rounded-md bg-slate-800/80 border border-slate-700/60 font-semibold text-slate-300">
                     {employee.departmentName}

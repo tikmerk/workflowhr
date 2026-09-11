@@ -44,6 +44,7 @@ import {
 } from "../data/mockDatabase";
 import firebaseConfig from "../../firebase-applet-config.json";
 import { compressAndOptimizeImage } from "../utils/imageCompression";
+import { invalidateEmployeeFaceCache } from "../utils/faceRecognitionEngine";
 
 // Collection Names
 const COL_EMPLOYEES = "employees";
@@ -232,36 +233,107 @@ export async function saveEmployeeToFirestore(employee: Employee) {
   }
 }
 
+export async function deleteEmployeeFromFirestore(employeeId: string): Promise<boolean> {
+  try {
+    await deleteDoc(doc(db, COL_EMPLOYEES, employeeId));
+    try {
+      localStorage.removeItem(`workflow_hr_cached_avatar_${employeeId}`);
+    } catch (e) {
+      // ignore
+    }
+    console.log(`Employee ${employeeId} deleted from Firestore successfully.`);
+    return true;
+  } catch (err) {
+    console.error("Failed to delete employee from Firestore:", err);
+    return false;
+  }
+}
+
 export async function updateEmployeeFacePhotoInFirestore(
   employeeId: string,
-  photoUrl: string
+  photoUrl: string,
+  verificationScore?: number
 ): Promise<{ success: boolean; optimizedUrl: string }> {
   try {
     // Compress and downscale photo to max 480x480 JPEG (~30KB-50KB) to ensure it is always
     // vastly below Firestore's 1MB limit and saves instantaneously
     const optimizedPhoto = await compressAndOptimizeImage(photoUrl, 480, 480, 0.82);
 
-    const updateData = {
+    const now = new Date();
+    const updateData: Record<string, any> = {
       faceRegisteredPhoto: optimizedPhoto,
       avatarUrl: optimizedPhoto,
       faceTemplateRegistered: true,
-      faceRegisteredAt: new Date().toISOString().split("T")[0],
+      faceVerified: true,
+      faceVerificationRequired: false,
+      faceRegisteredAt: now.toISOString().split("T")[0],
+      faceVerifiedAt: now.toISOString(),
     };
+
+    if (typeof verificationScore === "number") {
+      updateData.faceVerificationScore = verificationScore;
+    }
 
     // Use setDoc with merge: true for atomic, resilient update
     await setDoc(doc(db, COL_EMPLOYEES, employeeId), cleanForFirestore(updateData), { merge: true });
 
+    // Invalidate local in-memory 128D biometric vector cache so the new photo is immediately processed
+    invalidateEmployeeFaceCache(employeeId);
+
     // Also cache in localStorage for instant offline resilience & instant load upon reload
     try {
       localStorage.setItem(`workflow_hr_cached_avatar_${employeeId}`, optimizedPhoto);
+      localStorage.setItem(`workflow_hr_cached_verified_${employeeId}`, "true");
+      if (typeof verificationScore === "number") {
+        localStorage.setItem(`workflow_hr_cached_score_${employeeId}`, String(verificationScore));
+      }
     } catch (e) {
       console.warn("Local storage avatar cache notice:", e);
     }
 
-    console.log(`Employee ${employeeId} face photo successfully saved to Firestore.`);
+    console.log(`Employee ${employeeId} face photo & verification successfully saved to Firestore.`);
     return { success: true, optimizedUrl: optimizedPhoto };
   } catch (err) {
     console.error("Failed to update face photo in Firestore:", err);
+    return { success: false, optimizedUrl: photoUrl };
+  }
+}
+
+/**
+ * When a user uploads a new photo before live face verification,
+ * save the photo but mark biometric verification as PENDING / REQUIRED.
+ */
+export async function updateEmployeePhotoPendingVerificationInFirestore(
+  employeeId: string,
+  photoUrl: string
+): Promise<{ success: boolean; optimizedUrl: string }> {
+  try {
+    const optimizedPhoto = await compressAndOptimizeImage(photoUrl, 480, 480, 0.82);
+
+    const updateData: Record<string, any> = {
+      faceRegisteredPhoto: optimizedPhoto,
+      avatarUrl: optimizedPhoto,
+      faceTemplateRegistered: false,
+      faceVerified: false,
+      faceVerificationRequired: true,
+      faceVerificationScore: null,
+      faceVerifiedAt: null,
+    };
+
+    await setDoc(doc(db, COL_EMPLOYEES, employeeId), cleanForFirestore(updateData), { merge: true });
+    invalidateEmployeeFaceCache(employeeId);
+
+    try {
+      localStorage.setItem(`workflow_hr_cached_avatar_${employeeId}`, optimizedPhoto);
+      localStorage.setItem(`workflow_hr_cached_verified_${employeeId}`, "false");
+      localStorage.removeItem(`workflow_hr_cached_score_${employeeId}`);
+    } catch (e) {
+      console.warn("Local storage cache notice:", e);
+    }
+
+    return { success: true, optimizedUrl: optimizedPhoto };
+  } catch (err) {
+    console.error("Failed to save pending photo in Firestore:", err);
     return { success: false, optimizedUrl: photoUrl };
   }
 }
@@ -560,6 +632,69 @@ export function subscribeToDesignations(onUpdate: (designations: Designation[]) 
   } catch (e) {
     console.warn(e);
     return () => {};
+  }
+}
+
+export async function saveBranchToFirestore(branch: Branch): Promise<boolean> {
+  try {
+    const docRef = doc(db, COL_BRANCHES, branch.id);
+    await setDoc(docRef, cleanForFirestore(branch), { merge: true });
+    return true;
+  } catch (e) {
+    console.warn("Error saving branch to Firestore:", e);
+    return false;
+  }
+}
+
+export async function deleteBranchFromFirestore(branchId: string): Promise<boolean> {
+  try {
+    await deleteDoc(doc(db, COL_BRANCHES, branchId));
+    return true;
+  } catch (e) {
+    console.warn("Error deleting branch from Firestore:", e);
+    return false;
+  }
+}
+
+export async function saveDepartmentToFirestore(department: Department): Promise<boolean> {
+  try {
+    const docRef = doc(db, COL_DEPARTMENTS, department.id);
+    await setDoc(docRef, cleanForFirestore(department), { merge: true });
+    return true;
+  } catch (e) {
+    console.warn("Error saving department to Firestore:", e);
+    return false;
+  }
+}
+
+export async function deleteDepartmentFromFirestore(departmentId: string): Promise<boolean> {
+  try {
+    await deleteDoc(doc(db, COL_DEPARTMENTS, departmentId));
+    return true;
+  } catch (e) {
+    console.warn("Error deleting department from Firestore:", e);
+    return false;
+  }
+}
+
+export async function saveDesignationToFirestore(designation: Designation): Promise<boolean> {
+  try {
+    const docRef = doc(db, COL_DESIGNATIONS, designation.id);
+    await setDoc(docRef, cleanForFirestore(designation), { merge: true });
+    return true;
+  } catch (e) {
+    console.warn("Error saving designation to Firestore:", e);
+    return false;
+  }
+}
+
+export async function deleteDesignationFromFirestore(designationId: string): Promise<boolean> {
+  try {
+    await deleteDoc(doc(db, COL_DESIGNATIONS, designationId));
+    return true;
+  } catch (e) {
+    console.warn("Error deleting designation from Firestore:", e);
+    return false;
   }
 }
 

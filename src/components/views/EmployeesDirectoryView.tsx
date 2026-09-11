@@ -39,8 +39,10 @@ interface EmployeesDirectoryViewProps {
   departments: Department[];
   designations: Designation[];
   shifts: Shift[];
+  currentUser?: Employee;
   onAddEmployee: (emp: Employee) => void;
   onUpdateEmployee: (emp: Employee) => void;
+  onDeleteEmployee?: (empId: string) => void;
   onOpenDigitalIdCard?: (emp: Employee) => void;
 }
 
@@ -50,8 +52,10 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
   departments,
   designations,
   shifts,
+  currentUser,
   onAddEmployee,
   onUpdateEmployee,
+  onDeleteEmployee,
   onOpenDigitalIdCard,
 }) => {
   const [searchTerm, setSearchTerm] = useState("");
@@ -62,6 +66,161 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [enrollingEmployee, setEnrollingEmployee] = useState<Employee | null>(null);
+  const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
+
+  // Edit Employee Form State
+  const [editEmpCode, setEditEmpCode] = useState("");
+  const [editFullName, setEditFullName] = useState("");
+  const [editEmail, setEditEmail] = useState("");
+  const [editPhone, setEditPhone] = useState("");
+  const [editBranchId, setEditBranchId] = useState("");
+  const [editDeptId, setEditDeptId] = useState("");
+  const [editDesigId, setEditDesigId] = useState("");
+  const [editRole, setEditRole] = useState<UserRole>("EMPLOYEE");
+  const [editShiftId, setEditShiftId] = useState("");
+  const [editStatus, setEditStatus] = useState<any>("ACTIVE");
+  const [editJoiningDate, setEditJoiningDate] = useState("");
+  const [editBasicSalary, setEditBasicSalary] = useState(60000);
+  const [editNid, setEditNid] = useState("");
+  const [editBloodGroup, setEditBloodGroup] = useState<any>("O+");
+  const [editAddress, setEditAddress] = useState("");
+  const [editEmergencyPhone, setEditEmergencyPhone] = useState("");
+  const [editAdditionalDesignations, setEditAdditionalDesignations] = useState<string[]>([]);
+  const [editAdditionalDepartments, setEditAdditionalDepartments] = useState<string[]>([]);
+  const [newDesigInput, setNewDesigInput] = useState("");
+  const [newDeptInput, setNewDeptInput] = useState("");
+  const [customDesignationTitle, setCustomDesignationTitle] = useState("");
+
+  // Role-based permission verification
+  const isCeoOrSuperAdmin = (user?: Employee) => {
+    if (!user) return true;
+    return (
+      user.role === "SUPER_ADMIN" ||
+      user.role === "COMPANY_ADMIN" ||
+      user.isCeoOrOwner ||
+      user.designationTitle.toLowerCase().includes("ceo") ||
+      user.designationTitle.toLowerCase().includes("executive officer")
+    );
+  };
+
+  const isBranchManagerOf = (user?: Employee, targetBranchId?: string) => {
+    if (!user) return true;
+    const isManagerRole =
+      user.role === "BRANCH_MANAGER" ||
+      user.designationTitle.toLowerCase().includes("branch manager") ||
+      user.designationTitle.toLowerCase().includes("শাখা প্রধান") ||
+      user.designationTitle.toLowerCase().includes("manager");
+    return isManagerRole && user.branchId === targetBranchId;
+  };
+
+  const canEditEmployeeProfile = (targetEmp: Employee) => {
+    if (!currentUser) return true;
+    if (isCeoOrSuperAdmin(currentUser)) return true;
+    if (currentUser.role === "HR_MANAGER") return true;
+    if (isBranchManagerOf(currentUser, targetEmp.branchId)) return true;
+    if (currentUser.id === targetEmp.id) return true; // Self edit
+    return false;
+  };
+
+  const canDeleteEmployeeProfile = (targetEmp: Employee) => {
+    if (!currentUser) return true;
+    if (isCeoOrSuperAdmin(currentUser)) return true;
+    if (isBranchManagerOf(currentUser, targetEmp.branchId)) return true;
+    return false;
+  };
+
+  const openEditModal = (emp: Employee) => {
+    setEditingEmployee(emp);
+    setEditEmpCode(emp.employeeCode);
+    setEditFullName(emp.fullName);
+    setEditEmail(emp.email);
+    setEditPhone(emp.phone);
+    setEditBranchId(emp.branchId || branches[0]?.id || "");
+    setEditDeptId(emp.departmentId || departments[0]?.id || "");
+    setEditDesigId(emp.designationId || designations[0]?.id || "");
+    setCustomDesignationTitle(emp.designationTitle || "");
+    setEditAdditionalDesignations(emp.additionalDesignations || []);
+    setEditAdditionalDepartments(emp.additionalDepartments || []);
+    setEditRole(emp.role || "EMPLOYEE");
+    setEditShiftId(emp.shiftId || shifts[0]?.id || "");
+    setEditStatus(emp.status || "ACTIVE");
+    setEditJoiningDate(emp.joiningDate || "2026-09-01");
+    setEditBasicSalary(emp.salary?.basic || 60000);
+    setEditNid(emp.nidNumber || "");
+    setEditBloodGroup((emp.bloodGroup as any) || "O+");
+    setEditAddress(emp.presentAddress || "");
+    setEditEmergencyPhone(emp.emergencyPhone || "");
+  };
+
+  const handleEditSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingEmployee) return;
+
+    const branch = branches.find((b) => b.id === editBranchId) || branches[0];
+    const dept = departments.find((d) => d.id === editDeptId) || departments[0];
+    const desig = designations.find((d) => d.id === editDesigId) || designations[0];
+    const shift = shifts.find((s) => s.id === editShiftId) || shifts[0];
+
+    const basic = Number(editBasicSalary);
+    const gross = Math.round(basic * 1.77);
+
+    const updatedEmp: Employee = {
+      ...editingEmployee,
+      employeeCode: editEmpCode,
+      fullName: editFullName,
+      email: editEmail,
+      phone: editPhone,
+      emergencyPhone: editEmergencyPhone,
+      branchId: branch?.id || editingEmployee.branchId,
+      branchName: branch?.name || editingEmployee.branchName,
+      departmentId: dept?.id || editingEmployee.departmentId,
+      departmentName: dept?.name || editingEmployee.departmentName,
+      designationId: desig?.id || editingEmployee.designationId,
+      designationTitle: customDesignationTitle.trim() || desig?.title || editingEmployee.designationTitle,
+      additionalDesignations: editAdditionalDesignations,
+      additionalDepartments: editAdditionalDepartments,
+      role: editRole,
+      shiftId: shift?.id || editingEmployee.shiftId,
+      shiftName: shift?.name || editingEmployee.shiftName,
+      status: editStatus,
+      joiningDate: editJoiningDate,
+      nidNumber: editNid,
+      bloodGroup: editBloodGroup,
+      presentAddress: editAddress,
+      salary: {
+        ...editingEmployee.salary,
+        basic: basic,
+        houseRent: Math.round(basic * 0.4),
+        medicalAllowance: Math.round(basic * 0.12),
+        transportAllowance: Math.round(basic * 0.12),
+        specialAllowance: Math.round(basic * 0.13),
+        providentFundPercentage: editingEmployee.salary?.providentFundPercentage || 8,
+        taxDeductionPercentage: editingEmployee.salary?.taxDeductionPercentage || 6,
+        grossSalary: gross,
+      },
+    };
+
+    onUpdateEmployee(updatedEmp);
+    if (selectedEmployee?.id === updatedEmp.id) {
+      setSelectedEmployee(updatedEmp);
+    }
+    setEditingEmployee(null);
+  };
+
+  const handleDeleteEmployee = (emp: Employee) => {
+    if (
+      window.confirm(
+        `আপনি কি নিশ্চিত যে "${emp.fullName}" (${emp.employeeCode})-কে সিস্টেম থেকে মুছে ফেলতে চান? এই তথ্য ডাটাবেস থেকেও ডিলিট হয়ে যাবে।`
+      )
+    ) {
+      if (onDeleteEmployee) {
+        onDeleteEmployee(emp.id);
+      }
+      if (selectedEmployee?.id === emp.id) {
+        setSelectedEmployee(null);
+      }
+    }
+  };
 
   // New Employee Form State (Comprehensive 30+ Enterprise Fields)
   const [newEmpCode, setNewEmpCode] = useState(`WF-${1000 + employees.length + 1}`);
@@ -298,6 +457,18 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
                     <p className="text-[10px] text-teal-700 dark:text-teal-400 font-semibold mt-0.5">
                       {emp.designationTitle}
                     </p>
+                    {emp.additionalDesignations && emp.additionalDesignations.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {emp.additionalDesignations.map((d) => (
+                          <span
+                            key={d}
+                            className="px-1.5 py-0.2 rounded text-[8px] font-bold bg-teal-500/15 text-teal-800 dark:text-teal-300 border border-teal-500/30"
+                          >
+                            + {d}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -339,7 +510,7 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 pt-2 border-t border-slate-200/80 dark:border-slate-700/50">
+              <div className="flex items-center gap-1.5 pt-2 border-t border-slate-200/80 dark:border-slate-700/50">
                 {onOpenDigitalIdCard && (
                   <button
                     type="button"
@@ -356,8 +527,35 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
                   className="flex-1 py-2 px-2.5 rounded-lg bg-teal-500/15 hover:bg-teal-500/25 text-teal-800 dark:text-teal-300 border border-teal-500/30 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
                 >
                   <ScanFace className="w-3.5 h-3.5" />
-                  <span>{emp.faceTemplateRegistered ? "Update Photo" : "Enroll Face"}</span>
+                  <span>{emp.faceTemplateRegistered ? "Photo" : "Face"}</span>
                 </button>
+                {canEditEmployeeProfile(emp) ? (
+                  <button
+                    type="button"
+                    onClick={() => openEditModal(emp)}
+                    className="p-2 rounded-lg bg-slate-100 hover:bg-teal-500/20 dark:bg-slate-800 dark:hover:bg-teal-500/30 text-slate-700 dark:text-slate-300 hover:text-teal-700 dark:hover:text-teal-300 transition-colors cursor-pointer"
+                    title="Edit Employee (তথ্য এডিট করুন)"
+                  >
+                    <Edit2 className="w-4 h-4" />
+                  </button>
+                ) : (
+                  <span
+                    className="p-2 rounded-lg bg-slate-100 dark:bg-slate-800/40 text-slate-300 dark:text-slate-600 cursor-not-allowed opacity-50"
+                    title="শুধুমাত্র সিইও বা ব্রাঞ্চ ম্যানেজার প্রোফাইল সম্পাদনা করতে পারেন"
+                  >
+                    <Edit2 className="w-4 h-4" />
+                  </span>
+                )}
+                {onDeleteEmployee && canDeleteEmployeeProfile(emp) && (
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteEmployee(emp)}
+                    className="p-2 rounded-lg bg-slate-100 hover:bg-rose-500/20 dark:bg-slate-800 dark:hover:bg-rose-500/30 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 transition-colors cursor-pointer"
+                    title="Delete Employee (মুছে ফেলুন)"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => setSelectedEmployee(emp)}
@@ -408,7 +606,19 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
 
                   <td className="p-3">
                     <div className="font-semibold text-slate-900 dark:text-slate-200">{emp.designationTitle}</div>
-                    <div className="text-[10px] text-teal-700 dark:text-teal-400 font-medium">
+                    {emp.additionalDesignations && emp.additionalDesignations.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-0.5">
+                        {emp.additionalDesignations.map((d) => (
+                          <span
+                            key={d}
+                            className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-teal-500/15 text-teal-700 dark:text-teal-300 border border-teal-500/30"
+                          >
+                            + {d}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    <div className="text-[10px] text-teal-700 dark:text-teal-400 font-medium mt-0.5">
                       {emp.role.replace("_", " ")}
                     </div>
                   </td>
@@ -416,6 +626,18 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
                   <td className="p-3">
                     <div className="font-medium text-slate-900 dark:text-slate-200">{(emp.branchName || "Main Office").split("(")[0]}</div>
                     <div className="text-[10px] text-slate-500 dark:text-slate-400">{emp.departmentName}</div>
+                    {emp.additionalDepartments && emp.additionalDepartments.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-0.5">
+                        {emp.additionalDepartments.map((dept) => (
+                          <span
+                            key={dept}
+                            className="px-1.5 py-0.2 rounded text-[9px] font-medium bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800"
+                          >
+                            {dept}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </td>
 
                   <td className="p-3">
@@ -480,6 +702,31 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
                       >
                         <ScanFace className="w-4 h-4" />
                       </button>
+                      {canEditEmployeeProfile(emp) ? (
+                        <button
+                          onClick={() => openEditModal(emp)}
+                          className="p-1.5 rounded-lg bg-slate-100 hover:bg-teal-500/20 dark:bg-slate-800 dark:hover:bg-teal-500/30 text-slate-700 dark:text-slate-300 hover:text-teal-700 dark:hover:text-teal-300 transition-colors cursor-pointer"
+                          title="Edit Employee (তথ্য এডিট করুন)"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </button>
+                      ) : (
+                        <span
+                          className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800/40 text-slate-300 dark:text-slate-600 cursor-not-allowed opacity-50"
+                          title="শুধুমাত্র সিইও বা ব্রাঞ্চ ম্যানেজার প্রোফাইল সম্পাদনা করতে পারেন"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </span>
+                      )}
+                      {onDeleteEmployee && canDeleteEmployeeProfile(emp) && (
+                        <button
+                          onClick={() => handleDeleteEmployee(emp)}
+                          className="p-1.5 rounded-lg bg-slate-100 hover:bg-rose-500/20 dark:bg-slate-800 dark:hover:bg-rose-500/30 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 transition-colors cursor-pointer"
+                          title="Delete Employee (মুছে ফেলুন)"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
                       <button
                         onClick={() => setSelectedEmployee(emp)}
                         className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer"
@@ -551,6 +798,47 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
               </div>
             </div>
 
+            {/* Multi-Roles & Additional Portfolios */}
+            {((selectedEmployee.additionalDesignations && selectedEmployee.additionalDesignations.length > 0) ||
+              (selectedEmployee.additionalDepartments && selectedEmployee.additionalDepartments.length > 0)) && (
+              <div className="p-3.5 rounded-xl bg-teal-50/70 dark:bg-teal-950/30 border border-teal-200 dark:border-teal-800/60 space-y-2 text-xs">
+                <h4 className="font-bold text-teal-900 dark:text-teal-200 flex items-center gap-1.5">
+                  <Layers className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
+                  <span>অতিরিক্ত দায়িত্ব ও পোর্টফোলিও (Multi-Portfolios)</span>
+                </h4>
+                {selectedEmployee.additionalDesignations && selectedEmployee.additionalDesignations.length > 0 && (
+                  <div>
+                    <span className="text-[11px] text-slate-500 dark:text-slate-400 block mb-1">অতিরিক্ত পদবীসমূহ:</span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {selectedEmployee.additionalDesignations.map((d) => (
+                        <span
+                          key={d}
+                          className="px-2 py-0.5 rounded-md text-[11px] font-bold bg-teal-500/15 text-teal-800 dark:text-teal-200 border border-teal-500/30"
+                        >
+                          {d}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {selectedEmployee.additionalDepartments && selectedEmployee.additionalDepartments.length > 0 && (
+                  <div>
+                    <span className="text-[11px] text-slate-500 dark:text-slate-400 block mb-1">অতিরিক্ত বিভাগসমূহ:</span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {selectedEmployee.additionalDepartments.map((dept) => (
+                        <span
+                          key={dept}
+                          className="px-2 py-0.5 rounded-md text-[11px] font-medium bg-blue-500/15 text-blue-800 dark:text-blue-200 border border-blue-500/30"
+                        >
+                          {dept}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/60 space-y-2 text-xs">
               <h4 className="font-bold text-slate-900 dark:text-slate-200">Biometric & Device Binding Status</h4>
               <div className="flex items-center justify-between text-slate-700 dark:text-slate-300">
@@ -591,6 +879,30 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
                     <span>ডিজিটাল আইডি কার্ড (Digital ID)</span>
                   </button>
                 )}
+
+                {canEditEmployeeProfile(selectedEmployee) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      openEditModal(selectedEmployee);
+                    }}
+                    className="px-3.5 py-2 bg-slate-100 hover:bg-teal-500/20 dark:bg-slate-800 dark:hover:bg-teal-500/30 text-slate-700 dark:text-slate-200 hover:text-teal-700 dark:hover:text-teal-300 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer border border-slate-200 dark:border-slate-700"
+                  >
+                    <Edit2 className="w-4 h-4" />
+                    <span>তথ্য এডিট করুন (Edit)</span>
+                  </button>
+                )}
+
+                {onDeleteEmployee && canDeleteEmployeeProfile(selectedEmployee) && (
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteEmployee(selectedEmployee)}
+                    className="px-3.5 py-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer border border-rose-500/20"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    <span>মুছে ফেলুন (Delete)</span>
+                  </button>
+                )}
               </div>
 
               <button
@@ -610,12 +922,17 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
           isOpen={Boolean(enrollingEmployee)}
           onClose={() => setEnrollingEmployee(null)}
           employee={enrollingEmployee}
-          onSaveFacePhoto={(empId, photoUrl) => {
+          onSaveFacePhoto={(empId, photoUrl, verificationScore) => {
             const updated = {
               ...enrollingEmployee,
               faceRegisteredPhoto: photoUrl,
               avatarUrl: photoUrl,
               faceTemplateRegistered: true,
+              faceVerified: true,
+              faceVerificationRequired: false,
+              faceRegisteredAt: new Date().toISOString().split("T")[0],
+              faceVerifiedAt: new Date().toISOString(),
+              faceVerificationScore: verificationScore || 95,
             };
             onUpdateEmployee(updated);
             setEnrollingEmployee(null);
@@ -829,6 +1146,476 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
                   className="px-5 py-2 bg-gradient-to-r from-teal-600 to-emerald-600 text-white rounded-xl font-bold shadow-lg shadow-teal-500/20 cursor-pointer"
                 >
                   Save & Enroll Employee
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Edit Existing Employee */}
+      {editingEmployee && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl p-6 w-full max-w-3xl text-slate-900 dark:text-slate-100 shadow-2xl space-y-4 my-8 max-h-[92vh] flex flex-col">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
+              <div className="flex items-center gap-2">
+                <Edit2 className="w-5 h-5 text-teal-600 dark:text-teal-400" />
+                <div>
+                  <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                    কর্মকর্তা/কর্মচারীর তথ্য সম্পাদনা (Edit Employee)
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    {editingEmployee.fullName} ({editingEmployee.employeeCode})
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setEditingEmployee(null)}
+                className="p-2 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleEditSubmit} className="space-y-4 text-xs overflow-y-auto flex-1 pr-1">
+              {/* Basic Identifiers */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-slate-600 dark:text-slate-400 mb-1 font-semibold">
+                    Employee Code / ID *
+                  </label>
+                  <input
+                    type="text"
+                    value={editEmpCode}
+                    onChange={(e) => setEditEmpCode(e.target.value)}
+                    className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white font-mono"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-600 dark:text-slate-400 mb-1 font-semibold">
+                    Full Legal Name *
+                  </label>
+                  <input
+                    type="text"
+                    value={editFullName}
+                    onChange={(e) => setEditFullName(e.target.value)}
+                    className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-600 dark:text-slate-400 mb-1 font-semibold">
+                    Account Status
+                  </label>
+                  <select
+                    value={editStatus}
+                    onChange={(e) => setEditStatus(e.target.value)}
+                    className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white font-semibold"
+                  >
+                    <option value="ACTIVE">ACTIVE (সক্রিয়)</option>
+                    <option value="ON_LEAVE">ON LEAVE (ছুটিতে)</option>
+                    <option value="PROBATION">PROBATION (প্রবেশন)</option>
+                    <option value="TERMINATED">TERMINATED (স্থগিত)</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Contact Information */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-600 dark:text-slate-400 mb-1 font-semibold">
+                    Official Email *
+                  </label>
+                  <input
+                    type="email"
+                    value={editEmail}
+                    onChange={(e) => setEditEmail(e.target.value)}
+                    className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-600 dark:text-slate-400 mb-1 font-semibold">
+                    Phone Number *
+                  </label>
+                  <input
+                    type="tel"
+                    value={editPhone}
+                    onChange={(e) => setEditPhone(e.target.value)}
+                    className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white font-mono"
+                    required
+                  />
+                </div>
+              </div>
+
+              {/* Organizational Structure */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-slate-600 dark:text-slate-400 mb-1 font-semibold">
+                    Assigned Branch *
+                  </label>
+                  <select
+                    value={editBranchId}
+                    onChange={(e) => setEditBranchId(e.target.value)}
+                    className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white"
+                  >
+                    {branches.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-slate-600 dark:text-slate-400 mb-1 font-semibold">
+                    Department *
+                  </label>
+                  <select
+                    value={editDeptId}
+                    onChange={(e) => setEditDeptId(e.target.value)}
+                    className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white"
+                  >
+                    {departments.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.name} ({d.code})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-slate-600 dark:text-slate-400 mb-1 font-semibold">
+                    Designation (মূল পদবী) *
+                  </label>
+                  <div className="space-y-1.5">
+                    <select
+                      value={editDesigId}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setEditDesigId(val);
+                        const found = designations.find((d) => d.id === val);
+                        if (found) setCustomDesignationTitle(found.title);
+                      }}
+                      className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white"
+                    >
+                      {designations.map((des) => (
+                        <option key={des.id} value={des.id}>
+                          {des.title}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      type="text"
+                      placeholder="বা কাস্টম মূল পদবী লিখুন (যেমন: Chief Executive Officer)"
+                      value={customDesignationTitle}
+                      onChange={(e) => setCustomDesignationTitle(e.target.value)}
+                      className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2 text-xs text-slate-900 dark:text-white"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Multi-Designation & Department Portfolio Section */}
+              <div className="p-4 rounded-2xl bg-teal-50/60 dark:bg-teal-950/20 border border-teal-200/80 dark:border-teal-800/60 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Layers className="w-4 h-4 text-teal-600 dark:text-teal-400" />
+                    <h4 className="text-xs font-bold text-slate-900 dark:text-white">
+                      একাধিক পদবী ও বিভাগ পোর্টফোলিও (Multi-Designations & Portfolios)
+                    </h4>
+                  </div>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-teal-500/20 text-teal-800 dark:text-teal-300">
+                    ফিক্সড একক বেতন নীতি
+                  </span>
+                </div>
+
+                {/* Additional Designations */}
+                <div className="space-y-1.5">
+                  <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-300">
+                    অতিরিক্ত পদবীসমূহ (Additional Designations):
+                  </label>
+                  <div className="flex flex-wrap gap-1.5 min-h-[32px] p-2 rounded-xl bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800">
+                    {editAdditionalDesignations.length === 0 ? (
+                      <span className="text-[11px] text-slate-400 italic">কোনো অতিরিক্ত পদবী যুক্ত নেই</span>
+                    ) : (
+                      editAdditionalDesignations.map((desig, idx) => (
+                        <span
+                          key={idx}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-teal-500/15 text-teal-800 dark:text-teal-200 border border-teal-500/30"
+                        >
+                          <span>{desig}</span>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setEditAdditionalDesignations(editAdditionalDesignations.filter((_, i) => i !== idx))
+                            }
+                            className="hover:text-rose-500 cursor-pointer"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </span>
+                      ))
+                    )}
+                  </div>
+
+                  {/* Quick-add recommendations + Custom Input */}
+                  <div className="space-y-1.5 pt-1">
+                    <div className="flex flex-wrap gap-1">
+                      {[
+                        "Head of HR",
+                        "IT Manager",
+                        "Project Manager",
+                        "Accounts Coordinator",
+                        "International Relations Officer",
+                        "Training Center Director",
+                        "Field Operations Lead",
+                      ].map((tag) => (
+                        <button
+                          key={tag}
+                          type="button"
+                          disabled={editAdditionalDesignations.includes(tag)}
+                          onClick={() => {
+                            if (!editAdditionalDesignations.includes(tag)) {
+                              setEditAdditionalDesignations([...editAdditionalDesignations, tag]);
+                            }
+                          }}
+                          className={`px-2 py-0.5 rounded-md text-[10px] font-bold transition-all cursor-pointer ${
+                            editAdditionalDesignations.includes(tag)
+                              ? "bg-slate-100 dark:bg-slate-800 text-slate-400 opacity-50 cursor-not-allowed"
+                              : "bg-teal-50 hover:bg-teal-100 dark:bg-teal-900/30 dark:hover:bg-teal-900/60 text-teal-700 dark:text-teal-300 border border-teal-300/40"
+                          }`}
+                        >
+                          + {tag}
+                        </button>
+                      ))}
+                    </div>
+
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        placeholder="কাস্টম পদবী লিখুন (যেমন: ভোকেশনাল ট্রেইনার)..."
+                        value={newDesigInput}
+                        onChange={(e) => setNewDesigInput(e.target.value)}
+                        className="flex-1 px-3 py-1.5 text-xs rounded-xl bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (newDesigInput.trim() && !editAdditionalDesignations.includes(newDesigInput.trim())) {
+                            setEditAdditionalDesignations([...editAdditionalDesignations, newDesigInput.trim()]);
+                            setNewDesigInput("");
+                          }
+                        }}
+                        className="px-3 py-1.5 rounded-xl bg-teal-600 hover:bg-teal-500 text-white font-bold text-xs cursor-pointer shrink-0"
+                      >
+                        যোগ করুন (+)
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Additional Departments / Portfolios */}
+                <div className="space-y-1.5 pt-2 border-t border-teal-200/50 dark:border-teal-800/40">
+                  <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-300">
+                    অতিরিক্ত বিভাগ ও প্রকল্প পোর্টফোলিও (Additional Departments):
+                  </label>
+                  <div className="flex flex-wrap gap-1.5 min-h-[32px] p-2 rounded-xl bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800">
+                    {editAdditionalDepartments.length === 0 ? (
+                      <span className="text-[11px] text-slate-400 italic">কোনো অতিরিক্ত বিভাগ যুক্ত নেই</span>
+                    ) : (
+                      editAdditionalDepartments.map((dept, idx) => (
+                        <span
+                          key={idx}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-blue-500/15 text-blue-800 dark:text-blue-200 border border-blue-500/30"
+                        >
+                          <span>{dept}</span>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setEditAdditionalDepartments(editAdditionalDepartments.filter((_, i) => i !== idx))
+                            }
+                            className="hover:text-rose-500 cursor-pointer"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </span>
+                      ))
+                    )}
+                  </div>
+
+                  <div className="flex flex-wrap gap-1 pt-1">
+                    {[
+                      "Human Resources",
+                      "IT & Systems",
+                      "Finance, Accounts & Audit",
+                      "Relief & Humanitarian Aid",
+                      "Vocational Training Hub",
+                      "Microfinance & Credit",
+                    ].map((deptTag) => (
+                      <button
+                        key={deptTag}
+                        type="button"
+                        disabled={editAdditionalDepartments.includes(deptTag)}
+                        onClick={() => {
+                          if (!editAdditionalDepartments.includes(deptTag)) {
+                            setEditAdditionalDepartments([...editAdditionalDepartments, deptTag]);
+                          }
+                        }}
+                        className={`px-2 py-0.5 rounded-md text-[10px] font-bold transition-all cursor-pointer ${
+                          editAdditionalDepartments.includes(deptTag)
+                            ? "bg-slate-100 dark:bg-slate-800 text-slate-400 opacity-50 cursor-not-allowed"
+                            : "bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/30 dark:hover:bg-blue-900/60 text-blue-700 dark:text-blue-300 border border-blue-300/40"
+                        }`}
+                      >
+                        + {deptTag}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <p className="text-[11px] text-teal-800 dark:text-teal-300 bg-teal-500/10 p-2 rounded-lg leading-relaxed">
+                  <strong>বেতন নীতি:</strong> এক কর্মকর্তার একাধিক পদবী বা দায়িত্ব থাকলেও মাসিক বেতন ফিক্সড একক অ্যামাউন্ট অনুযায়ী গণনা হবে।
+                </p>
+              </div>
+
+              {/* Role & Work Shift */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-slate-600 dark:text-slate-400 mb-1 font-semibold">
+                    System Security Role
+                  </label>
+                  <select
+                    value={editRole}
+                    onChange={(e) => setEditRole(e.target.value as any)}
+                    className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white"
+                  >
+                    <option value="EMPLOYEE">Standard Employee</option>
+                    <option value="HR_MANAGER">HR Manager</option>
+                    <option value="DEPT_HEAD">Department Head</option>
+                    <option value="PAYROLL_OFFICER">Payroll Officer</option>
+                    <option value="AUDITOR">Auditor</option>
+                    <option value="SUPER_ADMIN">Super Administrator</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-slate-600 dark:text-slate-400 mb-1 font-semibold">
+                    Work Shift Schedule
+                  </label>
+                  <select
+                    value={editShiftId}
+                    onChange={(e) => setEditShiftId(e.target.value)}
+                    className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white"
+                  >
+                    {shifts.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name} ({s.startTime} - {s.endTime})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-slate-600 dark:text-slate-400 mb-1 font-semibold">
+                    Joining Date
+                  </label>
+                  <input
+                    type="date"
+                    value={editJoiningDate}
+                    onChange={(e) => setEditJoiningDate(e.target.value)}
+                    className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white"
+                  />
+                </div>
+              </div>
+
+              {/* Salary & Legal Info */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-slate-600 dark:text-slate-400 mb-1 font-semibold">
+                    Basic Salary (BDT ৳)
+                  </label>
+                  <input
+                    type="number"
+                    value={editBasicSalary}
+                    onChange={(e) => setEditBasicSalary(Number(e.target.value))}
+                    className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white font-mono"
+                  />
+                  <span className="text-[10px] text-slate-400 mt-0.5 block">
+                    Gross: ৳{Math.round(editBasicSalary * 1.77).toLocaleString()}
+                  </span>
+                </div>
+                <div>
+                  <label className="block text-slate-600 dark:text-slate-400 mb-1 font-semibold">
+                    National ID (NID)
+                  </label>
+                  <input
+                    type="text"
+                    value={editNid}
+                    onChange={(e) => setEditNid(e.target.value)}
+                    placeholder="10 or 17 digit NID"
+                    className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-600 dark:text-slate-400 mb-1 font-semibold">
+                    Blood Group
+                  </label>
+                  <select
+                    value={editBloodGroup}
+                    onChange={(e) => setEditBloodGroup(e.target.value as any)}
+                    className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white"
+                  >
+                    <option value="A+">A+</option>
+                    <option value="A-">A-</option>
+                    <option value="B+">B+</option>
+                    <option value="B-">B-</option>
+                    <option value="O+">O+</option>
+                    <option value="O-">O-</option>
+                    <option value="AB+">AB+</option>
+                    <option value="AB-">AB-</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Address & Emergency Contact */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-600 dark:text-slate-400 mb-1 font-semibold">
+                    Present Residential Address
+                  </label>
+                  <input
+                    type="text"
+                    value={editAddress}
+                    onChange={(e) => setEditAddress(e.target.value)}
+                    placeholder="e.g. House 14, Road 5, Dhanmondi, Dhaka"
+                    className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-600 dark:text-slate-400 mb-1 font-semibold">
+                    Emergency Contact Phone
+                  </label>
+                  <input
+                    type="tel"
+                    value={editEmergencyPhone}
+                    onChange={(e) => setEditEmergencyPhone(e.target.value)}
+                    placeholder="+880 1..."
+                    className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-3 border-t border-slate-200 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setEditingEmployee(null)}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl font-bold cursor-pointer transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white rounded-xl font-bold shadow-lg shadow-teal-500/20 cursor-pointer"
+                >
+                  Save Employee Updates
                 </button>
               </div>
             </form>

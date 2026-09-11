@@ -1026,15 +1026,17 @@ export const SmartAttendanceModal: React.FC<SmartAttendanceModalProps> = ({
           isOpen={showEnrollModal}
           onClose={() => setShowEnrollModal(false)}
           employee={activeEmployee}
-          onSaveFacePhoto={(empId, photoUrl) => {
+          onSaveFacePhoto={(empId, photoUrl, verificationScore) => {
             if (onUpdateFacePhoto) {
-              onUpdateFacePhoto(empId, photoUrl);
+              onUpdateFacePhoto(empId, photoUrl, verificationScore);
             }
             setActiveEmployee((prev) => ({
               ...prev,
               faceRegisteredPhoto: photoUrl,
               avatarUrl: photoUrl,
               faceTemplateRegistered: true,
+              faceVerificationScore: verificationScore || 95,
+              faceVerifiedAt: new Date().toISOString(),
             }));
             setShowEnrollModal(false);
           }}

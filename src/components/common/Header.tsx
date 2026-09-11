@@ -28,6 +28,7 @@ import {
   RefreshCw,
   X,
   Server,
+  AlertTriangle,
 } from "lucide-react";
 import { Employee, Branch, UserRole } from "../../types";
 import { useThemeLanguage } from "../../context/ThemeLanguageContext";
@@ -49,6 +50,7 @@ interface HeaderProps {
   pendingLeavesCount?: number;
   onLogout?: () => void;
   onOpenDigitalIdCard?: (emp?: Employee) => void;
+  onOpenFaceEnrollModal?: (emp?: Employee) => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -66,6 +68,7 @@ export const Header: React.FC<HeaderProps> = ({
   pendingLeavesCount = 0,
   onLogout,
   onOpenDigitalIdCard,
+  onOpenFaceEnrollModal,
 }) => {
   const { language, toggleLanguage, theme, toggleTheme, t, isBangla } = useThemeLanguage();
   const { setIsBrandingModalOpen } = useCompanyBranding();
@@ -156,6 +159,15 @@ export const Header: React.FC<HeaderProps> = ({
   }, []);
 
   const isSuperAdmin = currentEmployee.role === "SUPER_ADMIN" || currentEmployee.role === "COMPANY_ADMIN" || currentEmployee.role === "CEO";
+
+  const isFaceVerified = Boolean(
+    currentEmployee.faceTemplateRegistered &&
+    currentEmployee.faceVerified &&
+    typeof currentEmployee.faceVerificationScore === "number" &&
+    currentEmployee.faceVerificationScore > 0
+  );
+  const isFaceVerificationRequired = !isFaceVerified;
+  const totalNotificationBadge = pendingLeavesCount + (isFaceVerificationRequired ? 1 : 0);
 
   const selectedBranch =
     branches.find((b) => b.id === selectedBranchId) || {
@@ -369,9 +381,15 @@ export const Header: React.FC<HeaderProps> = ({
               aria-label="Notifications"
             >
               <Bell className="w-4 h-4" />
-              {pendingLeavesCount > 0 && (
-                <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-teal-500 text-[9px] font-bold text-slate-950 flex items-center justify-center animate-bounce">
-                  {pendingLeavesCount}
+              {totalNotificationBadge > 0 && (
+                <span
+                  className={`absolute -top-1 -right-1 min-w-4 h-4 px-1 rounded-full text-[9px] font-black flex items-center justify-center animate-bounce ${
+                    isFaceVerificationRequired
+                      ? "bg-amber-500 text-slate-950 ring-2 ring-amber-400"
+                      : "bg-teal-500 text-slate-950"
+                  }`}
+                >
+                  {totalNotificationBadge}
                 </span>
               )}
             </button>
@@ -383,6 +401,64 @@ export const Header: React.FC<HeaderProps> = ({
                   <span className="text-[10px] text-teal-600 dark:text-teal-400 font-mono font-bold">{t("লাইভ", "Live")}</span>
                 </div>
                 <div className="space-y-2">
+                  {/* Face Verification Required Alert Card */}
+                  {isFaceVerificationRequired ? (
+                    <div className="p-3 rounded-xl bg-gradient-to-r from-amber-500/20 via-amber-500/15 to-orange-500/20 border border-amber-500/40 shadow-xs animate-in fade-in">
+                      <div className="flex items-start gap-2.5">
+                        <div className="p-1.5 rounded-lg bg-amber-500/25 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5">
+                          <AlertTriangle className="w-4 h-4 animate-pulse" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-1">
+                            <span className="text-[10px] font-black text-amber-700 dark:text-amber-300 uppercase tracking-wider">
+                              {t("ছবির বায়োমেট্রিক ভেরিফিকেশন প্রয়োজন", "Face Verification Required")}
+                            </span>
+                            <span className="px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-amber-500/30 text-amber-800 dark:text-amber-200">
+                              {t("জরুরি", "Urgent")}
+                            </span>
+                          </div>
+                          <p className="text-slate-700 dark:text-slate-200 text-[11px] mt-1 font-medium leading-snug">
+                            {t(
+                              "আপনার প্রোফাইল ছবির সাথে লাইভ ক্যামেরা দিয়ে মুখমণ্ডল যাচাই করা হয়নি। স্মার্ট উপস্থিতি নিশ্চিত করতে এখনই লাইভ ভেরিফাই সম্পন্ন করুন।",
+                              "Your profile face has not been verified against live camera biometrics. Please verify to enable smart attendance."
+                            )}
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowNotifications(false);
+                              if (onOpenFaceEnrollModal) {
+                                onOpenFaceEnrollModal(currentEmployee);
+                              }
+                            }}
+                            className="mt-2.5 w-full py-1.5 px-2.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-bold text-[11px] flex items-center justify-center gap-1.5 shadow-sm transition-colors cursor-pointer"
+                          >
+                            <ScanFace className="w-3.5 h-3.5" />
+                            <span>{t("এখনই ক্যামেরা দিয়ে ভেরিফাই করুন", "Verify Live Face Now")}</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase flex items-center gap-1">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                          {t("বায়োমেট্রিক ফেস স্ট্যাটাস", "Biometric Face Status")}
+                        </span>
+                        <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-emerald-500/20 text-emerald-700 dark:text-emerald-300">
+                          {currentEmployee.faceVerificationScore}% {t("ভেরিফাইড", "Verified")}
+                        </span>
+                      </div>
+                      <p className="text-slate-600 dark:text-slate-300 text-[11px] mt-0.5">
+                        {t(
+                          "আপনার লাইভ ফেস ভেরিফিকেশন সফল হয়েছে এবং উপস্থিতি দেওয়ার জন্য সক্রিয় রয়েছে।",
+                          "Your biometric face is verified and ready for attendance clock-in."
+                        )}
+                      </p>
+                    </div>
+                  )}
+
                   <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/50">
                     <span className="text-[10px] font-bold text-teal-600 dark:text-teal-400 uppercase block">
                       {t("উপস্থিতি পর্যবেক্ষণ", "Attendance Telemetry")}
@@ -437,7 +513,7 @@ export const Header: React.FC<HeaderProps> = ({
             {showRoleMenu && (
               <div className="absolute right-0 mt-2 w-80 max-w-[92vw] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700/90 rounded-2xl shadow-2xl p-3 z-50 animate-in fade-in slide-in-from-top-2 duration-150 text-xs">
                 {/* User Info Header Card */}
-                <div className="flex items-center gap-3 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700/60 mb-2.5">
+                <div className="flex items-center gap-3 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700/60 mb-2">
                   <img
                     src={currentEmployee.avatarUrl}
                     alt={currentEmployee.fullName}
@@ -459,6 +535,54 @@ export const Header: React.FC<HeaderProps> = ({
                       </span>
                     </div>
                   </div>
+                </div>
+
+                {/* Biometric Face Status Strip */}
+                <div
+                  className={`p-2 rounded-xl mb-2.5 border flex items-center justify-between gap-2 ${
+                    isFaceVerificationRequired
+                      ? "bg-amber-500/10 border-amber-500/30 text-amber-900 dark:text-amber-200"
+                      : "bg-emerald-500/10 border-emerald-500/30 text-emerald-900 dark:text-emerald-200"
+                  }`}
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    {isFaceVerificationRequired ? (
+                      <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 animate-pulse" />
+                    ) : (
+                      <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+                    )}
+                    <div className="truncate">
+                      <div className="text-[10.5px] font-bold truncate">
+                        {isFaceVerificationRequired
+                          ? t("ফেস ভেরিফিকেশন প্রয়োজন", "Face Verification Required")
+                          : t(
+                              `বায়োমেট্রিক ফেস ভেরিফাইড (${currentEmployee.faceVerificationScore}%)`,
+                              `Biometric Face Verified (${currentEmployee.faceVerificationScore}%)`
+                            )}
+                      </div>
+                      <div className="text-[9px] opacity-75 truncate">
+                        {isFaceVerificationRequired
+                          ? t("উপস্থিতি রেকর্ড করতে লাইভ ভেরিফাই আবশ্যক", "Live check required for attendance")
+                          : t("স্মার্ট উপস্থিতি সক্রিয়", "Active for smart clock-in")}
+                      </div>
+                    </div>
+                  </div>
+                  {onOpenFaceEnrollModal && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowRoleMenu(false);
+                        onOpenFaceEnrollModal(currentEmployee);
+                      }}
+                      className={`px-2 py-1 rounded-lg text-[10px] font-bold shrink-0 transition-colors cursor-pointer ${
+                        isFaceVerificationRequired
+                          ? "bg-amber-600 hover:bg-amber-500 text-white shadow-xs"
+                          : "bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-700 dark:text-emerald-300"
+                      }`}
+                    >
+                      {isFaceVerificationRequired ? t("ভেরিফাই", "Verify") : t("আপডেট", "Update")}
+                    </button>
+                  )}
                 </div>
 
                 {/* Quick Preferences & Settings Panel (Theme, Language, Branding) */}

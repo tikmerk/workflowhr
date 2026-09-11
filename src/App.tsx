@@ -8,6 +8,7 @@ import {
 } from "./components/common";
 import { MobileBottomNav } from "./components/common/MobileBottomNav";
 import { SmartAttendanceModal } from "./components/attendance/SmartAttendanceModal";
+import { FaceEnrollmentModal } from "./components/attendance/FaceEnrollmentModal";
 import { AIHrAssistantModal } from "./components/ai/AIHrAssistantModal";
 import { ThemeLanguageProvider, useThemeLanguage } from "./context/ThemeLanguageContext";
 import { CompanyBrandingProvider } from "./context/CompanyBrandingContext";
@@ -31,7 +32,15 @@ import {
   saveBulkCandidatesToFirestore,
   deleteCandidateFromFirestore,
   updateEmployeeFacePhotoInFirestore,
+  updateEmployeePhotoPendingVerificationInFirestore,
   saveEmployeeToFirestore,
+  deleteEmployeeFromFirestore,
+  saveBranchToFirestore,
+  deleteBranchFromFirestore,
+  saveDepartmentToFirestore,
+  deleteDepartmentFromFirestore,
+  saveDesignationToFirestore,
+  deleteDesignationFromFirestore,
   saveAttendanceRecordToFirestore,
   saveLeaveApplicationToFirestore,
   updateLeaveStatusInFirestore,
@@ -49,6 +58,7 @@ import { EmployeeSelfServiceView } from "./components/views/EmployeeSelfServiceV
 import { EmployeesDirectoryView } from "./components/views/EmployeesDirectoryView";
 import { DepartmentsDesignationsView } from "./components/views/DepartmentsDesignationsView";
 import { BranchesGeofenceView } from "./components/views/BranchesGeofenceView";
+import { NgoProgramsTrainingView } from "./components/views/NgoProgramsTrainingView";
 import { AttendanceLogsView } from "./components/views/AttendanceLogsView";
 import { ShiftsHolidaysView } from "./components/views/ShiftsHolidaysView";
 import { LeavesView } from "./components/views/LeavesView";
@@ -61,6 +71,8 @@ import { CertificatesView } from "./components/views/CertificatesView";
 import { ExitManagementView } from "./components/views/ExitManagementView";
 import { NoticesChatView } from "./components/views/NoticesChatView";
 import { AuditReportsView } from "./components/views/AuditReportsView";
+import { MeetingsConferencesView } from "./components/views/MeetingsConferencesView";
+import { RolesPermissionsView } from "./components/views/RolesPermissionsView";
 
 // Initial Mock Dataset & Engines
 import {
@@ -85,6 +97,9 @@ import {
   mockNotices,
   mockChatMessages,
   mockAuditLogs,
+  INITIAL_MEETINGS_CONFERENCES,
+  INITIAL_ROLE_PERMISSIONS,
+  INITIAL_PAYROLL_POLICY,
 } from "./data/mockDatabase";
 import { calculateMonthlyPayroll } from "./utils/payrollEngine";
 import {
@@ -109,6 +124,9 @@ import {
   Notice,
   ChatMessage,
   AuditLog,
+  MeetingConference,
+  RolePermissionConfig,
+  PayrollPolicyConfig,
 } from "./types";
 import { CheckCircle2, Info, X } from "lucide-react";
 
@@ -126,7 +144,12 @@ function AppContent() {
   const [isAiAssistantModalOpen, setIsAiAssistantModalOpen] = useState(false);
   const [isIdCardModalOpen, setIsIdCardModalOpen] = useState(false);
   const [selectedIdCardEmployee, setSelectedIdCardEmployee] = useState<Employee | null>(null);
+  const [faceEnrollTargetEmployee, setFaceEnrollTargetEmployee] = useState<Employee | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const handleOpenFaceEnrollModal = (emp?: Employee) => {
+    setFaceEnrollTargetEmployee(emp || currentEmployee);
+  };
 
   // Core Data Collections
   const [company] = useState(mockCompany);
@@ -150,6 +173,42 @@ function AppContent() {
   const [notices, setNotices] = useState<Notice[]>(mockNotices);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>(mockChatMessages);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>(mockAuditLogs);
+  const [meetings, setMeetings] = useState<MeetingConference[]>(() => {
+    try {
+      const local = localStorage.getItem("wf_meetings_conferences");
+      return local ? JSON.parse(local) : INITIAL_MEETINGS_CONFERENCES;
+    } catch {
+      return INITIAL_MEETINGS_CONFERENCES;
+    }
+  });
+  const [rolePermissions, setRolePermissions] = useState<RolePermissionConfig[]>(() => {
+    try {
+      const local = localStorage.getItem("wf_role_permissions");
+      return local ? JSON.parse(local) : INITIAL_ROLE_PERMISSIONS;
+    } catch {
+      return INITIAL_ROLE_PERMISSIONS;
+    }
+  });
+  const [payrollPolicy, setPayrollPolicy] = useState<PayrollPolicyConfig>(() => {
+    try {
+      const local = localStorage.getItem("wf_payroll_policy");
+      return local ? JSON.parse(local) : INITIAL_PAYROLL_POLICY;
+    } catch {
+      return INITIAL_PAYROLL_POLICY;
+    }
+  });
+
+  useEffect(() => {
+    localStorage.setItem("wf_meetings_conferences", JSON.stringify(meetings));
+  }, [meetings]);
+
+  useEffect(() => {
+    localStorage.setItem("wf_role_permissions", JSON.stringify(rolePermissions));
+  }, [rolePermissions]);
+
+  useEffect(() => {
+    localStorage.setItem("wf_payroll_policy", JSON.stringify(payrollPolicy));
+  }, [payrollPolicy]);
 
   // Active Logged-in Persona & Auth state
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
@@ -166,15 +225,33 @@ function AppContent() {
       const savedEmpId = localStorage.getItem("workflow_hr_logged_user_id");
       const targetEmp = (savedEmpId && mockEmployees.find((e) => e.id === savedEmpId)) || mockEmployees[0];
       const cachedAvatar = localStorage.getItem(`workflow_hr_cached_avatar_${targetEmp.id}`);
+      const cachedScore = localStorage.getItem(`workflow_hr_cached_score_${targetEmp.id}`);
+      const cachedVerified = localStorage.getItem(`workflow_hr_cached_verified_${targetEmp.id}`);
+      const isVerified =
+        (targetEmp.faceVerified && typeof targetEmp.faceVerificationScore === "number" && targetEmp.faceVerificationScore > 0) ||
+        (cachedVerified === "true" && Boolean(cachedScore));
+      const score = (typeof targetEmp.faceVerificationScore === "number" && targetEmp.faceVerificationScore > 0)
+        ? targetEmp.faceVerificationScore
+        : (cachedScore ? Number(cachedScore) : undefined);
+
       if (cachedAvatar) {
         return {
           ...targetEmp,
           avatarUrl: cachedAvatar,
           faceRegisteredPhoto: cachedAvatar,
-          faceTemplateRegistered: true,
+          faceTemplateRegistered: isVerified,
+          faceVerified: isVerified,
+          faceVerificationRequired: !isVerified,
+          faceVerificationScore: isVerified ? score : undefined,
         };
       }
-      return targetEmp;
+      return {
+        ...targetEmp,
+        faceTemplateRegistered: isVerified,
+        faceVerified: isVerified,
+        faceVerificationRequired: !isVerified,
+        faceVerificationScore: isVerified ? score : undefined,
+      };
     } catch (e) {
       console.warn(e);
       return mockEmployees[0];
@@ -192,14 +269,34 @@ function AppContent() {
       const hydrated = updatedEmps.map((emp) => {
         try {
           const cached = localStorage.getItem(`workflow_hr_cached_avatar_${emp.id}`);
+          const cachedScore = localStorage.getItem(`workflow_hr_cached_score_${emp.id}`);
+          const cachedVerified = localStorage.getItem(`workflow_hr_cached_verified_${emp.id}`);
+          const isVerified =
+            (emp.faceVerified && typeof emp.faceVerificationScore === "number" && emp.faceVerificationScore > 0) ||
+            (cachedVerified === "true" && Boolean(cachedScore));
+          const score =
+            (typeof emp.faceVerificationScore === "number" && emp.faceVerificationScore > 0)
+              ? emp.faceVerificationScore
+              : (cachedScore ? Number(cachedScore) : undefined);
+
           if (cached && (!emp.avatarUrl || emp.avatarUrl.includes("unsplash"))) {
             return {
               ...emp,
               avatarUrl: cached,
               faceRegisteredPhoto: cached,
-              faceTemplateRegistered: true,
+              faceTemplateRegistered: isVerified,
+              faceVerified: isVerified,
+              faceVerificationRequired: !isVerified,
+              faceVerificationScore: isVerified ? score : undefined,
             };
           }
+          return {
+            ...emp,
+            faceTemplateRegistered: isVerified,
+            faceVerified: isVerified,
+            faceVerificationRequired: !isVerified,
+            faceVerificationScore: isVerified ? score : undefined,
+          };
         } catch (e) {
           // ignore
         }
@@ -322,7 +419,7 @@ function AppContent() {
     );
   };
 
-  const handleUpdateFacePhoto = async (employeeId: string, photoUrl: string) => {
+  const handleUpdateFacePhoto = async (employeeId: string, photoUrl: string, verificationScore?: number) => {
     // 1. Immediately compress & downscale photo (<50KB) to ensure full Firestore limit compliance
     let optimized = photoUrl;
     try {
@@ -331,6 +428,9 @@ function AppContent() {
       console.warn("Photo optimization notice:", err);
     }
 
+    const todayStr = new Date().toISOString().split("T")[0];
+    const isLiveVerified = typeof verificationScore === "number" && verificationScore > 0;
+
     setEmployees((prev) =>
       prev.map((e) =>
         e.id === employeeId
@@ -338,8 +438,12 @@ function AppContent() {
               ...e,
               faceRegisteredPhoto: optimized,
               avatarUrl: optimized,
-              faceTemplateRegistered: true,
-              faceRegisteredAt: new Date().toISOString().split("T")[0],
+              faceTemplateRegistered: isLiveVerified,
+              faceVerified: isLiveVerified,
+              faceVerificationRequired: !isLiveVerified,
+              faceRegisteredAt: todayStr,
+              faceVerifiedAt: isLiveVerified ? new Date().toISOString() : undefined,
+              faceVerificationScore: isLiveVerified ? verificationScore : undefined,
             }
           : e
       )
@@ -350,8 +454,12 @@ function AppContent() {
         ...prev,
         faceRegisteredPhoto: optimized,
         avatarUrl: optimized,
-        faceTemplateRegistered: true,
-        faceRegisteredAt: new Date().toISOString().split("T")[0],
+        faceTemplateRegistered: isLiveVerified,
+        faceVerified: isLiveVerified,
+        faceVerificationRequired: !isLiveVerified,
+        faceRegisteredAt: todayStr,
+        faceVerifiedAt: isLiveVerified ? new Date().toISOString() : undefined,
+        faceVerificationScore: isLiveVerified ? verificationScore : undefined,
       }));
     }
 
@@ -362,26 +470,43 @@ function AppContent() {
               ...prev,
               faceRegisteredPhoto: optimized,
               avatarUrl: optimized,
-              faceTemplateRegistered: true,
-              faceRegisteredAt: new Date().toISOString().split("T")[0],
+              faceTemplateRegistered: isLiveVerified,
+              faceVerified: isLiveVerified,
+              faceVerificationRequired: !isLiveVerified,
+              faceRegisteredAt: todayStr,
+              faceVerifiedAt: isLiveVerified ? new Date().toISOString() : undefined,
+              faceVerificationScore: isLiveVerified ? verificationScore : undefined,
             }
           : null
       );
     }
 
     // 2. Persist to Firestore cloud database & local fallback
-    const result = await updateEmployeeFacePhotoInFirestore(employeeId, optimized);
-    if (result.success) {
-      setToastMessage("ছবিটি ফায়ারবেস ক্লাউড ডাটাবেজে (Firestore) স্থায়ীভাবে সংরক্ষিত হয়েছে!");
-    } else {
-      setToastMessage("ছবিটি সংরক্ষিত হয়েছে (অফলাইন মোড)");
-    }
+    if (isLiveVerified) {
+      const result = await updateEmployeeFacePhotoInFirestore(employeeId, optimized, verificationScore);
+      if (result.success) {
+        setToastMessage(`বায়োমেট্রিক ফেস সফলভাবে ভেরিফাই ও হালনাগাদ করা হয়েছে (${verificationScore}%)!`);
+      } else {
+        setToastMessage(`ছবিটি সংরক্ষিত হয়েছে (অফলাইন ভেরিফাইড ${verificationScore}%)`);
+      }
 
-    notifyAndLog(
-      "BIOMETRIC_ENROLLMENT",
-      `Biometric reference face photo successfully enrolled & synchronized to Firestore for: ${employeeId}`,
-      "ATTENDANCE"
-    );
+      notifyAndLog(
+        "বায়োমেট্রিক ফেস ভেরিফিকেশন সফল",
+        `Employee ${employeeId} face photo updated & biometric verified with score ${verificationScore}%`,
+        "ATTENDANCE"
+      );
+    } else {
+      const result = await updateEmployeePhotoPendingVerificationInFirestore(employeeId, optimized);
+      setToastMessage(
+        "নতুন ছবি যুক্ত হয়েছে! কিন্তু লাইভ ফেস ভেরিফিকেশন অপেক্ষমান। হাজিরা দিতে ক্যামেরা দিয়ে ভেরিফাই করুন।"
+      );
+
+      notifyAndLog(
+        "নতুন ছবি আপলোড (ভেরিফিকেশন অপেক্ষমান)",
+        `Employee ${employeeId} uploaded a new face photo. Biometric live verification is required.`,
+        "ATTENDANCE"
+      );
+    }
   };
 
   // Handlers for Leaves
@@ -709,10 +834,41 @@ function AppContent() {
           pendingLeavesCount={pendingLeavesCount}
           onLogout={handleLogout}
           onOpenDigitalIdCard={handleOpenIdCardModal}
+          onOpenFaceEnrollModal={handleOpenFaceEnrollModal}
         />
 
         {/* Scrollable View Container */}
         <main className="flex-1 overflow-y-auto p-3 sm:p-6 lg:p-8 pb-40 sm:pb-44 lg:pb-12 space-y-4 sm:space-y-6">
+          {/* Global Face Verification Notice Banner if Current User Face is unverified */}
+          {!currentEmployee.faceVerified && (
+            <div className="p-3.5 sm:p-4 rounded-2xl bg-gradient-to-r from-amber-500/15 via-amber-500/10 to-orange-500/15 border border-amber-500/35 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs animate-in fade-in">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-xl bg-amber-500/20 text-amber-600 dark:text-amber-400 shrink-0 text-base">
+                  ⚠️
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h4 className="font-bold text-xs sm:text-sm text-slate-900 dark:text-white">
+                      ছবির বায়োমেট্রিক ফেস ভেরিফিকেশন প্রয়োজন
+                    </h4>
+                    <span className="px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-amber-500/25 text-amber-800 dark:text-amber-200">
+                      অপেক্ষমান
+                    </span>
+                  </div>
+                  <p className="text-[11px] sm:text-xs text-slate-600 dark:text-slate-300 mt-0.5">
+                    আপনার প্রোফাইল ছবির সাথে লাইভ ক্যামেরা চেহারা যাচাই করা হয়নি। স্মার্ট উপস্থিতি নিশ্চিত করতে এখনই লাইভ ভেরিফাই সম্পন্ন করুন।
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => handleOpenFaceEnrollModal(currentEmployee)}
+                className="w-full sm:w-auto px-3.5 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold shrink-0 transition-colors shadow-xs cursor-pointer flex items-center justify-center gap-1.5"
+              >
+                <span>ক্যামেরা দিয়ে ভেরিফাই করুন</span>
+              </button>
+            </div>
+          )}
           {/* View Router */}
           {activeTab === "dashboard" && (
             <DashboardView
@@ -760,6 +916,21 @@ function AppContent() {
               }}
               onUpdateFacePhoto={handleUpdateFacePhoto}
               onOpenDigitalIdCard={() => handleOpenIdCardModal(currentEmployee)}
+              onUpdateEmployee={(updatedEmp) => {
+                setEmployees((prev) =>
+                  prev.map((e) => (e.id === updatedEmp.id ? updatedEmp : e))
+                );
+                if (currentEmployee.id === updatedEmp.id) {
+                  setCurrentEmployee(updatedEmp);
+                }
+                saveEmployeeToFirestore(updatedEmp);
+                setToastMessage("আপনার প্রোফাইল ও পদবী সফলভাবে হালনাগাদ করা হয়েছে!");
+                notifyAndLog(
+                  "PROFILE_UPDATED",
+                  `Profile updated: ${updatedEmp.fullName} (${updatedEmp.designationTitle})`,
+                  "EMPLOYEES"
+                );
+              }}
             />
           )}
 
@@ -770,6 +941,7 @@ function AppContent() {
               departments={departments}
               designations={designations}
               shifts={shifts}
+              currentUser={currentEmployee}
               onAddEmployee={(newEmp) => {
                 setEmployees((prev) => [newEmp, ...prev]);
                 saveEmployeeToFirestore(newEmp);
@@ -789,6 +961,17 @@ function AppContent() {
                 saveEmployeeToFirestore(updatedEmp);
               }}
               onOpenDigitalIdCard={handleOpenIdCardModal}
+              onDeleteEmployee={(empId) => {
+                const target = employees.find((e) => e.id === empId);
+                setEmployees((prev) => prev.filter((e) => e.id !== empId));
+                deleteEmployeeFromFirestore(empId);
+                setToastMessage(`কর্মচারী ${target?.fullName || ""} সফলভাবে ডিলিট করা হয়েছে`);
+                notifyAndLog(
+                  "EMPLOYEE_DELETED",
+                  `Deleted staff record: ${target?.fullName || empId}`,
+                  "EMPLOYEES"
+                );
+              }}
             />
           )}
 
@@ -796,21 +979,74 @@ function AppContent() {
             <DepartmentsDesignationsView
               departments={departments}
               designations={designations}
+              employees={employees}
               onAddDepartment={(newDept) => {
                 setDepartments((prev) => [newDept, ...prev]);
+                saveDepartmentToFirestore(newDept);
                 notifyAndLog(
                   "DEPARTMENT_CREATED",
                   `Created department: ${newDept.name}`,
                   "HR_OPERATIONS"
                 );
               }}
+              onUpdateDepartment={(updatedDept) => {
+                setDepartments((prev) =>
+                  prev.map((d) => (d.id === updatedDept.id ? updatedDept : d))
+                );
+                saveDepartmentToFirestore(updatedDept);
+                notifyAndLog(
+                  "DEPARTMENT_UPDATED",
+                  `Updated department: ${updatedDept.name}`,
+                  "HR_OPERATIONS"
+                );
+              }}
+              onDeleteDepartment={(deptId) => {
+                const target = departments.find((d) => d.id === deptId);
+                setDepartments((prev) => prev.filter((d) => d.id !== deptId));
+                deleteDepartmentFromFirestore(deptId);
+                setToastMessage(`ডিপার্টমেন্ট ${target?.name || ""} মুছে ফেলা হয়েছে`);
+                notifyAndLog(
+                  "DEPARTMENT_DELETED",
+                  `Deleted department: ${target?.name || deptId}`,
+                  "HR_OPERATIONS"
+                );
+              }}
               onAddDesignation={(newDesig) => {
                 setDesignations((prev) => [newDesig, ...prev]);
+                saveDesignationToFirestore(newDesig);
                 notifyAndLog(
                   "DESIGNATION_CREATED",
                   `Created designation: ${newDesig.title}`,
                   "HR_OPERATIONS"
                 );
+              }}
+              onUpdateDesignation={(updatedDesig) => {
+                setDesignations((prev) =>
+                  prev.map((d) => (d.id === updatedDesig.id ? updatedDesig : d))
+                );
+                saveDesignationToFirestore(updatedDesig);
+                notifyAndLog(
+                  "DESIGNATION_UPDATED",
+                  `Updated designation: ${updatedDesig.title}`,
+                  "HR_OPERATIONS"
+                );
+              }}
+              onDeleteDesignation={(desigId) => {
+                const target = designations.find((d) => d.id === desigId);
+                setDesignations((prev) => prev.filter((d) => d.id !== desigId));
+                deleteDesignationFromFirestore(desigId);
+                setToastMessage(`পদবি ${target?.title || ""} মুছে ফেলা হয়েছে`);
+                notifyAndLog(
+                  "DESIGNATION_DELETED",
+                  `Deleted designation: ${target?.title || desigId}`,
+                  "HR_OPERATIONS"
+                );
+              }}
+              onViewEmployee={(emp) => {
+                setActiveTab("employees");
+              }}
+              onEditEmployee={(emp) => {
+                setActiveTab("employees");
               }}
             />
           )}
@@ -824,11 +1060,15 @@ function AppContent() {
                 setActiveTab("employees");
               }}
               onDeleteBranch={(bId) => {
+                const target = branches.find((b) => b.id === bId);
                 setBranches((prev) => prev.filter((b) => b.id !== bId));
-                notifyAndLog("BRANCH_DELETED", `Deleted regional branch`, "HR_OPERATIONS");
+                deleteBranchFromFirestore(bId);
+                setToastMessage(`ব্রাঞ্চ ${target?.name || ""} মুছে ফেলা হয়েছে`);
+                notifyAndLog("BRANCH_DELETED", `Deleted regional branch: ${target?.name || bId}`, "HR_OPERATIONS");
               }}
               onAddBranch={(newBranch) => {
                 setBranches((prev) => [newBranch, ...prev]);
+                saveBranchToFirestore(newBranch);
                 notifyAndLog(
                   "BRANCH_CREATED",
                   `Configured new regional branch: ${newBranch.name}`,
@@ -839,11 +1079,59 @@ function AppContent() {
                 setBranches((prev) =>
                   prev.map((b) => (b.id === updated.id ? updated : b))
                 );
+                saveBranchToFirestore(updated);
                 notifyAndLog(
-                  "GEOFENCE_UPDATED",
-                  `Updated geofence perimeter for ${updated.name} to ${updated.geofenceRadiusMeters}m`,
+                  "BRANCH_UPDATED",
+                  `Updated branch details & geofence for ${updated.name}`,
                   "HR_OPERATIONS"
                 );
+              }}
+            />
+          )}
+
+          {(activeTab === "ngo-programs-training" || (activeTab as string) === "ngo-programs") && (
+            <NgoProgramsTrainingView
+              employees={employees}
+              branches={branches}
+              currentUser={currentEmployee}
+              onViewEmployee={(emp) => {
+                setActiveTab("employees");
+              }}
+              onEditEmployee={(emp) => {
+                setActiveTab("employees");
+              }}
+            />
+          )}
+
+          {activeTab === "meetings-conferences" && (
+            <MeetingsConferencesView
+              meetings={meetings}
+              employees={employees}
+              departments={departments}
+              branches={branches}
+              onAddMeeting={(newMeeting) => {
+                setMeetings((prev) => [newMeeting, ...prev]);
+                notifyAndLog(
+                  "MEETING_CREATED",
+                  `Configured conference/event: ${newMeeting.title}`,
+                  "GENERAL"
+                );
+              }}
+              onUpdateMeeting={(updatedMeeting) => {
+                setMeetings((prev) =>
+                  prev.map((m) => (m.id === updatedMeeting.id ? updatedMeeting : m))
+                );
+                notifyAndLog(
+                  "MEETING_UPDATED",
+                  `Updated conference schedule: ${updatedMeeting.title}`,
+                  "GENERAL"
+                );
+              }}
+              onDeleteMeeting={(mId) => {
+                const target = meetings.find((m) => m.id === mId);
+                setMeetings((prev) => prev.filter((m) => m.id !== mId));
+                setToastMessage(`প্রোগ্রাম ${target?.title || ""} মুছে ফেলা হয়েছে`);
+                notifyAndLog("MEETING_DELETED", `Deleted event schedule`, "GENERAL");
               }}
             />
           )}
@@ -1030,6 +1318,41 @@ function AppContent() {
             />
           )}
 
+          {activeTab === "roles-permissions" && (
+            <RolesPermissionsView
+              rolePermissions={rolePermissions}
+              onUpdateRolePermissions={(updatedRoles) => {
+                setRolePermissions(updatedRoles);
+                notifyAndLog(
+                  "ROLE_PERMISSIONS_UPDATED",
+                  `Updated role permissions and access matrix`,
+                  "SECURITY"
+                );
+              }}
+              payrollPolicy={payrollPolicy}
+              onUpdatePayrollPolicy={(updatedPolicy) => {
+                setPayrollPolicy(updatedPolicy);
+                notifyAndLog(
+                  "POLICY_UPDATED",
+                  `Updated tardiness exemption & festival bonus policy`,
+                  "PAYROLL"
+                );
+              }}
+              employees={employees}
+              onUpdateEmployee={(updatedEmp) => {
+                setEmployees((prev) =>
+                  prev.map((e) => (e.id === updatedEmp.id ? updatedEmp : e))
+                );
+                saveEmployeeToFirestore(updatedEmp);
+                notifyAndLog(
+                  "EMPLOYEE_UPDATED",
+                  `Updated policy configuration for ${updatedEmp.fullName}`,
+                  "HR_OPERATIONS"
+                );
+              }}
+            />
+          )}
+
           {activeTab === "audit-reports" && (
             <AuditReportsView
               auditLogs={auditLogs}
@@ -1108,6 +1431,19 @@ function AppContent() {
         onSelectEmployee={(emp) => setSelectedIdCardEmployee(emp)}
         onUpdateFacePhoto={handleUpdateFacePhoto}
       />
+
+      {/* Global Live Biometric Face Verification & Enrollment Modal */}
+      {faceEnrollTargetEmployee && (
+        <FaceEnrollmentModal
+          isOpen={Boolean(faceEnrollTargetEmployee)}
+          onClose={() => setFaceEnrollTargetEmployee(null)}
+          employee={faceEnrollTargetEmployee}
+          onSaveFacePhoto={(empId, photoUrl, verificationScore) => {
+            handleUpdateFacePhoto(empId, photoUrl, verificationScore);
+            setFaceEnrollTargetEmployee(null);
+          }}
+        />
+      )}
     </div>
   );
 }

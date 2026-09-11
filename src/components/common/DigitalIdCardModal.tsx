@@ -15,10 +15,13 @@ import {
   Camera,
   Upload,
   Loader2,
+  ScanFace,
+  Lock,
 } from "lucide-react";
 import { toPng } from "html-to-image";
 import { Employee } from "../../types";
 import { DigitalIdCard } from "./DigitalIdCard";
+import { FaceEnrollmentModal } from "../attendance/FaceEnrollmentModal";
 import { useCompanyBranding } from "../../context/CompanyBrandingContext";
 import { useThemeLanguage } from "../../context/ThemeLanguageContext";
 import { compressAndOptimizeImage } from "../../utils/imageCompression";
@@ -29,7 +32,7 @@ interface DigitalIdCardModalProps {
   employee: Employee;
   allEmployees?: Employee[];
   onSelectEmployee?: (emp: Employee) => void;
-  onUpdateFacePhoto?: (employeeId: string, photoUrl: string) => void;
+  onUpdateFacePhoto?: (employeeId: string, photoUrl: string, verificationScore?: number) => void;
 }
 
 export const DigitalIdCardModal: React.FC<DigitalIdCardModalProps> = ({
@@ -47,33 +50,12 @@ export const DigitalIdCardModal: React.FC<DigitalIdCardModalProps> = ({
   const [cardTheme, setCardTheme] = useState<"dark" | "light" | "navy">("dark");
   const [isDownloading, setIsDownloading] = useState(false);
   const [downloadSuccess, setDownloadSuccess] = useState(false);
-  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [photoUpdateSuccess, setPhotoUpdateSuccess] = useState(false);
+  const [showEnrollModal, setShowEnrollModal] = useState(false);
 
   const cardRef = useRef<HTMLDivElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   if (!isOpen || !employee) return null;
-
-  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    try {
-      setIsUploadingPhoto(true);
-      setPhotoUpdateSuccess(false);
-      const optimized = await compressAndOptimizeImage(file, 480, 480, 0.85);
-      if (onUpdateFacePhoto) {
-        onUpdateFacePhoto(employee.id, optimized);
-      }
-      setPhotoUpdateSuccess(true);
-      setTimeout(() => setPhotoUpdateSuccess(false), 3500);
-    } catch (err) {
-      console.error("Failed to upload photo for ID badge:", err);
-    } finally {
-      setIsUploadingPhoto(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
-    }
-  };
 
   // High-Resolution PNG Exporter (3x DPI for crisp 300+ DPI print ready output)
   const handleDownloadHighResPng = async () => {
@@ -188,16 +170,11 @@ export const DigitalIdCardModal: React.FC<DigitalIdCardModalProps> = ({
                   />
                   <button
                     type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={isUploadingPhoto}
-                    className="absolute -bottom-1 -right-1 p-1 rounded-lg bg-teal-600 hover:bg-teal-500 text-white shadow-md cursor-pointer transition-colors"
-                    title="আইডি কার্ডের ছবি পরিবর্তন করুন"
+                    onClick={() => setShowEnrollModal(true)}
+                    className="absolute -bottom-1 -right-1 p-1.5 rounded-lg bg-teal-600 hover:bg-teal-500 text-white shadow-md cursor-pointer transition-colors"
+                    title="ফেস ভেরিফিকেশন ও ছবি পরিবর্তন করুন"
                   >
-                    {isUploadingPhoto ? (
-                      <Loader2 className="w-3 h-3 animate-spin" />
-                    ) : (
-                      <Camera className="w-3 h-3" />
-                    )}
+                    <Camera className="w-3.5 h-3.5" />
                   </button>
                 </div>
                 <div className="min-w-0 flex-1">
@@ -206,6 +183,19 @@ export const DigitalIdCardModal: React.FC<DigitalIdCardModalProps> = ({
                   <p className="text-[11px] text-slate-400 truncate">
                     {employee.departmentName} • {employee.branchName}
                   </p>
+                  <div className="mt-1 flex items-center gap-1.5">
+                    {employee.faceTemplateRegistered ? (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
+                        <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                        বায়োমেট্রিক ফেস নিবন্ধিত ({employee.faceVerificationScore || 96}%)
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/30 flex items-center gap-1">
+                        <Lock className="w-3 h-3" />
+                        ফেস ভেরিফিকেশন অপেক্ষমান
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 {/* Employee Navigator if allEmployees present */}
@@ -231,32 +221,15 @@ export const DigitalIdCardModal: React.FC<DigitalIdCardModalProps> = ({
                 )}
               </div>
 
-              {/* Direct Photo Change / Upload Button for Persistent Storage */}
+              {/* Mandatory Live Face Verification & Photo Upload Trigger */}
               <div className="pt-2 border-t border-slate-800/80 flex flex-col sm:flex-row items-center gap-2">
-                <input
-                  type="file"
-                  ref={fileInputRef}
-                  onChange={handlePhotoUpload}
-                  accept="image/*"
-                  className="hidden"
-                />
                 <button
                   type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={isUploadingPhoto}
-                  className="w-full py-2 px-3 rounded-xl bg-teal-500/15 hover:bg-teal-500/25 border border-teal-500/40 text-teal-300 text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50"
+                  onClick={() => setShowEnrollModal(true)}
+                  className="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-teal-500/20 to-emerald-500/20 hover:from-teal-500/30 hover:to-emerald-500/30 border border-teal-500/40 text-teal-200 text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-sm"
                 >
-                  {isUploadingPhoto ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin text-teal-400" />
-                      <span>অপটিমাইজ ও ক্লাউড সেভ হচ্ছে...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Upload className="w-4 h-4 text-teal-400" />
-                      <span>{t("আইডি কার্ডের ছবি পরিবর্তন বা আপলোড", "Upload / Change ID Photo")}</span>
-                    </>
-                  )}
+                  <ScanFace className="w-4 h-4 text-teal-400 shrink-0" />
+                  <span>{t("ছবি পরিবর্তন ও লাইভ ফেস ভেরিফিকেশন", "Change Photo & Verify Face")}</span>
                 </button>
               </div>
 
@@ -265,8 +238,8 @@ export const DigitalIdCardModal: React.FC<DigitalIdCardModalProps> = ({
                   <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
                   <span>
                     {t(
-                      "ছবিটি সফলভাবে ক্লাউড ডাটাবেজ (Firestore) ও আইডি কার্ডে সংরক্ষিত হয়েছে!",
-                      "Photo successfully saved to cloud database & ID card!"
+                      "ছবি ও ফেস ভেরিফিকেশন সফলভাবে ক্লাউড ডাটাবেজ (Firestore) ও আইডি কার্ডে সংরক্ষিত হয়েছে!",
+                      "Photo & face verification successfully saved to cloud database & ID card!"
                     )}
                   </span>
                 </div>
@@ -425,6 +398,23 @@ export const DigitalIdCardModal: React.FC<DigitalIdCardModalProps> = ({
             {t("বন্ধ করুন", "Close")}
           </button>
         </div>
+
+        {/* Mandatory Live Face Enrollment & Verification Modal */}
+        {showEnrollModal && (
+          <FaceEnrollmentModal
+            isOpen={showEnrollModal}
+            onClose={() => setShowEnrollModal(false)}
+            employee={employee}
+            onSaveFacePhoto={(empId, photoUrl, verificationScore) => {
+              if (onUpdateFacePhoto) {
+                onUpdateFacePhoto(empId, photoUrl, verificationScore);
+              }
+              setPhotoUpdateSuccess(true);
+              setTimeout(() => setPhotoUpdateSuccess(false), 3500);
+              setShowEnrollModal(false);
+            }}
+          />
+        )}
       </div>
     </div>
   );

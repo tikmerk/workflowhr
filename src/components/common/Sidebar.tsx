@@ -21,6 +21,10 @@ import {
   ChevronRight,
   Settings,
   Sparkles,
+  HeartHandshake,
+  GraduationCap,
+  Presentation,
+  KeyRound,
 } from "lucide-react";
 import { Logo } from "./Logo";
 import { UserRole } from "../../types";
@@ -34,6 +38,9 @@ export type NavTabId =
   | "employees"
   | "departments-designations"
   | "branches"
+  | "ngo-programs-training"
+  | "meetings-conferences"
+  | "roles-permissions"
   | "attendance-logs"
   | "shifts-holidays"
   | "leaves"
@@ -135,6 +142,28 @@ export const Sidebar: React.FC<SidebarProps> = ({
       ],
     },
     {
+      groupTitleEn: "NGO Programs & District Hubs",
+      groupTitleBn: "এনজিও কর্মসূচি ও জেলা ট্রেনিং হাব",
+      items: [
+        {
+          id: "ngo-programs-training",
+          labelEn: "Programs & Training Centers",
+          labelBn: "ত্রাণ কর্মসূচি ও প্রশিক্ষণ কেন্দ্র",
+          icon: HeartHandshake,
+          badgeEn: "Field Ops",
+          badgeBn: "ত্রাণ ও ট্রেনিং",
+        },
+        {
+          id: "meetings-conferences",
+          labelEn: "Meetings & Conferences",
+          labelBn: "মিটিং, সেমিনার ও সম্মেলন",
+          icon: Presentation,
+          badgeEn: "Attendance",
+          badgeBn: "প্রোগ্রাম হাজিরা",
+        },
+      ],
+    },
+    {
       groupTitleEn: "Time & Attendance",
       groupTitleBn: "সময় ও উপস্থিতি",
       items: [
@@ -227,6 +256,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
           labelEn: "Exit & Resignation",
           labelBn: "পদত্যাগ ও ক্লিয়ারেন্স",
           icon: UserMinus,
+        },
+        {
+          id: "roles-permissions",
+          labelEn: "Roles & Permissions",
+          labelBn: "সিস্টেম রোল ও পলিসি",
+          icon: KeyRound,
+          badgeEn: "Super Admin",
+          badgeBn: "সুপার অ্যাডমিন",
         },
         {
           id: "audit-reports",
