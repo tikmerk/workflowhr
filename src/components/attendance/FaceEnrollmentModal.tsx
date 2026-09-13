@@ -15,7 +15,10 @@ import {
   ArrowRight,
   Fingerprint,
   Info,
-  Eye
+  Eye,
+  Crown,
+  Save,
+  Check,
 } from "lucide-react";
 import { Employee } from "../../types";
 import { requestUserMediaStream, captureFrameAsBase64 } from "../../utils/faceUtils";
@@ -32,6 +35,8 @@ interface FaceEnrollmentModalProps {
   onClose: () => void;
   employee: Employee;
   onSaveFacePhoto: (employeeId: string, photoUrl: string, verificationScore?: number) => void;
+  isSuperAdmin?: boolean;
+  onUpdateEmployee?: (emp: Employee) => void;
 }
 
 export const FaceEnrollmentModal: React.FC<FaceEnrollmentModalProps> = ({
@@ -39,6 +44,8 @@ export const FaceEnrollmentModal: React.FC<FaceEnrollmentModalProps> = ({
   onClose,
   employee,
   onSaveFacePhoto,
+  isSuperAdmin = true,
+  onUpdateEmployee,
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasOverlayRef = useRef<HTMLCanvasElement>(null);
@@ -69,11 +76,17 @@ export const FaceEnrollmentModal: React.FC<FaceEnrollmentModalProps> = ({
     banglaStatusMessage: string;
   } | null>(null);
 
-  // STRICT REQUIREMENT: Is the current candidate photo verified live against the camera?
-  // Whenever a new photo is uploaded or selected, this MUST become false until verified live!
-  const [isLiveVerified, setIsLiveVerified] = useState<boolean>(false);
+  // Is verified live
+  const [isLiveVerified, setIsLiveVerified] = useState<boolean>(
+    Boolean(employee.faceVerified && employee.faceTemplateRegistered)
+  );
   const [verifiedScore, setVerifiedScore] = useState<number | null>(
     employee.faceTemplateRegistered && employee.faceVerificationScore ? employee.faceVerificationScore : null
+  );
+
+  // Attendance Exemption state for CEO / VIPs
+  const [isAttendanceExempt, setIsAttendanceExempt] = useState<boolean>(
+    Boolean(employee.isAttendanceExempt || employee.isCeoOrOwner)
   );
 
   const [isProcessingSave, setIsProcessingSave] = useState<boolean>(false);
@@ -242,7 +255,94 @@ export const FaceEnrollmentModal: React.FC<FaceEnrollmentModalProps> = ({
     }
   };
 
-  // Final Confirmation & Cloud Firestore Synchronization
+  // Save Photo directly without live camera verification (Verification will be required at attendance)
+  const handleSavePhotoWithoutVerification = async () => {
+    if (!candidatePhoto) return;
+    setIsProcessingSave(true);
+
+    try {
+      const finalPhoto = await compressAndOptimizeImage(candidatePhoto, 480, 480, 0.85);
+      invalidateEmployeeFaceCache(employee.id);
+
+      // Save with undefined verification score -> marks pending verification
+      onSaveFacePhoto(employee.id, finalPhoto, undefined);
+
+      if (onUpdateEmployee) {
+        onUpdateEmployee({
+          ...employee,
+          avatarUrl: finalPhoto,
+          faceRegisteredPhoto: finalPhoto,
+          faceVerified: false,
+          faceTemplateRegistered: false,
+          faceVerificationRequired: true,
+          faceVerificationScore: undefined,
+          isAttendanceExempt,
+        });
+      }
+
+      setIsProcessingSave(false);
+      setSuccessMessage(
+        "ছবিটি সফলভাবে সংরক্ষিত হয়েছে! লাইভ ফেস ভেরিফিকেশন এখনও অপেক্ষমান রয়েছে। পরবর্তীতে অ্যাটেন্ডেন্স দেওয়ার পূর্বে ফেস ভেরিফাই করতে হবে।"
+      );
+
+      setTimeout(() => {
+        setSuccessMessage(null);
+        onClose();
+      }, 2000);
+    } catch (err) {
+      console.error("Error saving pending photo:", err);
+      onSaveFacePhoto(employee.id, candidatePhoto, undefined);
+      setIsProcessingSave(false);
+      onClose();
+    }
+  };
+
+  // Super Admin manual verification override
+  const handleSuperAdminManualVerify = async () => {
+    if (!candidatePhoto) return;
+    setIsProcessingSave(true);
+
+    try {
+      const finalPhoto = await compressAndOptimizeImage(candidatePhoto, 480, 480, 0.85);
+      invalidateEmployeeFaceCache(employee.id);
+
+      // 100% score approval
+      onSaveFacePhoto(employee.id, finalPhoto, 100);
+
+      if (onUpdateEmployee) {
+        onUpdateEmployee({
+          ...employee,
+          avatarUrl: finalPhoto,
+          faceRegisteredPhoto: finalPhoto,
+          faceVerified: true,
+          faceTemplateRegistered: true,
+          faceVerificationRequired: false,
+          faceVerificationScore: 100,
+          manuallyVerifiedByAdmin: true,
+          isAttendanceExempt,
+        });
+      }
+
+      setIsProcessingSave(false);
+      setSuccessMessage(
+        isAttendanceExempt
+          ? "সুপার অ্যাডমিন ম্যানুয়াল ভেরিফিকেশন সম্পন্ন! কর্মকর্তা ফেস হাজিরা দেওয়া থেকে ছাড়প্রাপ্ত (Exempt)।"
+          : "সুপার অ্যাডমিন ম্যানুয়াল ভেরিফিকেশন সম্পন্ন হয়েছে! ফেস ১০০% অনুমোদিত।"
+      );
+
+      setTimeout(() => {
+        setSuccessMessage(null);
+        onClose();
+      }, 2000);
+    } catch (err) {
+      console.error("Super Admin verification error:", err);
+      onSaveFacePhoto(employee.id, candidatePhoto, 100);
+      setIsProcessingSave(false);
+      onClose();
+    }
+  };
+
+  // Final Confirmation & Cloud Firestore Synchronization (When Live Camera Passed)
   const handleSaveVerifiedEnrollment = async () => {
     if (!candidatePhoto || !isLiveVerified) return;
     setIsProcessingSave(true);
@@ -256,6 +356,19 @@ export const FaceEnrollmentModal: React.FC<FaceEnrollmentModalProps> = ({
 
       // Invoke parent save callback
       onSaveFacePhoto(employee.id, finalPhoto, score);
+
+      if (onUpdateEmployee) {
+        onUpdateEmployee({
+          ...employee,
+          avatarUrl: finalPhoto,
+          faceRegisteredPhoto: finalPhoto,
+          faceVerified: true,
+          faceTemplateRegistered: true,
+          faceVerificationRequired: false,
+          faceVerificationScore: score,
+          isAttendanceExempt,
+        });
+      }
 
       setIsProcessingSave(false);
       setSuccessMessage(
@@ -293,7 +406,7 @@ export const FaceEnrollmentModal: React.FC<FaceEnrollmentModalProps> = ({
             </div>
             <div>
               <h3 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
-                <span>বায়োমেট্রিক ফেস আপলোড ও বাধ্যতামূলক লাইভ ভেরিফিকেশন</span>
+                <span>বায়োমেট্রিক ফেস আপলোড ও ভেরিফিকেশন</span>
                 <span className="text-[10px] px-2 py-0.5 rounded-full bg-teal-500/20 text-teal-300 font-mono font-bold border border-teal-500/40">
                   128D AI Biometrics
                 </span>
@@ -313,11 +426,20 @@ export const FaceEnrollmentModal: React.FC<FaceEnrollmentModalProps> = ({
         </div>
 
         {/* Security Rule Banner */}
-        <div className="px-5 sm:px-6 py-2.5 bg-gradient-to-r from-amber-500/15 via-slate-850 to-teal-500/15 border-b border-slate-800 text-xs text-slate-300 flex items-center gap-2">
-          <ShieldAlert className="w-4 h-4 text-amber-400 shrink-0" />
-          <span>
-            <strong className="text-amber-300 font-bold">নিরাপত্তা নীতি:</strong> ছবি আপলোড করার পর ক্যামেরার সামনে দাঁড়িয়ে মুখ মিলিয়ে ভেরিফাই করা বাধ্যতামূলক। অন্যের ছবি দিয়ে এনরোল করলে পরবর্তী অ্যাটেন্ডেন্স বাতিল হয়ে যাবে।
-          </span>
+        <div className="px-5 sm:px-6 py-2.5 bg-gradient-to-r from-teal-500/15 via-slate-850 to-amber-500/15 border-b border-slate-800 text-xs text-slate-300 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <ShieldAlert className="w-4 h-4 text-teal-400 shrink-0" />
+            <span>
+              <strong className="text-teal-300 font-bold">ফেস ভেরিফিকেশন নীতি:</strong> ছবি আপলোড করে এখনই সেভ করতে পারেন। পরবর্তীতে অ্যাটেন্ডেন্স দেওয়ার সময় লাইভ ফেস ভেরিফাই চাওয়া হবে।
+            </span>
+          </div>
+
+          {employee.isCeoOrOwner && (
+            <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
+              <Crown className="w-3 h-3" />
+              <span>প্রতিষ্ঠান প্রধান</span>
+            </span>
+          )}
         </div>
 
         {/* Modal Body */}
@@ -603,57 +725,108 @@ export const FaceEnrollmentModal: React.FC<FaceEnrollmentModalProps> = ({
 
         {/* Modal Footer */}
         {!successMessage && (
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-5 sm:px-6 py-4 border-t border-slate-800 bg-slate-900/95">
-            <div className="text-xs text-slate-400 flex items-center gap-1.5">
-              <ShieldCheck className="w-4 h-4 text-teal-400 shrink-0" />
-              <span>
-                {isLiveVerified
-                  ? "ভেরিফিকেশন সফল! এবার এনরোলমেন্ট ডাটাবেজে সংরক্ষণ করুন।"
-                  : "সংরক্ষণের পূর্বে লাইভ ফেস ভেরিফিকেশন সম্পন্ন করা আবশ্যক।"}
-              </span>
-            </div>
+          <div className="flex flex-col gap-3 px-5 sm:px-6 py-4 border-t border-slate-800 bg-slate-900/95">
+            {/* Super Admin Manual Override Bar */}
+            {isSuperAdmin && candidatePhoto && (
+              <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-1.5 font-bold text-amber-300">
+                    <Crown className="w-4 h-4 text-amber-400" />
+                    <span>সুপার অ্যাডমিন স্পেশাল পাওয়ার (Manual Verification & Exemption)</span>
+                  </div>
+                  <p className="text-[11px] text-slate-300">
+                    চেয়ারম্যান, সিইও বা ভিআইপি কর্মকর্তার জন্য ফেস ক্যামেরা টেস্ট ছাড়াও সরাসরি অনুমোদন দিতে পারেন।
+                  </p>
+                  <label className="flex items-center gap-2 pt-0.5 cursor-pointer text-amber-200 hover:text-white transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={isAttendanceExempt}
+                      onChange={(e) => setIsAttendanceExempt(e.target.checked)}
+                      className="rounded text-amber-500 focus:ring-amber-400"
+                    />
+                    <span className="font-semibold text-[11px]">
+                      হাজিরা দেওয়া থেকে অব্যাহতি (Exempt - যেমন: CEO / চেয়ারম্যান নিজে উপস্থিতি দেবেন না)
+                    </span>
+                  </label>
+                </div>
 
-            <div className="flex items-center gap-2.5 w-full sm:w-auto">
-              <button
-                type="button"
-                onClick={onClose}
-                className="flex-1 sm:flex-initial px-4 py-2.5 text-xs font-semibold text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition-colors cursor-pointer"
-              >
-                বাতিল (Cancel)
-              </button>
+                <button
+                  type="button"
+                  onClick={handleSuperAdminManualVerify}
+                  disabled={isProcessingSave}
+                  className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs flex items-center gap-1.5 shadow-md shadow-amber-500/20 shrink-0 cursor-pointer transition-all"
+                >
+                  <Crown className="w-3.5 h-3.5" />
+                  <span>সুপার অ্যাডমিন ম্যানুয়াল অনুমোদন</span>
+                </button>
+              </div>
+            )}
 
-              <button
-                type="button"
-                onClick={handleSaveVerifiedEnrollment}
-                disabled={!isLiveVerified || !candidatePhoto || isProcessingSave}
-                className={`flex-1 sm:flex-initial px-5 py-2.5 text-xs font-bold rounded-xl shadow-lg flex items-center justify-center gap-2 transition-all cursor-pointer ${
-                  isLiveVerified
-                    ? "bg-gradient-to-r from-teal-500 to-emerald-600 hover:from-teal-400 hover:to-emerald-500 text-white shadow-emerald-500/20"
-                    : "bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed opacity-60"
-                }`}
-                title={
-                  !isLiveVerified
-                    ? "সংরক্ষণের জন্য প্রথমে লাইভ ফেস ভেরিফাই করুন"
-                    : "ফায়ারবেসে সেভ ও এনরোল করুন"
-                }
-              >
-                {isProcessingSave ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 animate-spin text-teal-300" />
-                    <span>ক্লাউডে সেভ ও এনরোল হচ্ছে...</span>
-                  </>
-                ) : isLiveVerified ? (
-                  <>
-                    <CheckCircle2 className="w-4 h-4 text-white" />
-                    <span>এনরোলমেন্ট নিশ্চিত ও ক্লাউডে সংরক্ষণ করুন</span>
-                  </>
-                ) : (
-                  <>
-                    <Lock className="w-4 h-4" />
-                    <span>ভেরিফিকেশন ছাড়া সেভ বন্ধ</span>
-                  </>
-                )}
-              </button>
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+              <div className="text-xs text-slate-400 flex items-center gap-1.5">
+                <ShieldCheck className="w-4 h-4 text-teal-400 shrink-0" />
+                <span>
+                  {isLiveVerified
+                    ? "✓ লাইভ ফেস ভেরিফিকেশন সফল হয়েছে!"
+                    : "ছবি সেভ করতে পারেন অথবা এখনই লাইভ ক্যামেরা দিয়ে ভেরিফাই করতে পারেন।"}
+                </span>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="px-3.5 py-2 text-xs font-semibold text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition-colors cursor-pointer"
+                >
+                  বাতিল (Cancel)
+                </button>
+
+                {/* Direct Photo Save Button (Verification Pending) */}
+                <button
+                  type="button"
+                  onClick={handleSavePhotoWithoutVerification}
+                  disabled={!candidatePhoto || isProcessingSave}
+                  className="px-4 py-2 text-xs font-bold rounded-xl bg-slate-800 hover:bg-slate-700 text-teal-300 border border-slate-700 hover:border-teal-500/50 flex items-center gap-1.5 cursor-pointer transition-all disabled:opacity-50"
+                  title="ছবি সংরক্ষণ করুন, ভেরিফিকেশন পরে সম্পন্ন করা যাবে"
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  <span>ছবি সংরক্ষণ করুন (ভেরিফিকেশন পরে)</span>
+                </button>
+
+                {/* Live Verified Save Button */}
+                <button
+                  type="button"
+                  onClick={handleSaveVerifiedEnrollment}
+                  disabled={!isLiveVerified || !candidatePhoto || isProcessingSave}
+                  className={`px-4 py-2 text-xs font-bold rounded-xl shadow-lg flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                    isLiveVerified
+                      ? "bg-gradient-to-r from-teal-500 to-emerald-600 hover:from-teal-400 hover:to-emerald-500 text-white shadow-emerald-500/20"
+                      : "bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed opacity-60"
+                  }`}
+                  title={
+                    !isLiveVerified
+                      ? "প্রথমে ওপরের বাটন দিয়ে লাইভ ভেরিফাই করুন"
+                      : "লাইভ ভেরিফাইড হিসেবে সেভ করুন"
+                  }
+                >
+                  {isProcessingSave ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin text-teal-300" />
+                      <span>সংরক্ষণ হচ্ছে...</span>
+                    </>
+                  ) : isLiveVerified ? (
+                    <>
+                      <CheckCircle2 className="w-4 h-4 text-white" />
+                      <span>লাইভ ভেরিফাইড হিসেবে সেভ করুন</span>
+                    </>
+                  ) : (
+                    <>
+                      <ScanFace className="w-4 h-4 text-slate-500" />
+                      <span>লাইভ ভেরিফাই প্রয়োজন</span>
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         )}

@@ -20,7 +20,23 @@ import {
   Phone,
   Calendar,
   CreditCard,
-  X
+  X,
+  KeyRound,
+  Lock,
+  EyeOff,
+  RotateCcw,
+  Shield,
+  Crown,
+  AlertTriangle,
+  Clock,
+  CalendarDays,
+  CalendarCheck,
+  Banknote,
+  Briefcase,
+  Award,
+  Check,
+  LayoutDashboard,
+  UserCheck,
 } from "lucide-react";
 import {
   Employee,
@@ -32,6 +48,40 @@ import {
 } from "../../types";
 import { exportToCSV } from "../../utils/exportUtils";
 import { FaceEnrollmentModal } from "../attendance/FaceEnrollmentModal";
+import { useCompanyBranding } from "../../context/CompanyBrandingContext";
+
+export const APP_TAB_OPTIONS = [
+  { id: "dashboard", labelBn: "এক্সিকিউটিভ ড্যাশবোর্ড", labelEn: "Executive Dashboard", icon: LayoutDashboard },
+  { id: "my-portal", labelBn: "সেলফ-সার্ভিস পোর্টাল", labelEn: "Self-Service Portal", icon: UserCheck },
+  { id: "attendance-logs", labelBn: "হাজিরা রেকর্ড", labelEn: "Attendance Logs", icon: Clock },
+  { id: "shifts-holidays", labelBn: "শিফট ও ছুটির ক্যালেন্ডার", labelEn: "Shifts & Calendar", icon: CalendarDays },
+  { id: "leaves", labelBn: "ছুটির দরখাস্ত ও ব্যালেন্স", labelEn: "Leave Applications", icon: CalendarCheck },
+  { id: "payroll", labelBn: "বেতন ও পে-স্লিপ", labelEn: "Payroll & Payslips", icon: CreditCard },
+  { id: "loans", labelBn: "ঋণ ও প্রভিডেন্ট ফান্ড", labelEn: "Loans & Provident Fund", icon: Banknote },
+  { id: "notices-chat", labelBn: "নোটিশ বোর্ড ও সার্কুলার", labelEn: "Notice Board & Comms", icon: FileText },
+  { id: "projects-tasks", labelBn: "প্রকল্প ও টাস্ক অগ্রগতি", labelEn: "Projects & Tasks", icon: Layers },
+  { id: "assets", labelBn: "কোম্পানি সম্পদ ও হ্যান্ডওভার", labelEn: "Asset Management", icon: Smartphone },
+  { id: "certificates", labelBn: "অফিসিয়াল সনদ ও প্রত্যয়ন", labelEn: "Official Letters", icon: ShieldCheck },
+  { id: "recruitment", labelBn: "নিয়োগ ও এআই বাছাই", labelEn: "Recruitment & ATS", icon: Briefcase },
+  { id: "ngo-programs-training", labelBn: "প্রশিক্ষণ ও ফিল্ড প্রজেক্ট", labelEn: "Programs & Training", icon: Award },
+  { id: "meetings-conferences", labelBn: "মিটিং ও কনফারেন্স", labelEn: "Meetings & Conferences", icon: Users },
+  { id: "branches", labelBn: "শাখা ও জিওফেন্স", labelEn: "Branches & Geofence", icon: Building2 },
+  { id: "departments-designations", labelBn: "বিভাগ ও পদবি", labelEn: "Departments & Designations", icon: Layers },
+  { id: "employees", labelBn: "কর্মী ডিরেক্টরি", labelEn: "Employees Directory", icon: Users },
+  { id: "roles-permissions", labelBn: "রোল ও পারমিশন পলিসি", labelEn: "Roles & Permissions", icon: KeyRound },
+  { id: "audit-reports", labelBn: "অডিট রিপোর্ট", labelEn: "Audit Reports", icon: Shield },
+  { id: "exit-management", labelBn: "পদত্যাগ ও ক্লিয়ারেন্স", labelEn: "Exit & Resignation", icon: Users },
+];
+
+export const DEFAULT_EMPLOYEE_ALLOWED_TABS = [
+  "dashboard",
+  "my-portal",
+  "attendance-logs",
+  "leaves",
+  "notices-chat",
+  "projects-tasks",
+  "certificates",
+];
 
 interface EmployeesDirectoryViewProps {
   employees: Employee[];
@@ -44,6 +94,12 @@ interface EmployeesDirectoryViewProps {
   onUpdateEmployee: (emp: Employee) => void;
   onDeleteEmployee?: (empId: string) => void;
   onOpenDigitalIdCard?: (emp: Employee) => void;
+  onAddDepartment?: (dept: Department) => void;
+  onUpdateDepartment?: (dept: Department) => void;
+  onDeleteDepartment?: (id: string) => void;
+  onAddDesignation?: (desig: Designation) => void;
+  onUpdateDesignation?: (desig: Designation) => void;
+  onDeleteDesignation?: (id: string) => void;
 }
 
 export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
@@ -57,7 +113,32 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
   onUpdateEmployee,
   onDeleteEmployee,
   onOpenDigitalIdCard,
+  onAddDepartment,
+  onUpdateDepartment,
+  onDeleteDepartment,
+  onAddDesignation,
+  onUpdateDesignation,
+  onDeleteDesignation,
 }) => {
+  const { getEmployeeIdPrefix } = useCompanyBranding();
+
+  // Generate next unique serial ID based on existing employees and configured prefix
+  const generateNextEmployeeCode = (prefix: string, list: Employee[]): string => {
+    const cleanPrefix = (prefix || "MWO").trim().toUpperCase();
+    let maxNum = 1000;
+    list.forEach((emp) => {
+      if (!emp.employeeCode) return;
+      const match = emp.employeeCode.match(/(\d+)$/);
+      if (match) {
+        const num = parseInt(match[1], 10);
+        if (!isNaN(num) && num > maxNum) {
+          maxNum = num;
+        }
+      }
+    });
+    return `${cleanPrefix}-${maxNum + 1}`;
+  };
+
   const [searchTerm, setSearchTerm] = useState("");
   const [filterBranch, setFilterBranch] = useState("ALL");
   const [filterDept, setFilterDept] = useState("ALL");
@@ -90,6 +171,43 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
   const [newDesigInput, setNewDesigInput] = useState("");
   const [newDeptInput, setNewDeptInput] = useState("");
   const [customDesignationTitle, setCustomDesignationTitle] = useState("");
+
+  // User Credential, Super Admin & Privacy Edit States
+  const [editUsername, setEditUsername] = useState("");
+  const [editPassword, setEditPassword] = useState("");
+  const [showEditPassword, setShowEditPassword] = useState(false);
+  const [editIsSuperAdmin, setEditIsSuperAdmin] = useState(false);
+  const [editIsCeoOrOwner, setEditIsCeoOrOwner] = useState(false);
+  const [editHideSalaryFromSelf, setEditHideSalaryFromSelf] = useState(false);
+  const [editIsAttendanceExempt, setEditIsAttendanceExempt] = useState(false);
+  const [editFaceVerified, setEditFaceVerified] = useState(false);
+  const [editAllowedTabs, setEditAllowedTabs] = useState<string[]>(DEFAULT_EMPLOYEE_ALLOWED_TABS);
+
+  // Quick Account Reset Modal State (Super Admin power to reset user ID & password)
+  const [quickResetEmployee, setQuickResetEmployee] = useState<Employee | null>(null);
+  const [quickResetUsername, setQuickResetUsername] = useState("");
+  const [quickResetPassword, setQuickResetPassword] = useState("");
+  const [showQuickResetPassword, setShowQuickResetPassword] = useState(false);
+  const [quickResetIsSuperAdmin, setQuickResetIsSuperAdmin] = useState(false);
+  const [quickResetIsCeoOrOwner, setQuickResetIsCeoOrOwner] = useState(false);
+  const [quickResetHideSalary, setQuickResetHideSalary] = useState(false);
+  const [quickResetSuccessMsg, setQuickResetSuccessMsg] = useState("");
+
+  // Inline Department & Designation Management Modal States
+  const [inlineDeptModal, setInlineDeptModal] = useState<{ mode: "add" | "edit"; dept?: Department } | null>(null);
+  const [inlineDeptName, setInlineDeptName] = useState("");
+  const [inlineDeptCode, setInlineDeptCode] = useState("");
+  const [inlineDeptBudget, setInlineDeptBudget] = useState(1500000);
+
+  const [inlineDesigModal, setInlineDesigModal] = useState<{ mode: "add" | "edit"; desig?: Designation } | null>(null);
+  const [inlineDesigTitle, setInlineDesigTitle] = useState("");
+  const [inlineDesigCode, setInlineDesigCode] = useState("");
+  const [inlineDesigMinSal, setInlineDesigMinSal] = useState(50000);
+  const [inlineDesigMaxSal, setInlineDesigMaxSal] = useState(100000);
+
+  const [inlineDeleteDeptTarget, setInlineDeleteDeptTarget] = useState<Department | null>(null);
+  const [inlineDeleteDesigTarget, setInlineDeleteDesigTarget] = useState<Designation | null>(null);
+  const [employeeToDelete, setEmployeeToDelete] = useState<Employee | null>(null);
 
   // Role-based permission verification
   const isCeoOrSuperAdmin = (user?: Employee) => {
@@ -150,6 +268,17 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
     setEditBloodGroup((emp.bloodGroup as any) || "O+");
     setEditAddress(emp.presentAddress || "");
     setEditEmergencyPhone(emp.emergencyPhone || "");
+
+    // Credentials & Administrative Roles
+    setEditUsername(emp.username || emp.email.split("@")[0] || emp.employeeCode.toLowerCase());
+    setEditPassword(emp.password || "123456");
+    setShowEditPassword(false);
+    setEditIsSuperAdmin(Boolean(emp.isSuperAdmin || emp.role === "SUPER_ADMIN"));
+    setEditIsCeoOrOwner(Boolean(emp.isCeoOrOwner));
+    setEditHideSalaryFromSelf(Boolean(emp.hideSalaryFromSelf));
+    setEditIsAttendanceExempt(Boolean(emp.isAttendanceExempt));
+    setEditFaceVerified(Boolean(emp.faceVerified));
+    setEditAllowedTabs(emp.allowedTabs || DEFAULT_EMPLOYEE_ALLOWED_TABS);
   };
 
   const handleEditSubmit = (e: React.FormEvent) => {
@@ -163,6 +292,8 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
 
     const basic = Number(editBasicSalary);
     const gross = Math.round(basic * 1.77);
+
+    const isPasswordChanged = editPassword.trim() !== (editingEmployee.password || "123456");
 
     const updatedEmp: Employee = {
       ...editingEmployee,
@@ -187,6 +318,16 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
       nidNumber: editNid,
       bloodGroup: editBloodGroup,
       presentAddress: editAddress,
+      // Credentials & Super Admin Flags
+      username: editUsername.trim() || editingEmployee.username || editingEmployee.email.split("@")[0],
+      password: editPassword.trim() || editingEmployee.password || "123456",
+      isSuperAdmin: editIsSuperAdmin || editRole === "SUPER_ADMIN",
+      isCeoOrOwner: editIsCeoOrOwner,
+      hideSalaryFromSelf: editHideSalaryFromSelf,
+      isAttendanceExempt: editIsAttendanceExempt,
+      faceVerified: editFaceVerified,
+      allowedTabs: editAllowedTabs,
+      passwordLastChangedAt: isPasswordChanged ? new Date().toISOString() : editingEmployee.passwordLastChangedAt,
       salary: {
         ...editingEmployee.salary,
         basic: basic,
@@ -207,23 +348,186 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
     setEditingEmployee(null);
   };
 
+  // Quick Account Reset Handlers (Super Admin power to reset user ID & password)
+  const openQuickResetModal = (emp: Employee) => {
+    setQuickResetEmployee(emp);
+    setQuickResetUsername(emp.username || emp.email.split("@")[0] || emp.employeeCode.toLowerCase());
+    setQuickResetPassword(emp.password || "123456");
+    setShowQuickResetPassword(false);
+    setQuickResetIsSuperAdmin(Boolean(emp.isSuperAdmin || emp.role === "SUPER_ADMIN"));
+    setQuickResetIsCeoOrOwner(Boolean(emp.isCeoOrOwner));
+    setQuickResetHideSalary(Boolean(emp.hideSalaryFromSelf));
+    setQuickResetSuccessMsg("");
+  };
+
+  const handleQuickResetSave = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!quickResetEmployee) return;
+
+    const updated: Employee = {
+      ...quickResetEmployee,
+      username: quickResetUsername.trim() || quickResetEmployee.email.split("@")[0],
+      password: quickResetPassword.trim() || "123456",
+      isSuperAdmin: quickResetIsSuperAdmin,
+      isCeoOrOwner: quickResetIsCeoOrOwner,
+      hideSalaryFromSelf: quickResetHideSalary,
+      passwordLastChangedAt: new Date().toISOString(),
+    };
+
+    onUpdateEmployee(updated);
+    setQuickResetSuccessMsg("অ্যাকাউন্ট ইউজার আইডি ও পাসওয়ার্ড সফলভাবে আপডেট করা হয়েছে!");
+    setTimeout(() => {
+      setQuickResetEmployee(null);
+      setQuickResetSuccessMsg("");
+    }, 1200);
+  };
+
   const handleDeleteEmployee = (emp: Employee) => {
-    if (
-      window.confirm(
-        `আপনি কি নিশ্চিত যে "${emp.fullName}" (${emp.employeeCode})-কে সিস্টেম থেকে মুছে ফেলতে চান? এই তথ্য ডাটাবেস থেকেও ডিলিট হয়ে যাবে।`
-      )
-    ) {
-      if (onDeleteEmployee) {
-        onDeleteEmployee(emp.id);
-      }
-      if (selectedEmployee?.id === emp.id) {
+    setEmployeeToDelete(emp);
+  };
+
+  const confirmDeleteEmployee = () => {
+    if (employeeToDelete && onDeleteEmployee) {
+      onDeleteEmployee(employeeToDelete.id);
+      if (selectedEmployee?.id === employeeToDelete.id) {
         setSelectedEmployee(null);
       }
     }
+    setEmployeeToDelete(null);
+  };
+
+  // Inline Dept/Desig handlers
+  const handleOpenAddDeptModal = () => {
+    setInlineDeptModal({ mode: "add" });
+    setInlineDeptName("");
+    setInlineDeptCode(`D${departments.length + 1}`);
+    setInlineDeptBudget(1500000);
+  };
+
+  const handleOpenEditDeptModal = (deptId: string) => {
+    const d = departments.find((item) => item.id === deptId);
+    if (!d) return;
+    setInlineDeptModal({ mode: "edit", dept: d });
+    setInlineDeptName(d.name);
+    setInlineDeptCode(d.code);
+    setInlineDeptBudget(d.budgetAllocated || 1500000);
+  };
+
+  const handleSaveInlineDept = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!inlineDeptName.trim()) return;
+    if (inlineDeptModal?.mode === "add") {
+      const newD: Department = {
+        id: `dept-${Date.now()}`,
+        name: inlineDeptName.trim(),
+        code: inlineDeptCode.trim().toUpperCase() || `D${departments.length + 1}`,
+        description: "",
+        totalEmployees: 0,
+        budgetAllocated: Number(inlineDeptBudget) || 1500000,
+      };
+      if (onAddDepartment) onAddDepartment(newD);
+      if (editingEmployee) setEditDeptId(newD.id);
+      else setNewDeptId(newD.id);
+    } else if (inlineDeptModal?.mode === "edit" && inlineDeptModal.dept) {
+      const updatedD: Department = {
+        ...inlineDeptModal.dept,
+        name: inlineDeptName.trim(),
+        code: inlineDeptCode.trim().toUpperCase() || inlineDeptModal.dept.code,
+        budgetAllocated: Number(inlineDeptBudget) || inlineDeptModal.dept.budgetAllocated,
+      };
+      if (onUpdateDepartment) onUpdateDepartment(updatedD);
+    }
+    setInlineDeptModal(null);
+  };
+
+  const handleOpenAddDesigModal = () => {
+    setInlineDesigModal({ mode: "add" });
+    setInlineDesigTitle("");
+    setInlineDesigCode(`DSG-${designations.length + 1}`);
+    setInlineDesigMinSal(50000);
+    setInlineDesigMaxSal(100000);
+  };
+
+  const handleOpenEditDesigModal = (desigId: string) => {
+    const d = designations.find((item) => item.id === desigId);
+    if (!d) return;
+    setInlineDesigModal({ mode: "edit", desig: d });
+    setInlineDesigTitle(d.title);
+    setInlineDesigCode(d.code);
+    setInlineDesigMinSal(d.minSalary || 50000);
+    setInlineDesigMaxSal(d.maxSalary || 100000);
+  };
+
+  const handleSaveInlineDesig = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!inlineDesigTitle.trim()) return;
+    if (inlineDesigModal?.mode === "add") {
+      const currentDeptId = editingEmployee ? editDeptId : newDeptId;
+      const currentDept = departments.find((d) => d.id === currentDeptId) || departments[0];
+      const newD: Designation = {
+        id: `desig-${Date.now()}`,
+        title: inlineDesigTitle.trim(),
+        code: inlineDesigCode.trim().toUpperCase() || `DSG-${designations.length + 1}`,
+        departmentId: currentDept?.id || "",
+        departmentName: currentDept?.name || "General",
+        level: "MID",
+        minSalary: Number(inlineDesigMinSal) || 50000,
+        maxSalary: Number(inlineDesigMaxSal) || 100000,
+        description: "",
+      };
+      if (onAddDesignation) onAddDesignation(newD);
+      if (editingEmployee) {
+        setEditDesigId(newD.id);
+        setCustomDesignationTitle(newD.title);
+      } else {
+        setNewDesigId(newD.id);
+      }
+    } else if (inlineDesigModal?.mode === "edit" && inlineDesigModal.desig) {
+      const updatedD: Designation = {
+        ...inlineDesigModal.desig,
+        title: inlineDesigTitle.trim(),
+        code: inlineDesigCode.trim().toUpperCase() || inlineDesigModal.desig.code,
+        minSalary: Number(inlineDesigMinSal) || inlineDesigModal.desig.minSalary,
+        maxSalary: Number(inlineDesigMaxSal) || inlineDesigModal.desig.maxSalary,
+      };
+      if (onUpdateDesignation) onUpdateDesignation(updatedD);
+      if (editingEmployee && editDesigId === updatedD.id) {
+        setCustomDesignationTitle(updatedD.title);
+      }
+    }
+    setInlineDesigModal(null);
+  };
+
+  const confirmDeleteInlineDept = () => {
+    if (inlineDeleteDeptTarget && onDeleteDepartment) {
+      onDeleteDepartment(inlineDeleteDeptTarget.id);
+      if (editDeptId === inlineDeleteDeptTarget.id) {
+        setEditDeptId(departments.find((d) => d.id !== inlineDeleteDeptTarget.id)?.id || "");
+      }
+      if (newDeptId === inlineDeleteDeptTarget.id) {
+        setNewDeptId(departments.find((d) => d.id !== inlineDeleteDeptTarget.id)?.id || "");
+      }
+    }
+    setInlineDeleteDeptTarget(null);
+  };
+
+  const confirmDeleteInlineDesig = () => {
+    if (inlineDeleteDesigTarget && onDeleteDesignation) {
+      onDeleteDesignation(inlineDeleteDesigTarget.id);
+      if (editDesigId === inlineDeleteDesigTarget.id) {
+        setEditDesigId(designations.find((d) => d.id !== inlineDeleteDesigTarget.id)?.id || "");
+      }
+      if (newDesigId === inlineDeleteDesigTarget.id) {
+        setNewDesigId(designations.find((d) => d.id !== inlineDeleteDesigTarget.id)?.id || "");
+      }
+    }
+    setInlineDeleteDesigTarget(null);
   };
 
   // New Employee Form State (Comprehensive 30+ Enterprise Fields)
-  const [newEmpCode, setNewEmpCode] = useState(`WF-${1000 + employees.length + 1}`);
+  const [newEmpCode, setNewEmpCode] = useState(() =>
+    generateNextEmployeeCode(getEmployeeIdPrefix(), employees)
+  );
   const [newFullName, setNewFullName] = useState("");
   const [newEmail, setNewEmail] = useState("");
   const [newPhone, setNewPhone] = useState("+880 1");
@@ -237,6 +541,27 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
   const [newNid, setNewNid] = useState("");
   const [newBloodGroup, setNewBloodGroup] = useState<any>("O+");
   const [newAddress, setNewAddress] = useState("");
+
+  const handleOpenAddModal = () => {
+    setNewEmpCode(generateNextEmployeeCode(getEmployeeIdPrefix(), employees));
+    setNewFullName("");
+    setNewEmail("");
+    setNewPhone("+880 1");
+    setNewUsername("");
+    setNewPassword("123456");
+    setShowAddModal(true);
+  };
+
+  // New Employee Account & Permissions
+  const [newUsername, setNewUsername] = useState("");
+  const [newPassword, setNewPassword] = useState("123456");
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [newIsSuperAdmin, setNewIsSuperAdmin] = useState(false);
+  const [newIsCeoOrOwner, setNewIsCeoOrOwner] = useState(false);
+  const [newHideSalaryFromSelf, setNewHideSalaryFromSelf] = useState(false);
+  const [newIsAttendanceExempt, setNewIsAttendanceExempt] = useState(false);
+  const [newFaceVerified, setNewFaceVerified] = useState(false);
+  const [newAllowedTabs, setNewAllowedTabs] = useState<string[]>(DEFAULT_EMPLOYEE_ALLOWED_TABS);
 
   const filteredEmployees = employees.filter((emp) => {
     const matchesSearch =
@@ -288,6 +613,15 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
       status: "ACTIVE",
       shiftId: shift.id,
       shiftName: shift.name,
+      // Account credentials & role flags
+      username: newUsername.trim() || newEmail.split("@")[0] || newEmpCode.toLowerCase(),
+      password: newPassword.trim() || "123456",
+      isSuperAdmin: newIsSuperAdmin || newRole === "SUPER_ADMIN",
+      isCeoOrOwner: newIsCeoOrOwner,
+      hideSalaryFromSelf: newHideSalaryFromSelf,
+      isAttendanceExempt: newIsAttendanceExempt,
+      faceVerified: newFaceVerified,
+      allowedTabs: newAllowedTabs,
       salary: {
         basic: newBasicSalary,
         houseRent: Math.round(newBasicSalary * 0.4),
@@ -318,6 +652,15 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
     setNewNid("");
     setNewAddress("");
     setNewBasicSalary(60000);
+    setNewUsername("");
+    setNewPassword("123456");
+    setShowNewPassword(false);
+    setNewIsSuperAdmin(false);
+    setNewIsCeoOrOwner(false);
+    setNewHideSalaryFromSelf(false);
+    setNewIsAttendanceExempt(false);
+    setNewFaceVerified(false);
+    setNewAllowedTabs(DEFAULT_EMPLOYEE_ALLOWED_TABS);
   };
 
   const handleExportCSV = () => {
@@ -452,7 +795,19 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
                     className="w-11 h-11 rounded-xl object-cover border border-slate-200 dark:border-slate-700"
                   />
                   <div>
-                    <h4 className="font-bold text-slate-900 dark:text-white text-xs">{emp.fullName}</h4>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <h4 className="font-bold text-slate-900 dark:text-white text-xs">{emp.fullName}</h4>
+                      {Boolean(emp.isSuperAdmin || emp.role === "SUPER_ADMIN") && (
+                        <span className="px-1.5 py-0.2 rounded text-[8px] font-bold bg-purple-500/15 text-purple-700 dark:text-purple-300 border border-purple-500/30">
+                          Super Admin
+                        </span>
+                      )}
+                      {Boolean(emp.isCeoOrOwner) && (
+                        <span className="px-1.5 py-0.2 rounded text-[8px] font-bold bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30">
+                          CEO
+                        </span>
+                      )}
+                    </div>
                     <p className="text-[10px] font-mono text-slate-500 dark:text-slate-400">{emp.employeeCode}</p>
                     <p className="text-[10px] text-teal-700 dark:text-teal-400 font-semibold mt-0.5">
                       {emp.designationTitle}
@@ -502,11 +857,18 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
                     </span>
                   )}
                 </div>
-                <div className="flex justify-between">
+                <div className="flex justify-between items-center">
                   <span>Gross Salary:</span>
-                  <span className="text-slate-900 dark:text-white font-mono font-bold">
-                    ৳{(emp.salary?.grossSalary ?? 0).toLocaleString()}
-                  </span>
+                  <div className="text-right">
+                    <span className="text-slate-900 dark:text-white font-mono font-bold">
+                      ৳{(emp.salary?.grossSalary ?? 0).toLocaleString()}
+                    </span>
+                    {emp.hideSalaryFromSelf && (
+                      <span className="block text-[8px] font-bold text-amber-600 dark:text-amber-400">
+                        (কর্মী থেকে গোপন)
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -528,6 +890,14 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
                 >
                   <ScanFace className="w-3.5 h-3.5" />
                   <span>{emp.faceTemplateRegistered ? "Photo" : "Face"}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => openQuickResetModal(emp)}
+                  className="p-2 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 text-amber-700 dark:text-amber-300 border border-amber-500/30 transition-colors cursor-pointer"
+                  title="লগইন আইডি ও পাসওয়ার্ড রিসেট করুন"
+                >
+                  <KeyRound className="w-4 h-4" />
                 </button>
                 {canEditEmployeeProfile(emp) ? (
                   <button
@@ -594,11 +964,23 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
                         className="w-10 h-10 rounded-xl object-cover border border-slate-200 dark:border-slate-700"
                       />
                       <div>
-                        <div className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                        <div className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5 flex-wrap">
                           <span>{emp.fullName}</span>
+                          {Boolean(emp.isSuperAdmin || emp.role === "SUPER_ADMIN") && (
+                            <span className="px-1.5 py-0.2 rounded text-[8px] font-bold bg-purple-500/15 text-purple-700 dark:text-purple-300 border border-purple-500/30">
+                              Super Admin
+                            </span>
+                          )}
+                          {Boolean(emp.isCeoOrOwner) && (
+                            <span className="px-1.5 py-0.2 rounded text-[8px] font-bold bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30">
+                              CEO
+                            </span>
+                          )}
                         </div>
-                        <div className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">
-                          {emp.employeeCode} • {emp.email}
+                        <div className="text-[11px] text-slate-500 dark:text-slate-400 font-mono flex items-center gap-1.5">
+                          <span>{emp.employeeCode}</span>
+                          <span>•</span>
+                          <span className="text-teal-600 dark:text-teal-400 font-bold" title="লগইন ইউজারনেম">@{emp.username || emp.email.split("@")[0]}</span>
                         </div>
                       </div>
                     </div>
@@ -668,8 +1050,18 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
                     </div>
                   </td>
 
-                  <td className="p-3 font-mono font-semibold text-slate-900 dark:text-white">
-                    ৳{(emp.salary?.grossSalary ?? 0).toLocaleString()}
+                  <td className="p-3 font-mono">
+                    <div className="font-semibold text-slate-900 dark:text-white">
+                      ৳{(emp.salary?.grossSalary ?? 0).toLocaleString()}
+                    </div>
+                    {emp.hideSalaryFromSelf && (
+                      <span
+                        className="inline-flex items-center gap-1 text-[9px] font-bold text-amber-700 dark:text-amber-300 bg-amber-500/15 px-1.5 py-0.5 rounded border border-amber-500/30 mt-0.5"
+                        title="এই কর্মী তার নিজের সেলফ সার্ভিস অ্যাকাউন্টে বেতন দেখতে পারবেন না"
+                      >
+                        <Shield className="w-2.5 h-2.5" /> কর্মী থেকে গোপন
+                      </span>
+                    )}
                   </td>
 
                   <td className="p-3">
@@ -701,6 +1093,14 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
                         title="Enroll / Update Biometric Face Photo"
                       >
                         <ScanFace className="w-4 h-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => openQuickResetModal(emp)}
+                        className="p-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/25 text-amber-700 dark:text-amber-400 border border-amber-500/30 transition-colors cursor-pointer"
+                        title="আইডি ও পাসওয়ার্ড রিসেট করুন (Super Admin Reset Credentials)"
+                      >
+                        <KeyRound className="w-4 h-4" />
                       </button>
                       {canEditEmployeeProfile(emp) ? (
                         <button
@@ -1019,7 +1419,38 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
                   </select>
                 </div>
                 <div>
-                  <label className="block text-slate-600 dark:text-slate-400 mb-1">Department</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-slate-600 dark:text-slate-400 font-semibold">Department *</label>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={handleOpenAddDeptModal}
+                        className="text-[11px] text-teal-600 dark:text-teal-400 font-bold hover:underline cursor-pointer flex items-center gap-0.5"
+                      >
+                        <Plus className="w-3 h-3" /> নতুন বিভাগ
+                      </button>
+                      {newDeptId && (
+                        <>
+                          <span className="text-slate-300 dark:text-slate-600">|</span>
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEditDeptModal(newDeptId)}
+                            className="text-[11px] text-blue-600 dark:text-blue-400 font-semibold hover:underline cursor-pointer flex items-center gap-0.5"
+                          >
+                            <Edit2 className="w-2.5 h-2.5" /> এডিট
+                          </button>
+                          <span className="text-slate-300 dark:text-slate-600">|</span>
+                          <button
+                            type="button"
+                            onClick={() => setInlineDeleteDeptTarget(departments.find((d) => d.id === newDeptId) || null)}
+                            className="text-[11px] text-rose-600 dark:text-rose-400 font-semibold hover:underline cursor-pointer flex items-center gap-0.5"
+                          >
+                            <Trash2 className="w-2.5 h-2.5" /> মুছুন
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
                   <select
                     value={newDeptId}
                     onChange={(e) => setNewDeptId(e.target.value)}
@@ -1027,7 +1458,7 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
                   >
                     {departments.map((d) => (
                       <option key={d.id} value={d.id}>
-                        {d.name}
+                        {d.name} ({d.code})
                       </option>
                     ))}
                   </select>
@@ -1036,7 +1467,38 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-slate-600 dark:text-slate-400 mb-1">Designation</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-slate-600 dark:text-slate-400 font-semibold">Designation *</label>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={handleOpenAddDesigModal}
+                        className="text-[11px] text-teal-600 dark:text-teal-400 font-bold hover:underline cursor-pointer flex items-center gap-0.5"
+                      >
+                        <Plus className="w-3 h-3" /> নতুন পদবি
+                      </button>
+                      {newDesigId && (
+                        <>
+                          <span className="text-slate-300 dark:text-slate-600">|</span>
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEditDesigModal(newDesigId)}
+                            className="text-[11px] text-blue-600 dark:text-blue-400 font-semibold hover:underline cursor-pointer flex items-center gap-0.5"
+                          >
+                            <Edit2 className="w-2.5 h-2.5" /> এডিট
+                          </button>
+                          <span className="text-slate-300 dark:text-slate-600">|</span>
+                          <button
+                            type="button"
+                            onClick={() => setInlineDeleteDesigTarget(designations.find((d) => d.id === newDesigId) || null)}
+                            className="text-[11px] text-rose-600 dark:text-rose-400 font-semibold hover:underline cursor-pointer flex items-center gap-0.5"
+                          >
+                            <Trash2 className="w-2.5 h-2.5" /> মুছুন
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
                   <select
                     value={newDesigId}
                     onChange={(e) => setNewDesigId(e.target.value)}
@@ -1044,7 +1506,7 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
                   >
                     {designations.map((d) => (
                       <option key={d.id} value={d.id}>
-                        {d.title}
+                        {d.title} ({d.code})
                       </option>
                     ))}
                   </select>
@@ -1131,6 +1593,209 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
                   placeholder="e.g. House 14, Road 5, Dhanmondi, Dhaka"
                   className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white"
                 />
+              </div>
+
+              {/* Login Account & Privacy Configuration (Super Admin Control) */}
+              <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 space-y-3">
+                <div className="flex items-center gap-2 text-teal-700 dark:text-teal-400 font-bold">
+                  <KeyRound className="w-4 h-4" />
+                  <span>লগইন অ্যাকাউন্ট ও নিরাপত্তা কন্ট্রোল (Login Account & Security)</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-slate-600 dark:text-slate-400 mb-1 font-semibold">
+                      ইউজার আইডি / ইউজারনেম (User ID / Username)
+                    </label>
+                    <input
+                      type="text"
+                      value={newUsername}
+                      onChange={(e) => setNewUsername(e.target.value)}
+                      placeholder={newEmail ? newEmail.split("@")[0] : newEmpCode.toLowerCase()}
+                      className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2 text-slate-900 dark:text-white font-mono"
+                    />
+                    <span className="text-[10px] text-slate-400">খালি রাখলে স্বয়ংক্রিয় ইউজার আইডি তৈরি হবে</span>
+                  </div>
+                  <div>
+                    <label className="block text-slate-600 dark:text-slate-400 mb-1 font-semibold">
+                      প্রাথমিক পাসওয়ার্ড (Initial Password)
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showNewPassword ? "text" : "password"}
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        placeholder="123456"
+                        className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2 pr-10 text-slate-900 dark:text-white font-mono"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowNewPassword(!showNewPassword)}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                      >
+                        {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                    <span className="text-[10px] text-slate-400">কর্মী তার একাউন্টে ঢুকে এই পাসওয়ার্ড পরিবর্তন করতে পারবেন</span>
+                  </div>
+                </div>
+
+                {/* Role & Salary Privacy Toggles */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
+                  <label className="flex items-start gap-2 p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 cursor-pointer hover:border-purple-400 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={newIsSuperAdmin}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setNewIsSuperAdmin(checked);
+                        if (checked) {
+                          setNewAllowedTabs(APP_TAB_OPTIONS.map((t) => t.id));
+                        }
+                      }}
+                      className="mt-0.5 rounded text-purple-600 focus:ring-purple-500"
+                    />
+                    <div>
+                      <div className="font-bold text-slate-900 dark:text-white flex items-center gap-1">
+                        <Shield className="w-3.5 h-3.5 text-purple-600" />
+                        <span>সুপার অ্যাডমিন</span>
+                      </div>
+                      <p className="text-[10px] text-slate-500">সব ক্ষমতা ও রিসেট সুবিধা</p>
+                    </div>
+                  </label>
+
+                  <label className="flex items-start gap-2 p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 cursor-pointer hover:border-amber-400 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={newIsCeoOrOwner}
+                      onChange={(e) => setNewIsCeoOrOwner(e.target.checked)}
+                      className="mt-0.5 rounded text-amber-600 focus:ring-amber-500"
+                    />
+                    <div>
+                      <div className="font-bold text-slate-900 dark:text-white flex items-center gap-1">
+                        <Crown className="w-3.5 h-3.5 text-amber-600" />
+                        <span>প্রতিষ্ঠান প্রধান / CEO</span>
+                      </div>
+                      <p className="text-[10px] text-slate-500">নির্বাহী প্রধানের মর্যাদা</p>
+                    </div>
+                  </label>
+
+                  <label className="flex items-start gap-2 p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 cursor-pointer hover:border-teal-400 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={newHideSalaryFromSelf}
+                      onChange={(e) => setNewHideSalaryFromSelf(e.target.checked)}
+                      className="mt-0.5 rounded text-teal-600 focus:ring-teal-500"
+                    />
+                    <div>
+                      <div className="font-bold text-slate-900 dark:text-white flex items-center gap-1">
+                        <Lock className="w-3.5 h-3.5 text-rose-500" />
+                        <span>বেতন গোপন রাখুন</span>
+                      </div>
+                      <p className="text-[10px] text-slate-500">কর্মী বেতন দেখতে পাবে না</p>
+                    </div>
+                  </label>
+                </div>
+
+                {/* Biometric & Attendance Exceptions */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+                  <label className="flex items-start gap-2 p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 cursor-pointer hover:border-teal-400 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={newIsAttendanceExempt}
+                      onChange={(e) => setNewIsAttendanceExempt(e.target.checked)}
+                      className="mt-0.5 rounded text-teal-600 focus:ring-teal-500"
+                    />
+                    <div>
+                      <div className="font-bold text-slate-900 dark:text-white flex items-center gap-1">
+                        <ShieldCheck className="w-3.5 h-3.5 text-teal-600" />
+                        <span>হাজিরা অব্যাহতি (Exempt from Attendance)</span>
+                      </div>
+                      <p className="text-[10px] text-slate-500">দেরি বা অনুপস্থিতির জরিমানা প্রযোজ্য হবে না (CEO/পরিচালক)</p>
+                    </div>
+                  </label>
+
+                  <label className="flex items-start gap-2 p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 cursor-pointer hover:border-blue-400 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={newFaceVerified}
+                      onChange={(e) => setNewFaceVerified(e.target.checked)}
+                      className="mt-0.5 rounded text-blue-600 focus:ring-blue-500"
+                    />
+                    <div>
+                      <div className="font-bold text-slate-900 dark:text-white flex items-center gap-1">
+                        <ScanFace className="w-3.5 h-3.5 text-blue-600" />
+                        <span>বায়োমেট্রিক ফেস ভেরিফায়েড</span>
+                      </div>
+                      <p className="text-[10px] text-slate-500">ফেস ডাটা আগেই অনুমোদিত বলে গণ্য হবে</p>
+                    </div>
+                  </label>
+                </div>
+
+                {/* Allowed Tabs & Navigation Permissions */}
+                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="font-bold text-slate-900 dark:text-white text-xs flex items-center gap-1.5">
+                        <LayoutDashboard className="w-3.5 h-3.5 text-teal-600" />
+                        দৃশ্যমান মেনু ও অ্যাক্সেস কন্ট্রোল (Allowed Navigation Tabs)
+                      </span>
+                      <p className="text-[10px] text-slate-500">কর্মী সিস্টেমে লগইন করার পর কোন কোন মেনু দেখতে ও ব্যবহার করতে পারবেন</p>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setNewAllowedTabs(APP_TAB_OPTIONS.map((t) => t.id))}
+                        className="text-[10px] font-bold px-2 py-0.5 rounded bg-teal-500/10 text-teal-700 dark:text-teal-300 hover:bg-teal-500/20 cursor-pointer"
+                      >
+                        সব মেনু
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setNewAllowedTabs(DEFAULT_EMPLOYEE_ALLOWED_TABS)}
+                        className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-700 cursor-pointer"
+                      >
+                        সাধারণ কর্মী
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setNewAllowedTabs(["SELF_SERVICE"])}
+                        className="text-[10px] font-bold px-2 py-0.5 rounded bg-purple-500/10 text-purple-700 dark:text-purple-300 hover:bg-purple-500/20 cursor-pointer"
+                      >
+                        সেলফ সার্ভিস অনলি
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-1.5 max-h-44 overflow-y-auto p-1 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800">
+                    {APP_TAB_OPTIONS.map((tab) => {
+                      const isChecked = newAllowedTabs.includes(tab.id);
+                      return (
+                        <label
+                          key={tab.id}
+                          className={`flex items-center gap-1.5 p-1.5 rounded text-[11px] cursor-pointer transition-colors ${
+                            isChecked
+                              ? "bg-teal-50 dark:bg-teal-950/40 text-teal-800 dark:text-teal-200 font-medium"
+                              : "hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400"
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setNewAllowedTabs([...newAllowedTabs, tab.id]);
+                              } else {
+                                setNewAllowedTabs(newAllowedTabs.filter((id) => id !== tab.id));
+                              }
+                            }}
+                            className="rounded text-teal-600 focus:ring-teal-500 w-3.5 h-3.5"
+                          />
+                          <span className="truncate">{tab.labelBn}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
 
               <div className="flex justify-end gap-3 pt-3 border-t border-slate-200 dark:border-slate-800">
@@ -1268,9 +1933,40 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
                   </select>
                 </div>
                 <div>
-                  <label className="block text-slate-600 dark:text-slate-400 mb-1 font-semibold">
-                    Department *
-                  </label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-slate-600 dark:text-slate-400 font-semibold">
+                      Department *
+                    </label>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={handleOpenAddDeptModal}
+                        className="text-[11px] text-teal-600 dark:text-teal-400 font-bold hover:underline cursor-pointer flex items-center gap-0.5"
+                      >
+                        <Plus className="w-3 h-3" /> নতুন বিভাগ
+                      </button>
+                      {editDeptId && (
+                        <>
+                          <span className="text-slate-300 dark:text-slate-600">|</span>
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEditDeptModal(editDeptId)}
+                            className="text-[11px] text-blue-600 dark:text-blue-400 font-semibold hover:underline cursor-pointer flex items-center gap-0.5"
+                          >
+                            <Edit2 className="w-2.5 h-2.5" /> এডিট
+                          </button>
+                          <span className="text-slate-300 dark:text-slate-600">|</span>
+                          <button
+                            type="button"
+                            onClick={() => setInlineDeleteDeptTarget(departments.find((d) => d.id === editDeptId) || null)}
+                            className="text-[11px] text-rose-600 dark:text-rose-400 font-semibold hover:underline cursor-pointer flex items-center gap-0.5"
+                          >
+                            <Trash2 className="w-2.5 h-2.5" /> মুছুন
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
                   <select
                     value={editDeptId}
                     onChange={(e) => setEditDeptId(e.target.value)}
@@ -1284,9 +1980,40 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
                   </select>
                 </div>
                 <div>
-                  <label className="block text-slate-600 dark:text-slate-400 mb-1 font-semibold">
-                    Designation (মূল পদবী) *
-                  </label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-slate-600 dark:text-slate-400 font-semibold">
+                      Designation (মূল পদবী) *
+                    </label>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={handleOpenAddDesigModal}
+                        className="text-[11px] text-teal-600 dark:text-teal-400 font-bold hover:underline cursor-pointer flex items-center gap-0.5"
+                      >
+                        <Plus className="w-3 h-3" /> নতুন পদবি
+                      </button>
+                      {editDesigId && (
+                        <>
+                          <span className="text-slate-300 dark:text-slate-600">|</span>
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEditDesigModal(editDesigId)}
+                            className="text-[11px] text-blue-600 dark:text-blue-400 font-semibold hover:underline cursor-pointer flex items-center gap-0.5"
+                          >
+                            <Edit2 className="w-2.5 h-2.5" /> এডিট
+                          </button>
+                          <span className="text-slate-300 dark:text-slate-600">|</span>
+                          <button
+                            type="button"
+                            onClick={() => setInlineDeleteDesigTarget(designations.find((d) => d.id === editDesigId) || null)}
+                            className="text-[11px] text-rose-600 dark:text-rose-400 font-semibold hover:underline cursor-pointer flex items-center gap-0.5"
+                          >
+                            <Trash2 className="w-2.5 h-2.5" /> মুছুন
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
                   <div className="space-y-1.5">
                     <select
                       value={editDesigId}
@@ -1300,7 +2027,7 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
                     >
                       {designations.map((des) => (
                         <option key={des.id} value={des.id}>
-                          {des.title}
+                          {des.title} ({des.code})
                         </option>
                       ))}
                     </select>
@@ -1603,6 +2330,224 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
                 </div>
               </div>
 
+              {/* Account Credentials, Role Flags & Salary Visibility (Super Admin Control) */}
+              <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 space-y-3.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-teal-700 dark:text-teal-400 font-bold">
+                    <KeyRound className="w-4 h-4" />
+                    <span>লগইন অ্যাকাউন্ট ও নিরাপত্তা কন্ট্রোল (Super Admin Credential & Access Control)</span>
+                  </div>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-purple-500/10 text-purple-700 dark:text-purple-300 border border-purple-500/20">
+                    সুপার অ্যাডমিন কর্তৃত্ব
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-slate-600 dark:text-slate-400 mb-1 font-semibold">
+                      ইউজার আইডি / ইউজারনেম (Login User ID / Username)
+                    </label>
+                    <input
+                      type="text"
+                      value={editUsername}
+                      onChange={(e) => setEditUsername(e.target.value)}
+                      placeholder="username"
+                      className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2 text-slate-900 dark:text-white font-mono"
+                    />
+                    <span className="text-[10px] text-slate-400">লগইনে এই ইউজার আইডি অথবা ইমেইল ব্যবহার করা যাবে</span>
+                  </div>
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-slate-600 dark:text-slate-400 font-semibold">
+                        অ্যাকাউন্ট পাসওয়ার্ড (Account Password)
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setEditPassword("123456")}
+                        className="text-[10px] text-amber-600 dark:text-amber-400 hover:underline flex items-center gap-0.5 font-bold cursor-pointer"
+                      >
+                        <RotateCcw className="w-3 h-3" /> ডিফল্ট (123456)
+                      </button>
+                    </div>
+                    <div className="relative">
+                      <input
+                        type={showEditPassword ? "text" : "password"}
+                        value={editPassword}
+                        onChange={(e) => setEditPassword(e.target.value)}
+                        placeholder="পাসওয়ার্ড লিখুন..."
+                        className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2 pr-10 text-slate-900 dark:text-white font-mono"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowEditPassword(!showEditPassword)}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                      >
+                        {showEditPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                    <span className="text-[10px] text-slate-400">কর্মী তার একাউন্টে ঢুকে এই পাসওয়ার্ড পরিবর্তন করতে পারবেন</span>
+                  </div>
+                </div>
+
+                {/* Role & Salary Privacy Toggles */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
+                  <label className="flex items-start gap-2.5 p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 cursor-pointer hover:border-purple-400 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={editIsSuperAdmin}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setEditIsSuperAdmin(checked);
+                        if (checked) {
+                          setEditAllowedTabs(APP_TAB_OPTIONS.map((t) => t.id));
+                        }
+                      }}
+                      className="mt-0.5 rounded text-purple-600 focus:ring-purple-500 cursor-pointer"
+                    />
+                    <div>
+                      <div className="font-bold text-slate-900 dark:text-white flex items-center gap-1">
+                        <Shield className="w-3.5 h-3.5 text-purple-600" />
+                        <span>সুপার অ্যাডমিন</span>
+                      </div>
+                      <p className="text-[10px] text-slate-500">সকল মেনু, তথ্য ও পাসওয়ার্ড রিসেটের সর্বোচ্চ ক্ষমতা</p>
+                    </div>
+                  </label>
+
+                  <label className="flex items-start gap-2.5 p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 cursor-pointer hover:border-amber-400 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={editIsCeoOrOwner}
+                      onChange={(e) => setEditIsCeoOrOwner(e.target.checked)}
+                      className="mt-0.5 rounded text-amber-600 focus:ring-amber-500 cursor-pointer"
+                    />
+                    <div>
+                      <div className="font-bold text-slate-900 dark:text-white flex items-center gap-1">
+                        <Crown className="w-3.5 h-3.5 text-amber-600" />
+                        <span>প্রতিষ্ঠান প্রধান / CEO</span>
+                      </div>
+                      <p className="text-[10px] text-slate-500">প্রতিষ্ঠানের প্রশাসনিক ও নির্বাহী প্রধান মর্যাদা</p>
+                    </div>
+                  </label>
+
+                  <label className="flex items-start gap-2.5 p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 cursor-pointer hover:border-rose-400 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={editHideSalaryFromSelf}
+                      onChange={(e) => setEditHideSalaryFromSelf(e.target.checked)}
+                      className="mt-0.5 rounded text-rose-600 focus:ring-rose-500 cursor-pointer"
+                    />
+                    <div>
+                      <div className="font-bold text-slate-900 dark:text-white flex items-center gap-1">
+                        <Lock className="w-3.5 h-3.5 text-rose-500" />
+                        <span>বেতন গোপন রাখুন</span>
+                      </div>
+                      <p className="text-[10px] text-slate-500">কর্মী নিজের একাউন্টে নিজের বেতন ও পে-স্লিপ দেখতে পাবেন না</p>
+                    </div>
+                  </label>
+                </div>
+
+                {/* Biometric & Attendance Exceptions */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+                  <label className="flex items-start gap-2 p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 cursor-pointer hover:border-teal-400 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={editIsAttendanceExempt}
+                      onChange={(e) => setEditIsAttendanceExempt(e.target.checked)}
+                      className="mt-0.5 rounded text-teal-600 focus:ring-teal-500"
+                    />
+                    <div>
+                      <div className="font-bold text-slate-900 dark:text-white flex items-center gap-1">
+                        <ShieldCheck className="w-3.5 h-3.5 text-teal-600" />
+                        <span>হাজিরা অব্যাহতি (Exempt from Attendance)</span>
+                      </div>
+                      <p className="text-[10px] text-slate-500">দেরি বা অনুপস্থিতির জরিমানা প্রযোজ্য হবে না (CEO/পরিচালক)</p>
+                    </div>
+                  </label>
+
+                  <label className="flex items-start gap-2 p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 cursor-pointer hover:border-blue-400 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={editFaceVerified}
+                      onChange={(e) => setEditFaceVerified(e.target.checked)}
+                      className="mt-0.5 rounded text-blue-600 focus:ring-blue-500"
+                    />
+                    <div>
+                      <div className="font-bold text-slate-900 dark:text-white flex items-center gap-1">
+                        <ScanFace className="w-3.5 h-3.5 text-blue-600" />
+                        <span>বায়োমেট্রিক ফেস ভেরিফায়েড</span>
+                      </div>
+                      <p className="text-[10px] text-slate-500">ফেস ডাটা আগেই অনুমোদিত বলে গণ্য হবে</p>
+                    </div>
+                  </label>
+                </div>
+
+                {/* Allowed Tabs & Navigation Permissions */}
+                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="font-bold text-slate-900 dark:text-white text-xs flex items-center gap-1.5">
+                        <LayoutDashboard className="w-3.5 h-3.5 text-teal-600" />
+                        দৃশ্যমান মেনু ও অ্যাক্সেস কন্ট্রোল (Allowed Navigation Tabs)
+                      </span>
+                      <p className="text-[10px] text-slate-500">কর্মী সিস্টেমে লগইন করার পর কোন কোন মেনু দেখতে ও ব্যবহার করতে পারবেন</p>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setEditAllowedTabs(APP_TAB_OPTIONS.map((t) => t.id))}
+                        className="text-[10px] font-bold px-2 py-0.5 rounded bg-teal-500/10 text-teal-700 dark:text-teal-300 hover:bg-teal-500/20 cursor-pointer"
+                      >
+                        সব মেনু
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEditAllowedTabs(DEFAULT_EMPLOYEE_ALLOWED_TABS)}
+                        className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-700 cursor-pointer"
+                      >
+                        সাধারণ কর্মী
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEditAllowedTabs(["SELF_SERVICE"])}
+                        className="text-[10px] font-bold px-2 py-0.5 rounded bg-purple-500/10 text-purple-700 dark:text-purple-300 hover:bg-purple-500/20 cursor-pointer"
+                      >
+                        সেলফ সার্ভিস অনলি
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-1.5 max-h-44 overflow-y-auto p-1 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800">
+                    {APP_TAB_OPTIONS.map((tab) => {
+                      const isChecked = editAllowedTabs.includes(tab.id);
+                      return (
+                        <label
+                          key={tab.id}
+                          className={`flex items-center gap-1.5 p-1.5 rounded text-[11px] cursor-pointer transition-colors ${
+                            isChecked
+                              ? "bg-teal-50 dark:bg-teal-950/40 text-teal-800 dark:text-teal-200 font-medium"
+                              : "hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400"
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setEditAllowedTabs([...editAllowedTabs, tab.id]);
+                              } else {
+                                setEditAllowedTabs(editAllowedTabs.filter((id) => id !== tab.id));
+                              }
+                            }}
+                            className="rounded text-teal-600 focus:ring-teal-500 w-3.5 h-3.5"
+                          />
+                          <span className="truncate">{tab.labelBn}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
               <div className="flex justify-end gap-3 pt-3 border-t border-slate-200 dark:border-slate-800">
                 <button
                   type="button"
@@ -1619,6 +2564,447 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Super Admin Quick Reset & Permissions */}
+      {quickResetEmployee && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl p-6 w-full max-w-lg text-slate-900 dark:text-slate-100 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-amber-500/15 text-amber-600 dark:text-amber-400">
+                  <KeyRound className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                    আইডি, পাসওয়ার্ড ও অ্যাক্সেস নিয়ন্ত্রণ
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    {quickResetEmployee.fullName} ({quickResetEmployee.employeeCode})
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setQuickResetEmployee(null)}
+                className="p-2 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3.5 text-xs">
+              <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/40 text-amber-800 dark:text-amber-300 space-y-1">
+                <p className="font-bold flex items-center gap-1.5">
+                  <Shield className="w-3.5 h-3.5" /> সুপার অ্যাডমিন কন্ট্রোল প্যানেল
+                </p>
+                <p className="text-[11px] leading-relaxed">
+                  সুপার অ্যাডমিন হিসেবে আপনি যেকোনো কর্মীর ইউজার আইডি, পাসওয়ার্ড এবং অ্যাক্সেস পারমিশন অবিলম্বে পরিবর্তন বা রিসেট করতে পারেন।
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-slate-600 dark:text-slate-400 mb-1 font-semibold">
+                  ইউজার আইডি / ইউজারনেম (Login User ID)
+                </label>
+                <input
+                  type="text"
+                  value={quickResetUsername}
+                  onChange={(e) => setQuickResetUsername(e.target.value)}
+                  placeholder="username"
+                  className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white font-mono"
+                />
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-slate-600 dark:text-slate-400 font-semibold">
+                    নতুন পাসওয়ার্ড (Account Password)
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setQuickResetPassword("123456")}
+                    className="text-[11px] text-amber-600 dark:text-amber-400 hover:underline flex items-center gap-1 font-bold cursor-pointer"
+                  >
+                    <RotateCcw className="w-3 h-3" /> ডিফল্ট (123456) এ রিসেট
+                  </button>
+                </div>
+                <div className="relative">
+                  <input
+                    type={showQuickResetPassword ? "text" : "password"}
+                    value={quickResetPassword}
+                    onChange={(e) => setQuickResetPassword(e.target.value)}
+                    placeholder="পাসওয়ার্ড লিখুন..."
+                    className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 pr-10 text-slate-900 dark:text-white font-mono font-semibold"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowQuickResetPassword(!showQuickResetPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                  >
+                    {showQuickResetPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+                <p className="text-[10px] text-slate-400 mt-1">
+                  কর্মী তার নিজের প্রোফাইল থেকে পরবর্তীতে এই পাসওয়ার্ড পরিবর্তন করতে পারবেন।
+                </p>
+              </div>
+
+              <div className="space-y-2 pt-1 border-t border-slate-200 dark:border-slate-800">
+                <label className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 cursor-pointer">
+                  <div className="flex items-center gap-2">
+                    <Shield className="w-4 h-4 text-purple-600" />
+                    <div>
+                      <div className="font-bold text-slate-900 dark:text-white">সুপার অ্যাডমিন ক্ষমতা (Super Admin)</div>
+                      <div className="text-[10px] text-slate-500">প্রতিষ্ঠানের সকল ডেটা ও সিস্টেমের পূর্ণ নিয়ন্ত্রণ</div>
+                    </div>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={quickResetIsSuperAdmin}
+                    onChange={(e) => setQuickResetIsSuperAdmin(e.target.checked)}
+                    className="rounded text-purple-600 focus:ring-purple-500 cursor-pointer w-4 h-4"
+                  />
+                </label>
+
+                <label className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 cursor-pointer">
+                  <div className="flex items-center gap-2">
+                    <Crown className="w-4 h-4 text-amber-600" />
+                    <div>
+                      <div className="font-bold text-slate-900 dark:text-white">প্রতিষ্ঠান প্রধান / CEO (Executive Head)</div>
+                      <div className="text-[10px] text-slate-500">প্রতিষ্ঠানের প্রধান হিসেবে পরিচিতি ও ক্ষমতা</div>
+                    </div>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={quickResetIsCeoOrOwner}
+                    onChange={(e) => setQuickResetIsCeoOrOwner(e.target.checked)}
+                    className="rounded text-amber-600 focus:ring-amber-500 cursor-pointer w-4 h-4"
+                  />
+                </label>
+
+                <label className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 cursor-pointer">
+                  <div className="flex items-center gap-2">
+                    <Lock className="w-4 h-4 text-rose-500" />
+                    <div>
+                      <div className="font-bold text-slate-900 dark:text-white">বেতন বিবরণ কর্মীর থেকে গোপন রাখুন</div>
+                      <div className="text-[10px] text-slate-500">কর্মী তার সেলফ সার্ভিসে কোনো বেতন বা পে-স্লিপ দেখতে পাবেন না</div>
+                    </div>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={quickResetHideSalary}
+                    onChange={(e) => setQuickResetHideSalary(e.target.checked)}
+                    className="rounded text-rose-600 focus:ring-rose-500 cursor-pointer w-4 h-4"
+                  />
+                </label>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 pt-3 border-t border-slate-200 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={() => setQuickResetEmployee(null)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl font-bold cursor-pointer transition-colors text-xs"
+              >
+                বাতিল করুন
+              </button>
+              <button
+                type="button"
+                onClick={handleQuickResetSave}
+                className="px-5 py-2 bg-gradient-to-r from-amber-600 to-teal-600 text-white rounded-xl font-bold shadow-lg shadow-amber-500/20 cursor-pointer text-xs transition-opacity hover:opacity-95"
+              >
+                পরিবর্তন সংরক্ষণ করুন
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Inline Add / Edit Department */}
+      {inlineDeptModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 w-full max-w-md text-slate-900 dark:text-slate-100 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
+              <div className="flex items-center gap-2">
+                <Building2 className="w-5 h-5 text-teal-600 dark:text-teal-400" />
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                  {inlineDeptModal.mode === "add" ? "নতুন বিভাগ যুক্ত করুন" : "বিভাগ সম্পাদনা করুন"}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setInlineDeptModal(null)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveInlineDept} className="space-y-3 text-xs">
+              <div>
+                <label className="block text-slate-600 dark:text-slate-400 mb-1 font-semibold">
+                  বিভাগের নাম (Department Name) *
+                </label>
+                <input
+                  type="text"
+                  value={inlineDeptName}
+                  onChange={(e) => setInlineDeptName(e.target.value)}
+                  placeholder="যেমন: Human Resources & Culture"
+                  className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white text-xs font-medium"
+                  required
+                  autoFocus
+                />
+              </div>
+              <div>
+                <label className="block text-slate-600 dark:text-slate-400 mb-1 font-semibold">
+                  বিভাগ কোড (Department Code) *
+                </label>
+                <input
+                  type="text"
+                  value={inlineDeptCode}
+                  onChange={(e) => setInlineDeptCode(e.target.value)}
+                  placeholder="D1"
+                  className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white text-xs font-mono uppercase"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-slate-600 dark:text-slate-400 mb-1 font-semibold">
+                  বার্ষিক বাজেট (Allocated Budget ৳)
+                </label>
+                <input
+                  type="number"
+                  value={inlineDeptBudget}
+                  onChange={(e) => setInlineDeptBudget(Number(e.target.value))}
+                  className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white text-xs font-mono"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2.5 pt-2 border-t border-slate-200 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setInlineDeptModal(null)}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl font-bold cursor-pointer text-xs"
+                >
+                  বাতিল
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 bg-teal-600 hover:bg-teal-500 text-white rounded-xl font-bold shadow-lg shadow-teal-500/20 cursor-pointer text-xs"
+                >
+                  সংরক্ষণ করুন
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Inline Add / Edit Designation */}
+      {inlineDesigModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 w-full max-w-md text-slate-900 dark:text-slate-100 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
+              <div className="flex items-center gap-2">
+                <Briefcase className="w-5 h-5 text-teal-600 dark:text-teal-400" />
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                  {inlineDesigModal.mode === "add" ? "নতুন পদবি যুক্ত করুন" : "পদবি সম্পাদনা করুন"}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setInlineDesigModal(null)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveInlineDesig} className="space-y-3 text-xs">
+              <div>
+                <label className="block text-slate-600 dark:text-slate-400 mb-1 font-semibold">
+                  পদবির নাম / টাইটেল (Designation Title) *
+                </label>
+                <input
+                  type="text"
+                  value={inlineDesigTitle}
+                  onChange={(e) => setInlineDesigTitle(e.target.value)}
+                  placeholder="যেমন: Senior Software Engineer"
+                  className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white text-xs font-medium"
+                  required
+                  autoFocus
+                />
+              </div>
+              <div>
+                <label className="block text-slate-600 dark:text-slate-400 mb-1 font-semibold">
+                  পদবি কোড (Designation Code) *
+                </label>
+                <input
+                  type="text"
+                  value={inlineDesigCode}
+                  onChange={(e) => setInlineDesigCode(e.target.value)}
+                  placeholder="DSG-1"
+                  className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white text-xs font-mono uppercase"
+                  required
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-2.5">
+                <div>
+                  <label className="block text-slate-600 dark:text-slate-400 mb-1 font-semibold">
+                    সর্বনিম্ন বেতন (৳)
+                  </label>
+                  <input
+                    type="number"
+                    value={inlineDesigMinSal}
+                    onChange={(e) => setInlineDesigMinSal(Number(e.target.value))}
+                    className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2 text-slate-900 dark:text-white text-xs font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-600 dark:text-slate-400 mb-1 font-semibold">
+                    সর্বোচ্চ বেতন (৳)
+                  </label>
+                  <input
+                    type="number"
+                    value={inlineDesigMaxSal}
+                    onChange={(e) => setInlineDesigMaxSal(Number(e.target.value))}
+                    className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2 text-slate-900 dark:text-white text-xs font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2.5 pt-2 border-t border-slate-200 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setInlineDesigModal(null)}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl font-bold cursor-pointer text-xs"
+                >
+                  বাতিল
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 bg-teal-600 hover:bg-teal-500 text-white rounded-xl font-bold shadow-lg shadow-teal-500/20 cursor-pointer text-xs"
+                >
+                  সংরক্ষণ করুন
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Delete Department Confirmation */}
+      {inlineDeleteDeptTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl p-6 w-full max-w-md text-slate-900 dark:text-slate-100 shadow-2xl space-y-4">
+            <div className="flex items-center gap-3 text-rose-600">
+              <div className="p-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-900">
+                <AlertTriangle className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">বিভাগ মুছে ফেলার নিশ্চিতকরণ</h3>
+                <p className="text-xs text-slate-500">এই অ্যাকশনটি স্থায়ী</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+              আপনি কি নিশ্চিত যে <strong>"{inlineDeleteDeptTarget.name}" ({inlineDeleteDeptTarget.code})</strong> বিভাগটি মুছে ফেলতে চান?
+            </p>
+
+            <div className="flex justify-end gap-2.5 pt-3 border-t border-slate-200 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={() => setInlineDeleteDeptTarget(null)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl font-bold cursor-pointer text-xs"
+              >
+                বাতিল
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeleteInlineDept}
+                className="px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-bold shadow-lg shadow-rose-600/20 cursor-pointer text-xs"
+              >
+                মুছে ফেলুন
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Delete Designation Confirmation */}
+      {inlineDeleteDesigTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl p-6 w-full max-w-md text-slate-900 dark:text-slate-100 shadow-2xl space-y-4">
+            <div className="flex items-center gap-3 text-rose-600">
+              <div className="p-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-900">
+                <AlertTriangle className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">পদবি মুছে ফেলার নিশ্চিতকরণ</h3>
+                <p className="text-xs text-slate-500">এই অ্যাকশনটি স্থায়ী</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+              আপনি কি নিশ্চিত যে <strong>"{inlineDeleteDesigTarget.title}" ({inlineDeleteDesigTarget.code})</strong> পদবিটি মুছে ফেলতে চান?
+            </p>
+
+            <div className="flex justify-end gap-2.5 pt-3 border-t border-slate-200 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={() => setInlineDeleteDesigTarget(null)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl font-bold cursor-pointer text-xs"
+              >
+                বাতিল
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeleteInlineDesig}
+                className="px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-bold shadow-lg shadow-rose-600/20 cursor-pointer text-xs"
+              >
+                মুছে ফেলুন
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Delete Employee Confirmation (No window.confirm!) */}
+      {employeeToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl p-6 w-full max-w-md text-slate-900 dark:text-slate-100 shadow-2xl space-y-4">
+            <div className="flex items-center gap-3 text-rose-600">
+              <div className="p-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-900">
+                <AlertTriangle className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">কর্মী মুছে ফেলার নিশ্চিতকরণ</h3>
+                <p className="text-xs text-slate-500">ডাটাবেস ও সিস্টেম থেকে প্রোফাইল অপসারণ</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+              আপনি কি নিশ্চিত যে কর্মী <strong>"{employeeToDelete.fullName}" ({employeeToDelete.employeeCode})</strong>-কে সিস্টেম থেকে স্থায়ীভাবে মুছে ফেলতে চান?
+            </p>
+
+            <div className="flex justify-end gap-2.5 pt-3 border-t border-slate-200 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={() => setEmployeeToDelete(null)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl font-bold cursor-pointer text-xs"
+              >
+                বাতিল করুন
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeleteEmployee}
+                className="px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-bold shadow-lg shadow-rose-600/20 cursor-pointer text-xs"
+              >
+                হ্যাঁ, মুছে ফেলুন
+              </button>
+            </div>
           </div>
         </div>
       )}

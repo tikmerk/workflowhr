@@ -20,7 +20,8 @@ import {
   X,
   TrendingUp,
   Award,
-  DollarSign
+  DollarSign,
+  AlertTriangle,
 } from "lucide-react";
 import { Department, Designation, Employee } from "../../types";
 import { useThemeLanguage } from "../../context/ThemeLanguageContext";
@@ -37,6 +38,7 @@ interface DepartmentsDesignationsViewProps {
   onDeleteDesignation?: (id: string) => void;
   onViewEmployee?: (emp: Employee) => void;
   onEditEmployee?: (emp: Employee) => void;
+  onUpdateEmployee?: (emp: Employee) => void;
 }
 
 export const DepartmentsDesignationsView: React.FC<DepartmentsDesignationsViewProps> = ({
@@ -51,6 +53,7 @@ export const DepartmentsDesignationsView: React.FC<DepartmentsDesignationsViewPr
   onDeleteDesignation,
   onViewEmployee,
   onEditEmployee,
+  onUpdateEmployee,
 }) => {
   const { isBangla } = useThemeLanguage();
 
@@ -100,29 +103,31 @@ export const DepartmentsDesignationsView: React.FC<DepartmentsDesignationsViewPr
   const [editDesigMaxSal, setEditDesigMaxSal] = useState(120000);
   const [editDesigDesc, setEditDesigDesc] = useState("");
 
+  // In-App Safe Deletion Confirmation states (No window.confirm to avoid iframe blocks)
+  const [deptToDelete, setDeptToDelete] = useState<Department | null>(null);
+  const [desigToDelete, setDesigToDelete] = useState<Designation | null>(null);
+
   // Department helper: get members for any department
   const getDeptEmployees = (dept: Department) => {
     return employees.filter((e) => {
       const matchId = e.departmentId === dept.id;
-      const matchName = e.departmentName === dept.name;
-      const matchFuzzy =
-        Boolean(e.departmentName && dept.name) &&
-        (e.departmentName.toLowerCase().includes(dept.name.toLowerCase()) ||
-          dept.name.toLowerCase().includes(e.departmentName.toLowerCase()));
+      const matchName =
+        Boolean(dept.name && e.departmentName) &&
+        e.departmentName.trim().toLowerCase() === dept.name.trim().toLowerCase();
       const matchCode =
         Boolean(dept.code) &&
-        (e.departmentId?.toUpperCase() === dept.code.toUpperCase() ||
-          e.departmentName?.toUpperCase() === dept.code.toUpperCase());
+        ((e.departmentId && e.departmentId.trim().toUpperCase() === dept.code.trim().toUpperCase()) ||
+          (e.departmentName && e.departmentName.trim().toUpperCase() === dept.code.trim().toUpperCase()));
       const matchAdditional = Boolean(
         e.additionalDepartments &&
-        e.additionalDepartments.some((ad) =>
-          ad.toLowerCase().includes(dept.name.toLowerCase()) ||
-          dept.name.toLowerCase().includes(ad.toLowerCase()) ||
-          (dept.code && ad.toUpperCase().includes(dept.code.toUpperCase()))
+        e.additionalDepartments.some(
+          (ad) =>
+            ad.trim().toLowerCase() === dept.name.trim().toLowerCase() ||
+            (dept.code && ad.trim().toUpperCase() === dept.code.trim().toUpperCase())
         )
       );
 
-      return matchId || matchName || matchFuzzy || matchCode || matchAdditional;
+      return matchId || matchName || matchCode || matchAdditional;
     });
   };
 
@@ -130,23 +135,22 @@ export const DepartmentsDesignationsView: React.FC<DepartmentsDesignationsViewPr
   const getDesigEmployees = (desig: Designation) => {
     return employees.filter((e) => {
       const matchId = e.designationId === desig.id;
-      const matchTitle = e.designationTitle?.toLowerCase() === desig.title.toLowerCase();
-      const matchPartial =
-        Boolean(e.designationTitle && desig.title) &&
-        (e.designationTitle.toLowerCase().includes(desig.title.toLowerCase()) ||
-          desig.title.toLowerCase().includes(e.designationTitle.toLowerCase()));
+      const matchTitle =
+        Boolean(desig.title && e.designationTitle) &&
+        e.designationTitle.trim().toLowerCase() === desig.title.trim().toLowerCase();
       const matchCode =
-        Boolean(desig.code) && e.designationId?.toUpperCase() === desig.code.toUpperCase();
+        Boolean(desig.code) &&
+        Boolean(e.designationId && e.designationId.trim().toUpperCase() === desig.code.trim().toUpperCase());
       const matchAdditional = Boolean(
         e.additionalDesignations &&
-        e.additionalDesignations.some((ades) =>
-          ades.toLowerCase().includes(desig.title.toLowerCase()) ||
-          desig.title.toLowerCase().includes(ades.toLowerCase()) ||
-          (desig.code && ades.toUpperCase().includes(desig.code.toUpperCase()))
+        e.additionalDesignations.some(
+          (ades) =>
+            ades.trim().toLowerCase() === desig.title.trim().toLowerCase() ||
+            (desig.code && ades.trim().toUpperCase() === desig.code.trim().toUpperCase())
         )
       );
 
-      return matchId || matchTitle || matchPartial || matchCode || matchAdditional;
+      return matchId || matchTitle || matchCode || matchAdditional;
     });
   };
 
@@ -234,23 +238,16 @@ export const DepartmentsDesignationsView: React.FC<DepartmentsDesignationsViewPr
     setEditingDept(null);
   };
 
-  // Handle Delete Department with confirmation
+  // Handle Delete Department with in-app confirmation modal
   const handleDeleteDept = (dept: Department) => {
-    const assignedCount = getDeptEmployees(dept).length;
-    const msg =
-      assignedCount > 0
-        ? isBangla
-          ? `সতর্কতা: "${dept.name}" ডিপার্টমেন্টে ${assignedCount} জন কর্মকর্তা-কর্মচারী নিযুক্ত আছেন। আপনি কি ডিপার্টমেন্টটি মুছে ফেলতে চান?`
-          : `Warning: ${assignedCount} employees are assigned to "${dept.name}". Are you sure you want to delete this department?`
-        : isBangla
-          ? `আপনি কি "${dept.name}" ডিপার্টমেন্টটি মুছে ফেলতে চান?`
-          : `Are you sure you want to delete department "${dept.name}"?`;
+    setDeptToDelete(dept);
+  };
 
-    if (window.confirm(msg)) {
-      if (onDeleteDepartment) {
-        onDeleteDepartment(dept.id);
-      }
+  const confirmDeleteDept = () => {
+    if (deptToDelete && onDeleteDepartment) {
+      onDeleteDepartment(deptToDelete.id);
     }
+    setDeptToDelete(null);
   };
 
   // Handle Add Designation
@@ -313,23 +310,16 @@ export const DepartmentsDesignationsView: React.FC<DepartmentsDesignationsViewPr
     setEditingDesig(null);
   };
 
-  // Handle Delete Designation with confirmation
+  // Handle Delete Designation with in-app confirmation modal
   const handleDeleteDesig = (desig: Designation) => {
-    const assignedCount = getDesigEmployees(desig).length;
-    const msg =
-      assignedCount > 0
-        ? isBangla
-          ? `সতর্কতা: "${desig.title}" পদবিতে ${assignedCount} জন কর্মকর্তা কর্মরত আছেন। আপনি কি পদবিটি মুছে ফেলতে চান?`
-          : `Warning: ${assignedCount} employees hold the "${desig.title}" designation. Are you sure you want to delete it?`
-        : isBangla
-          ? `আপনি কি "${desig.title}" পদবিটি মুছে ফেলতে চান?`
-          : `Are you sure you want to delete designation "${desig.title}"?`;
+    setDesigToDelete(desig);
+  };
 
-    if (window.confirm(msg)) {
-      if (onDeleteDesignation) {
-        onDeleteDesignation(desig.id);
-      }
+  const confirmDeleteDesig = () => {
+    if (desigToDelete && onDeleteDesignation) {
+      onDeleteDesignation(desigToDelete.id);
     }
+    setDesigToDelete(null);
   };
 
   return (
@@ -719,11 +709,26 @@ export const DepartmentsDesignationsView: React.FC<DepartmentsDesignationsViewPr
                         className="w-11 h-11 rounded-xl object-cover border border-slate-200 dark:border-slate-700"
                       />
                       <div>
-                        <div className="font-bold text-slate-900 dark:text-white text-xs sm:text-sm flex items-center gap-1.5">
+                        <div className="font-bold text-slate-900 dark:text-white text-xs sm:text-sm flex items-center flex-wrap gap-1.5">
                           <span>{emp.fullName}</span>
                           <span className="font-mono text-[10px] text-slate-400 dark:text-slate-500 font-normal">
                             ({emp.employeeCode})
                           </span>
+                          {emp.isSuperAdmin && (
+                            <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-purple-500/20 text-purple-700 dark:text-purple-300">
+                              {isBangla ? "সুপার অ্যাডমিন" : "Super Admin"}
+                            </span>
+                          )}
+                          {emp.isCeoOrOwner && (
+                            <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-amber-500/20 text-amber-700 dark:text-amber-300">
+                              {isBangla ? "সিইও / প্রধান" : "CEO"}
+                            </span>
+                          )}
+                          {emp.hideSalaryFromSelf && (
+                            <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-slate-500/20 text-slate-600 dark:text-slate-400">
+                              {isBangla ? "বেতন গোপন" : "Salary Hidden"}
+                            </span>
+                          )}
                         </div>
                         <div className="text-xs text-teal-700 dark:text-teal-400 font-semibold">
                           {emp.designationTitle}
@@ -841,11 +846,26 @@ export const DepartmentsDesignationsView: React.FC<DepartmentsDesignationsViewPr
                         className="w-11 h-11 rounded-xl object-cover border border-slate-200 dark:border-slate-700"
                       />
                       <div>
-                        <div className="font-bold text-slate-900 dark:text-white text-xs sm:text-sm flex items-center gap-1.5">
+                        <div className="font-bold text-slate-900 dark:text-white text-xs sm:text-sm flex items-center flex-wrap gap-1.5">
                           <span>{emp.fullName}</span>
                           <span className="font-mono text-[10px] text-slate-400 dark:text-slate-500 font-normal">
                             ({emp.employeeCode})
                           </span>
+                          {emp.isSuperAdmin && (
+                            <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-purple-500/20 text-purple-700 dark:text-purple-300">
+                              {isBangla ? "সুপার অ্যাডমিন" : "Super Admin"}
+                            </span>
+                          )}
+                          {emp.isCeoOrOwner && (
+                            <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-amber-500/20 text-amber-700 dark:text-amber-300">
+                              {isBangla ? "সিইও / প্রধান" : "CEO"}
+                            </span>
+                          )}
+                          {emp.hideSalaryFromSelf && (
+                            <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-slate-500/20 text-slate-600 dark:text-slate-400">
+                              {isBangla ? "বেতন গোপন" : "Salary Hidden"}
+                            </span>
+                          )}
                         </div>
                         <div className="text-xs text-teal-700 dark:text-teal-400 font-semibold">
                           {emp.branchName || "Main Campus"} • {emp.departmentName}
@@ -1305,6 +1325,120 @@ export const DepartmentsDesignationsView: React.FC<DepartmentsDesignationsViewPr
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Custom Confirmation Modal for Deleting Department */}
+      {deptToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 animate-in zoom-in-95">
+            <div className="w-12 h-12 rounded-xl bg-rose-500/15 text-rose-600 dark:text-rose-400 flex items-center justify-center mx-auto">
+              <AlertTriangle className="w-6 h-6" />
+            </div>
+
+            <div className="text-center space-y-1">
+              <h3 className="text-lg font-bold text-slate-900 dark:text-white">
+                {isBangla ? "ডিপার্টমেন্ট মুছে ফেলার নিশ্চিতকরণ" : "Delete Department Confirmation"}
+              </h3>
+              <p className="text-sm font-semibold text-rose-600 dark:text-rose-400">
+                "{deptToDelete.name}" ({deptToDelete.code})
+              </p>
+            </div>
+
+            {getDeptEmployees(deptToDelete).length > 0 ? (
+              <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-800 dark:text-amber-200">
+                <p className="font-bold flex items-center gap-1.5 mb-1">
+                  <span>⚠️ সতর্কতা:</span>
+                </p>
+                <p>
+                  {isBangla
+                    ? `এই ডিপার্টমেন্টে বর্তমানে ${getDeptEmployees(deptToDelete).length} জন কর্মকর্তা-কর্মচারী নিযুক্ত আছেন। মুছে ফেললে তাদের বিভাগীয় অ্যাসাইনমেন্ট আনঅ্যাসাইনড হয়ে যাবে।`
+                    : `Currently ${getDeptEmployees(deptToDelete).length} employee(s) are assigned to this department.`}
+                </p>
+              </div>
+            ) : (
+              <p className="text-xs text-slate-500 dark:text-slate-400 text-center">
+                {isBangla
+                  ? "আপনি কি নিশ্চিত যে আপনি এই ডিপার্টমেন্টটি চিরতরে মুছে ফেলতে চান?"
+                  : "Are you sure you want to permanently delete this department?"}
+              </p>
+            )}
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setDeptToDelete(null)}
+                className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-bold transition cursor-pointer"
+              >
+                {isBangla ? "বাতিল" : "Cancel"}
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeleteDept}
+                className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition cursor-pointer shadow-sm flex items-center gap-1.5"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>{isBangla ? "হ্যাঁ, মুছে ফেলুন" : "Yes, Delete"}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Custom Confirmation Modal for Deleting Designation */}
+      {desigToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 animate-in zoom-in-95">
+            <div className="w-12 h-12 rounded-xl bg-rose-500/15 text-rose-600 dark:text-rose-400 flex items-center justify-center mx-auto">
+              <AlertTriangle className="w-6 h-6" />
+            </div>
+
+            <div className="text-center space-y-1">
+              <h3 className="text-lg font-bold text-slate-900 dark:text-white">
+                {isBangla ? "পদবি মুছে ফেলার নিশ্চিতকরণ" : "Delete Designation Confirmation"}
+              </h3>
+              <p className="text-sm font-semibold text-rose-600 dark:text-rose-400">
+                "{desigToDelete.title}" ({desigToDelete.code})
+              </p>
+            </div>
+
+            {getDesigEmployees(desigToDelete).length > 0 ? (
+              <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-800 dark:text-amber-200">
+                <p className="font-bold flex items-center gap-1.5 mb-1">
+                  <span>⚠️ সতর্কতা:</span>
+                </p>
+                <p>
+                  {isBangla
+                    ? `এই পদবিতে বর্তমানে ${getDesigEmployees(desigToDelete).length} জন কর্মকর্তা নিয়োজিত আছেন। মুছে ফেললে তাদের পদবি মুছে যাবে।`
+                    : `Currently ${getDesigEmployees(desigToDelete).length} employee(s) hold this designation.`}
+                </p>
+              </div>
+            ) : (
+              <p className="text-xs text-slate-500 dark:text-slate-400 text-center">
+                {isBangla
+                  ? "আপনি কি নিশ্চিত যে আপনি এই পদবিটি চিরতরে মুছে ফেলতে চান?"
+                  : "Are you sure you want to permanently delete this designation?"}
+              </p>
+            )}
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setDesigToDelete(null)}
+                className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-bold transition cursor-pointer"
+              >
+                {isBangla ? "বাতিল" : "Cancel"}
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeleteDesig}
+                className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition cursor-pointer shadow-sm flex items-center gap-1.5"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>{isBangla ? "হ্যাঁ, মুছে ফেলুন" : "Yes, Delete"}</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

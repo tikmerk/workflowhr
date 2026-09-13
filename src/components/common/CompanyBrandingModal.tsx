@@ -16,12 +16,20 @@ import {
   FileText,
   Users,
   ToggleLeft,
-  ToggleRight
+  ToggleRight,
+  Lock,
+  Shield,
+  KeyRound,
 } from "lucide-react";
+import { Employee } from "../../types";
 import { useCompanyBranding } from "../../context/CompanyBrandingContext";
 import { useThemeLanguage } from "../../context/ThemeLanguageContext";
 
-export const CompanyBrandingModal: React.FC = () => {
+interface CompanyBrandingModalProps {
+  currentUser?: Employee;
+}
+
+export const CompanyBrandingModal: React.FC<CompanyBrandingModalProps> = ({ currentUser }) => {
   const {
     branding,
     updateBranding,
@@ -48,7 +56,21 @@ export const CompanyBrandingModal: React.FC = () => {
   const [email, setEmail] = useState(branding.email);
   const [website, setWebsite] = useState(branding.website);
   const [regNo, setRegNo] = useState(branding.registrationNumber || "");
+  const [employeeIdPrefix, setEmployeeIdPrefix] = useState(branding.employeeIdPrefix || "MWO");
   const [savedSuccess, setSavedSuccess] = useState(false);
+
+  // Role check: Only core Platform Super Admin can toggle Demo Mode
+  // CEO/Owner is restricted from toggling Demo Mode
+  const isCeoOrOwner = Boolean(
+    currentUser?.isCeoOrOwner ||
+    currentUser?.role === "CEO" ||
+    currentUser?.designationTitle?.toLowerCase().includes("ceo") ||
+    currentUser?.designationTitle?.toLowerCase().includes("chief executive")
+  );
+
+  const canToggleDemoMode = Boolean(
+    (currentUser?.role === "SUPER_ADMIN" || currentUser?.isSuperAdmin) && !isCeoOrOwner
+  );
 
   // Sync if modal opens with fresh data
   React.useEffect(() => {
@@ -64,6 +86,7 @@ export const CompanyBrandingModal: React.FC = () => {
       setEmail(branding.email);
       setWebsite(branding.website);
       setRegNo(branding.registrationNumber || "");
+      setEmployeeIdPrefix(branding.employeeIdPrefix || "MWO");
       setSavedSuccess(false);
     }
   }, [isBrandingModalOpen, branding]);
@@ -109,6 +132,7 @@ export const CompanyBrandingModal: React.FC = () => {
       email,
       website,
       registrationNumber: regNo,
+      employeeIdPrefix: employeeIdPrefix.trim().toUpperCase() || "MWO",
     });
     setSavedSuccess(true);
     setTimeout(() => {
@@ -389,44 +413,95 @@ export const CompanyBrandingModal: React.FC = () => {
                 className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white focus:outline-none focus:border-teal-500"
               />
             </div>
+
+            {/* Employee ID Prefix Configuration */}
+            <div>
+              <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase mb-1 flex items-center gap-1">
+                <Sparkles className="w-3.5 h-3.5 text-purple-500" />
+                <span>{t("কর্মচারী আইডি প্রিফিক্স (Employee ID Prefix)", "Employee ID Prefix (e.g. MWO)")}</span>
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={employeeIdPrefix}
+                  onChange={(e) => setEmployeeIdPrefix(e.target.value.toUpperCase())}
+                  placeholder="MWO"
+                  maxLength={10}
+                  className="w-32 px-3 py-2 text-xs font-mono font-bold uppercase rounded-xl bg-slate-50 dark:bg-slate-950 border border-purple-300 dark:border-purple-800 text-purple-700 dark:text-purple-300 focus:outline-none focus:border-purple-500"
+                />
+                <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                  {t(
+                    `নতুন কর্মীর আইডি হবে: ${employeeIdPrefix || "MWO"}-1001, ${employeeIdPrefix || "MWO"}-1002`,
+                    `New staff will get IDs: ${employeeIdPrefix || "MWO"}-1001, ${employeeIdPrefix || "MWO"}-1002...`
+                  )}
+                </span>
+              </div>
+            </div>
           </div>
 
-          {/* 5. Interactive Demo Mode Toggle (Super Admin Control) */}
-          <div className="p-3.5 rounded-xl bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <div className={`p-2 rounded-xl ${isDemoModeEnabled ? "bg-teal-500/20 text-teal-400" : "bg-slate-200 dark:bg-slate-800 text-slate-500"}`}>
+          {/* 5. Interactive Demo Mode Toggle (Super Admin Control Only) */}
+          <div className="p-3.5 rounded-xl bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-start gap-3">
+              <div className={`p-2 rounded-xl mt-0.5 ${isDemoModeEnabled ? "bg-teal-500/20 text-teal-400" : "bg-slate-200 dark:bg-slate-800 text-slate-500"}`}>
                 <Users className="w-5 h-5" />
               </div>
               <div>
-                <div className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <div className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-2 flex-wrap">
                   <span>{t("লগইন পেজে ডেমো মোড ও এক-ক্লিক টেস্ট এক্সেস", "Interactive Demo Mode on Login Page")}</span>
                   <span className={`px-1.5 py-0.2 rounded text-[10px] font-bold ${isDemoModeEnabled ? "bg-teal-500/20 text-teal-600 dark:text-teal-400" : "bg-slate-200 dark:bg-slate-800 text-slate-500"}`}>
                     {isDemoModeEnabled ? "ACTIVE" : "DISABLED"}
                   </span>
+                  {!canToggleDemoMode && (
+                    <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                      <Lock className="w-2.5 h-2.5" />
+                      {t("সুপার অ্যাডমিন লক", "Super Admin Locked")}
+                    </span>
+                  )}
                 </div>
                 <div className="text-[11px] text-slate-500 mt-0.5">
-                  {t("চালু থাকলে লগইন পেজে সরাসরি সিইও, এইচআর, অ্যাকাউন্টস বা স্টাফ রোল ঘুরে দেখার বাটন থাকবে। বন্ধ থাকলে সরাসরি আইডি ও পাসওয়ার্ড লাগবে।", "When ON, login page shows 1-click role presets for CEO, HR, Accounts and Staff to explore. When OFF, standard credentials required.")}
+                  {t(
+                    "চালু থাকলে লগইন পেজে সরাসরি সিইও, এইচআর, অ্যাকাউন্টস বা স্টাফ রোল ঘুরে দেখার বাটন থাকবে। বন্ধ থাকলে সরাসরি আইডি ও পাসওয়ার্ড লাগবে।",
+                    "When ON, login page shows 1-click role presets for CEO, HR, Accounts and Staff to explore. When OFF, standard credentials required."
+                  )}
                 </div>
+                {!canToggleDemoMode && (
+                  <div className="mt-1.5 text-[10.5px] font-medium text-amber-700 dark:text-amber-400 bg-amber-500/10 p-2 rounded-lg border border-amber-500/20 flex items-center gap-1.5">
+                    <Shield className="w-3.5 h-3.5 shrink-0 text-amber-500" />
+                    <span>
+                      {t(
+                        "ডেমো মোড নিয়ন্ত্রণ শুধুমাত্র মূল প্ল্যাটফর্ম সুপার অ্যাডমিনের জন্য সংরক্ষিত। সিইও/মালিক বা অন্য কোনো রোল থেকে এটি অন/অফ করা যাবে না।",
+                        "Demo Mode control is strictly reserved for the Platform Super Admin. CEO/Owner or other roles cannot toggle this setting."
+                      )}
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
 
-            <button
-              type="button"
-              onClick={() => setIsDemoModeEnabled(!isDemoModeEnabled)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 text-xs font-bold transition-all cursor-pointer shrink-0"
-            >
-              {isDemoModeEnabled ? (
-                <>
-                  <ToggleRight className="w-5 h-5 text-teal-500" />
-                  <span className="text-teal-600 dark:text-teal-400">{t("চালু", "ON")}</span>
-                </>
-              ) : (
-                <>
-                  <ToggleLeft className="w-5 h-5 text-slate-500" />
-                  <span className="text-slate-500">{t("বন্ধ", "OFF")}</span>
-                </>
-              )}
-            </button>
+            {canToggleDemoMode ? (
+              <button
+                type="button"
+                onClick={() => setIsDemoModeEnabled(!isDemoModeEnabled)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 text-xs font-bold transition-all cursor-pointer shrink-0"
+              >
+                {isDemoModeEnabled ? (
+                  <>
+                    <ToggleRight className="w-5 h-5 text-teal-500" />
+                    <span className="text-teal-600 dark:text-teal-400">{t("চালু", "ON")}</span>
+                  </>
+                ) : (
+                  <>
+                    <ToggleLeft className="w-5 h-5 text-slate-500" />
+                    <span className="text-slate-500">{t("বন্ধ", "OFF")}</span>
+                  </>
+                )}
+              </button>
+            ) : (
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-200 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-400 dark:text-slate-500 text-xs font-bold cursor-not-allowed shrink-0 select-none">
+                <Lock className="w-3.5 h-3.5" />
+                <span>{isDemoModeEnabled ? t("চালু (লকড)", "ON (Locked)") : t("বন্ধ (লকড)", "OFF (Locked)")}</span>
+              </div>
+            )}
           </div>
 
           {/* 6. Software Attribution Notice (White-Label Clarity) */}

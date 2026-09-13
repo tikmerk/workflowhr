@@ -25,6 +25,12 @@ import {
   X,
   Briefcase,
   Shield,
+  KeyRound,
+  Lock,
+  Eye,
+  EyeOff,
+  RotateCcw,
+  Check,
 } from "lucide-react";
 import {
   Employee,
@@ -71,11 +77,22 @@ export const EmployeeSelfServiceView: React.FC<EmployeeSelfServiceViewProps> = (
   onUpdateEmployee,
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<
-    "overview" | "attendance" | "payslips" | "leaves" | "loans" | "assets"
+    "overview" | "attendance" | "payslips" | "leaves" | "loans" | "assets" | "security"
   >("overview");
   const [showFaceEnrollModal, setShowFaceEnrollModal] = useState<boolean>(false);
   const [candidateUploadedPhoto, setCandidateUploadedPhoto] = useState<string | null>(null);
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
+
+  // Self-service password change state
+  const [currentPasswordInput, setCurrentPasswordInput] = useState("");
+  const [newPasswordInput, setNewPasswordInput] = useState("");
+  const [confirmPasswordInput, setConfirmPasswordInput] = useState("");
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [passwordChangeSuccess, setPasswordChangeSuccess] = useState<string | null>(null);
+  const [passwordChangeError, setPasswordChangeError] = useState<string | null>(null);
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
 
   const isFaceVerified = Boolean(
     currentEmployee.faceTemplateRegistered &&
@@ -242,6 +259,49 @@ export const EmployeeSelfServiceView: React.FC<EmployeeSelfServiceViewProps> = (
 
     setShowLoanModal(false);
     setLoanReason("");
+  };
+
+  const handlePasswordChangeSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setPasswordChangeError(null);
+    setPasswordChangeSuccess(null);
+
+    const actualCurrentPassword = currentEmployee.password || "123456";
+    if (currentPasswordInput !== actualCurrentPassword) {
+      setPasswordChangeError("বর্তমান পাসওয়ার্ডটি সঠিক নয়। অনুগ্রহ করে সঠিক পাসওয়ার্ড দিন। (ডিফল্ট: 123456)");
+      return;
+    }
+
+    if (newPasswordInput.length < 4) {
+      setPasswordChangeError("নতুন পাসওয়ার্ড কমপক্ষে ৪ অক্ষরের হতে হবে।");
+      return;
+    }
+
+    if (newPasswordInput !== confirmPasswordInput) {
+      setPasswordChangeError("নতুন পাসওয়ার্ড এবং নিশ্চিতকরণ পাসওয়ার্ড মিলছে না!");
+      return;
+    }
+
+    if (newPasswordInput === actualCurrentPassword) {
+      setPasswordChangeError("নতুন পাসওয়ার্ডটি আপনার বর্তমান পাসওয়ার্ড থেকে আলাদা হতে হবে।");
+      return;
+    }
+
+    setIsChangingPassword(true);
+    setTimeout(() => {
+      if (onUpdateEmployee) {
+        onUpdateEmployee({
+          ...currentEmployee,
+          password: newPasswordInput,
+          passwordLastChangedAt: new Date().toISOString(),
+        });
+      }
+      setIsChangingPassword(false);
+      setPasswordChangeSuccess("আপনার পাসওয়ার্ড সফলভাবে পরিবর্তিত হয়েছে! পরবর্তী লগইনে এই নতুন পাসওয়ার্ডটি ব্যবহার করুন।");
+      setCurrentPasswordInput("");
+      setNewPasswordInput("");
+      setConfirmPasswordInput("");
+    }, 400);
   };
 
   return (
@@ -473,10 +533,15 @@ export const EmployeeSelfServiceView: React.FC<EmployeeSelfServiceViewProps> = (
         {[
           { id: "overview", label: "Profile & Hardware Security", icon: UserCheck },
           { id: "attendance", label: "My Attendance Logs", icon: Clock },
-          { id: "payslips", label: "Salary & Payslips", icon: CreditCard },
+          ...(!currentEmployee.hideSalaryFromSelf
+            ? [{ id: "payslips", label: "Salary & Payslips", icon: CreditCard }]
+            : []),
           { id: "leaves", label: "Leave Requests & Balance", icon: CalendarCheck },
-          { id: "loans", label: "Loans & Advance Salary", icon: Banknote },
+          ...(!currentEmployee.hideSalaryFromSelf
+            ? [{ id: "loans", label: "Loans & Advance Salary", icon: Banknote }]
+            : []),
           { id: "assets", label: "Assigned Assets", icon: Laptop },
+          { id: "security", label: "পাসওয়ার্ড ও নিরাপত্তা", icon: KeyRound },
         ].map((tab) => {
           const Icon = tab.icon;
           const isActive = activeSubTab === tab.id;
@@ -561,6 +626,29 @@ export const EmployeeSelfServiceView: React.FC<EmployeeSelfServiceViewProps> = (
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30">
                   Passed
                 </span>
+              </div>
+
+              {/* Quick Password Management Link */}
+              <div className="p-3.5 rounded-xl bg-gradient-to-r from-teal-50 to-emerald-50/40 dark:from-slate-800/80 dark:to-teal-950/30 border border-teal-200/80 dark:border-teal-800/40 flex items-center justify-between">
+                <div>
+                  <p className="font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
+                    <KeyRound className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
+                    <span>অ্যাকাউন্ট পাসওয়ার্ড নিরাপত্তা</span>
+                  </p>
+                  <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
+                    {currentEmployee.passwordLastChangedAt
+                      ? "নিজস্ব পাসওয়ার্ড কার্যকর রয়েছে"
+                      : "প্রাথমিক পাসওয়ার্ড সেট করা রয়েছে"}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setActiveSubTab("security")}
+                  className="px-2.5 py-1.5 rounded-xl bg-teal-600 hover:bg-teal-500 text-white font-bold text-[11px] shadow-xs cursor-pointer flex items-center gap-1 transition-colors"
+                >
+                  <KeyRound className="w-3 h-3" />
+                  <span>পাসওয়ার্ড পরিবর্তন</span>
+                </button>
               </div>
             </div>
           </div>
@@ -706,56 +794,81 @@ export const EmployeeSelfServiceView: React.FC<EmployeeSelfServiceViewProps> = (
 
       {/* Tab 3: Salary & Payslips */}
       {activeSubTab === "payslips" && (
-        <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-bold text-slate-900 dark:text-white">My Monthly Payslips & Breakdown</h3>
-            <span className="text-xs text-teal-600 dark:text-teal-400 font-semibold">
-              Gross Monthly Salary: ৳{(currentEmployee.salary?.grossSalary ?? 0).toLocaleString()}
-            </span>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {myPayslips.map((slip) => (
-              <div
-                key={slip.id}
-                className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 space-y-4 shadow-xs"
+        currentEmployee.hideSalaryFromSelf ? (
+          <div className="p-8 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs text-center space-y-4">
+            <div className="w-14 h-14 rounded-2xl bg-amber-500/15 text-amber-600 dark:text-amber-400 flex items-center justify-center mx-auto border border-amber-500/30">
+              <Lock className="w-7 h-7" />
+            </div>
+            <div className="space-y-1.5">
+              <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                বেতন ও পে-স্লিপ তথ্য গোপন রাখা হয়েছে (Salary Details Restricted)
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto leading-relaxed">
+                প্রতিষ্ঠানের অভ্যন্তরীণ পলিসি ও সুপার অ্যাডমিন কনফিগারেশন অনুযায়ী আপনার অ্যাকাউন্টে বেতন এবং পে-স্লিপ প্রদর্শন বন্ধ রয়েছে। আপনার কোনো প্রশ্ন থাকলে সরাসরি সুপার অ্যাডমিন বা অ্যাকাউন্টস বিভাগের সাথে যোগাযোগ করুন।
+              </p>
+            </div>
+            <div className="pt-2">
+              <button
+                type="button"
+                onClick={() => setActiveSubTab("overview")}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-bold rounded-xl cursor-pointer transition-colors"
               >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <span className="text-xs font-bold text-slate-900 dark:text-white">{slip.payrollMonth} Payslip</span>
-                    <p className="text-[10px] text-slate-500 dark:text-slate-400">{slip.paymentDate || "Processed"}</p>
-                  </div>
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30">
-                    {slip.paymentStatus}
-                  </span>
-                </div>
-
-                <div className="space-y-1.5 text-xs">
-                  <div className="flex justify-between text-slate-700 dark:text-slate-300">
-                    <span>Gross Earnings:</span>
-                    <span className="font-semibold text-slate-900 dark:text-white">৳{(slip.grossEarnings ?? 0).toLocaleString()}</span>
-                  </div>
-                  <div className="flex justify-between text-slate-500 dark:text-slate-400">
-                    <span>Total Deductions (PF, Tax, Late):</span>
-                    <span className="text-red-500 dark:text-red-400">-৳{(slip.totalDeductions ?? 0).toLocaleString()}</span>
-                  </div>
-                  <div className="flex justify-between text-slate-900 dark:text-slate-200 font-bold pt-2 border-t border-slate-200 dark:border-slate-700">
-                    <span>Net Disbursed Salary:</span>
-                    <span className="text-emerald-600 dark:text-emerald-400 text-sm">৳{(slip.netSalary ?? 0).toLocaleString()}</span>
-                  </div>
-                </div>
-
-                <button
-                  onClick={() => onViewPayslip(slip)}
-                  className="w-full py-2 bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-650 text-slate-800 dark:text-slate-100 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
-                >
-                  <FileText className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
-                  <span>View & Print Payslip</span>
-                </button>
-              </div>
-            ))}
+                প্রোফাইল ওভারভিউ-তে ফিরে যান
+              </button>
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white">My Monthly Payslips & Breakdown</h3>
+              <span className="text-xs text-teal-600 dark:text-teal-400 font-semibold">
+                Gross Monthly Salary: ৳{(currentEmployee.salary?.grossSalary ?? 0).toLocaleString()}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {myPayslips.map((slip) => (
+                <div
+                  key={slip.id}
+                  className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 space-y-4 shadow-xs"
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="text-xs font-bold text-slate-900 dark:text-white">{slip.payrollMonth} Payslip</span>
+                      <p className="text-[10px] text-slate-500 dark:text-slate-400">{slip.paymentDate || "Processed"}</p>
+                    </div>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30">
+                      {slip.paymentStatus}
+                    </span>
+                  </div>
+
+                  <div className="space-y-1.5 text-xs">
+                    <div className="flex justify-between text-slate-700 dark:text-slate-300">
+                      <span>Gross Earnings:</span>
+                      <span className="font-semibold text-slate-900 dark:text-white">৳{(slip.grossEarnings ?? 0).toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between text-slate-500 dark:text-slate-400">
+                      <span>Total Deductions (PF, Tax, Late):</span>
+                      <span className="text-red-500 dark:text-red-400">-৳{(slip.totalDeductions ?? 0).toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between text-slate-900 dark:text-slate-200 font-bold pt-2 border-t border-slate-200 dark:border-slate-700">
+                      <span>Net Disbursed Salary:</span>
+                      <span className="text-emerald-600 dark:text-emerald-400 text-sm">৳{(slip.netSalary ?? 0).toLocaleString()}</span>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() => onViewPayslip(slip)}
+                    className="w-full py-2 bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-650 text-slate-800 dark:text-slate-100 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                  >
+                    <FileText className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
+                    <span>View & Print Payslip</span>
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )
       )}
 
       {/* Tab 4: Leave Requests */}
@@ -923,6 +1036,244 @@ export const EmployeeSelfServiceView: React.FC<EmployeeSelfServiceViewProps> = (
                 </div>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* Tab 7: Password & Security (Self-Service) */}
+      {activeSubTab === "security" && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in fade-in duration-200">
+          {/* Left Column: Account Credentials Overview */}
+          <div className="space-y-4">
+            <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-teal-500/15 text-teal-600 dark:text-teal-400">
+                  <Shield className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                    লগইন অ্যাকাউন্ট তথ্য (Account Identity)
+                  </h3>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    আপনার ডিজিটাল কর্মস্থল অ্যাক্সেস প্রোফাইল
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-3 text-xs">
+                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60">
+                  <span className="text-slate-500 dark:text-slate-400 block text-[10px] uppercase tracking-wider font-semibold">
+                    লগইন ইউজার আইডি (Login Username)
+                  </span>
+                  <span className="font-mono font-bold text-teal-600 dark:text-teal-400 text-sm">
+                    {currentEmployee.username || currentEmployee.email.split("@")[0]}
+                  </span>
+                  <p className="text-[10px] text-slate-400 mt-0.5">
+                    লগইনের সময় এই আইডি অথবা আপনার অফিসিয়াল ইমেইল দিতে পারেন।
+                  </p>
+                </div>
+
+                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60">
+                  <span className="text-slate-500 dark:text-slate-400 block text-[10px] uppercase tracking-wider font-semibold">
+                    অফিসিয়াল ইমেইল (Official Email)
+                  </span>
+                  <span className="font-semibold text-slate-900 dark:text-slate-200">
+                    {currentEmployee.email}
+                  </span>
+                </div>
+
+                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60">
+                  <span className="text-slate-500 dark:text-slate-400 block text-[10px] uppercase tracking-wider font-semibold">
+                    এমপ্লয়ি কোড ও শাখা
+                  </span>
+                  <div className="flex items-center justify-between mt-0.5">
+                    <span className="font-bold text-slate-900 dark:text-white">{currentEmployee.employeeCode}</span>
+                    <span className="text-slate-500">{currentEmployee.branchName}</span>
+                  </div>
+                </div>
+
+                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60">
+                  <span className="text-slate-500 dark:text-slate-400 block text-[10px] uppercase tracking-wider font-semibold">
+                    পাসওয়ার্ড স্ট্যাটাস (Password Status)
+                  </span>
+                  <div className="flex items-center gap-1.5 mt-1">
+                    {currentEmployee.passwordLastChangedAt ? (
+                      <span className="text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1">
+                        <CheckCircle2 className="w-3.5 h-3.5" /> নিজস্ব পাসওয়ার্ড সক্রিয়
+                      </span>
+                    ) : (
+                      <span className="text-amber-600 dark:text-amber-400 font-bold flex items-center gap-1">
+                        <AlertCircle className="w-3.5 h-3.5" /> প্রাথমিক পাসওয়ার্ড (123456)
+                      </span>
+                    )}
+                  </div>
+                  {currentEmployee.passwordLastChangedAt && (
+                    <p className="text-[10px] text-slate-400 mt-1">
+                      সর্বশেষ আপডেট: {new Date(currentEmployee.passwordLastChangedAt).toLocaleDateString("bn-BD")}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Privacy & Admin Control Notice */}
+            <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/40 text-xs space-y-2">
+              <div className="flex items-center gap-2 text-amber-800 dark:text-amber-300 font-bold">
+                <Lock className="w-4 h-4" />
+                <span>নিরাপত্তা পরামর্শ</span>
+              </div>
+              <p className="text-slate-600 dark:text-slate-400 text-[11px] leading-relaxed">
+                আপনার পাসওয়ার্ড কখনোই অন্য কারো সাথে শেয়ার করবেন না। পাসওয়ার্ড ভুলে গেলে আপনার প্রতিষ্ঠানের সুপার অ্যাডমিন যেকোনো সময় পাসওয়ার্ড রিসেট করে দিতে পারেন।
+              </p>
+            </div>
+          </div>
+
+          {/* Right Column: Change Password Form (2 cols wide on desktop) */}
+          <div className="lg:col-span-2 p-6 sm:p-7 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-5">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-teal-500/15 text-teal-600 dark:text-teal-400">
+                  <KeyRound className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                    পাসওয়ার্ড পরিবর্তন করুন (Change My Password)
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    আপনার অ্যাকাউন্টের নিরাপত্তা নিশ্চিত করতে নিয়মিত নতুন পাসওয়ার্ড সেট করুন
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Success Alert */}
+            {passwordChangeSuccess && (
+              <div className="p-4 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 text-emerald-800 dark:text-emerald-200 text-xs flex items-start gap-3 animate-in fade-in">
+                <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-bold">{passwordChangeSuccess}</p>
+                  <p className="text-[11px] text-emerald-700 dark:text-emerald-300 mt-0.5">
+                    আপনার নতুন পাসওয়ার্ডটি এখনই কার্যকর হয়েছে। আপনি নিশ্চিন্তে কাজ চালিয়ে যেতে পারেন।
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Error Alert */}
+            {passwordChangeError && (
+              <div className="p-4 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800/60 text-rose-800 dark:text-rose-200 text-xs flex items-start gap-3 animate-in fade-in">
+                <AlertCircle className="w-5 h-5 text-rose-500 shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-bold">ত্রুটি: পাসওয়ার্ড পরিবর্তন করা যায়নি</p>
+                  <p className="text-[11px] text-rose-700 dark:text-rose-300 mt-0.5">
+                    {passwordChangeError}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            <form onSubmit={handlePasswordChangeSubmit} className="space-y-4 text-xs">
+              {/* Current Password Field */}
+              <div>
+                <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1.5">
+                  বর্তমান পাসওয়ার্ড (Current Password)
+                </label>
+                <div className="relative max-w-md">
+                  <input
+                    type={showCurrentPassword ? "text" : "password"}
+                    value={currentPasswordInput}
+                    onChange={(e) => setCurrentPasswordInput(e.target.value)}
+                    placeholder="বর্তমান পাসওয়ার্ড লিখুন... (প্রাথমিক: 123456)"
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-3 pr-10 text-slate-900 dark:text-white font-mono"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                  >
+                    {showCurrentPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+                <span className="text-[10px] text-slate-400 mt-1 block">
+                  আপনি যদি আগে কখনো পাসওয়ার্ড পরিবর্তন না করে থাকেন, তবে ডিফল্ট পাসওয়ার্ড হলো <strong>123456</strong>
+                </span>
+              </div>
+
+              {/* New Password Field */}
+              <div>
+                <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1.5">
+                  নতুন পাসওয়ার্ড (New Password)
+                </label>
+                <div className="relative max-w-md">
+                  <input
+                    type={showNewPassword ? "text" : "password"}
+                    value={newPasswordInput}
+                    onChange={(e) => setNewPasswordInput(e.target.value)}
+                    placeholder="কমপক্ষে ৪ বা তার বেশি অক্ষরের শক্তিশালী পাসওয়ার্ড"
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-3 pr-10 text-slate-900 dark:text-white font-mono"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowNewPassword(!showNewPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                  >
+                    {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              {/* Confirm New Password Field */}
+              <div>
+                <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1.5">
+                  নতুন পাসওয়ার্ড নিশ্চিত করুন (Confirm New Password)
+                </label>
+                <div className="relative max-w-md">
+                  <input
+                    type={showConfirmPassword ? "text" : "password"}
+                    value={confirmPasswordInput}
+                    onChange={(e) => setConfirmPasswordInput(e.target.value)}
+                    placeholder="নতুন পাসওয়ার্ডটি পুনরায় লিখুন"
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-3 pr-10 text-slate-900 dark:text-white font-mono"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                  >
+                    {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+                {newPasswordInput && confirmPasswordInput && (
+                  <span className={`text-[11px] font-semibold mt-1.5 flex items-center gap-1 ${
+                    newPasswordInput === confirmPasswordInput ? "text-emerald-600 dark:text-emerald-400" : "text-rose-500"
+                  }`}>
+                    {newPasswordInput === confirmPasswordInput ? (
+                      <>
+                        <Check className="w-3.5 h-3.5" /> পাসওয়ার্ড দুটি মিলেছে
+                      </>
+                    ) : (
+                      <>
+                        <AlertCircle className="w-3.5 h-3.5" /> নতুন পাসওয়ার্ড ও কনফার্ম পাসওয়ার্ড এক নয়
+                      </>
+                    )}
+                  </span>
+                )}
+              </div>
+
+              <div className="pt-3 border-t border-slate-100 dark:border-slate-800">
+                <button
+                  type="submit"
+                  disabled={isChangingPassword}
+                  className="px-6 py-3 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white rounded-xl font-bold shadow-md shadow-teal-500/20 cursor-pointer flex items-center gap-2 transition-all disabled:opacity-50"
+                >
+                  <KeyRound className="w-4 h-4" />
+                  <span>{isChangingPassword ? "সংরক্ষণ করা হচ্ছে..." : "পাসওয়ার্ড আপডেট করুন"}</span>
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

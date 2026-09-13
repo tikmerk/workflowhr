@@ -5,7 +5,7 @@ import {defineConfig} from 'vite';
 
 export default defineConfig(() => {
   return {
-    base: '/workflowhr/', // <--- এই লাইনটি যোগ করা হয়েছে
+    base: process.env.VITE_BASE_PATH || '/', // <--- এই লাইনটি যোগ করা হয়েছে
     plugins: [react(), tailwindcss()],
     resolve: {
       alias: {

@@ -12,6 +12,7 @@ import {
   onSnapshot,
   query,
   orderBy,
+  writeBatch,
   Firestore,
 } from "firebase/firestore";
 import firebaseConfig from "../../firebase-applet-config.json";
@@ -36,4 +37,5 @@ export {
   onSnapshot,
   query,
   orderBy,
+  writeBatch,
 };

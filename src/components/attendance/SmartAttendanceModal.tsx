@@ -908,7 +908,7 @@ export const SmartAttendanceModal: React.FC<SmartAttendanceModalProps> = ({
                 </div>
 
                 {/* Explicit Warning If Employee Has No Photo Enrolled */}
-                {!hasRegisteredPhoto && (
+                {!hasRegisteredPhoto && !activeEmployee.isAttendanceExempt && (
                   <div className="p-3 rounded-xl bg-amber-500/15 border border-amber-500/30 text-xs text-amber-300 space-y-2">
                     <div className="flex items-center gap-1.5 font-bold">
                       <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
@@ -925,6 +925,40 @@ export const SmartAttendanceModal: React.FC<SmartAttendanceModalProps> = ({
                       <ImageIcon className="w-3.5 h-3.5" />
                       <span>Enroll Face Photo Now (ছবি আপলোড করুন)</span>
                     </button>
+                  </div>
+                )}
+
+                {/* Photo Uploaded but Live Face Verification Pending */}
+                {hasRegisteredPhoto && !activeEmployee.faceVerified && !activeEmployee.isAttendanceExempt && (
+                  <div className="p-3 rounded-xl bg-amber-500/15 border border-amber-500/30 text-xs text-amber-300 space-y-2 animate-in fade-in duration-200">
+                    <div className="flex items-center gap-1.5 font-bold">
+                      <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+                      <span>আপনার ফেস ভেরিফিকেশন করা নাই (Verification Pending)</span>
+                    </div>
+                    <p className="text-[11px] text-amber-200 leading-relaxed">
+                      আপনার প্রোফাইলে ছবি সেভ করা আছে, তবে লাইভ ফেস ভেরিফিকেশন করা হয়নি। হাজিরা দেওয়ার পূর্বে দয়া করে ফেস ভেরিফিকেশন করে নিন।
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setShowEnrollModal(true)}
+                      className="w-full py-1.5 px-3 bg-teal-600 hover:bg-teal-500 text-white font-bold rounded-lg text-xs flex items-center justify-center gap-1.5 transition-all shadow cursor-pointer"
+                    >
+                      <ScanFace className="w-3.5 h-3.5" />
+                      <span>আগে ফেস ভেরিফিকেশন করুন</span>
+                    </button>
+                  </div>
+                )}
+
+                {/* CEO / Executive Attendance Exemption Banner */}
+                {activeEmployee.isAttendanceExempt && (
+                  <div className="p-3 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-xs text-emerald-300 space-y-1">
+                    <div className="flex items-center gap-1.5 font-bold">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                      <span>উপস্থিতি প্রদান থেকে অব্যাহতিপ্রাপ্ত (Attendance Exempt)</span>
+                    </div>
+                    <p className="text-[11px] text-emerald-200 leading-relaxed">
+                      এই কর্মকর্তা (যেমন: CEO / চেয়ারম্যান / পরিচালনা পর্ষদ) নির্বাহী নীতি অনুযায়ী ফেস হাজিরা দেওয়া থেকে অব্যাহতিপ্রাপ্ত।
+                    </p>
                   </div>
                 )}
 
@@ -1026,19 +1060,26 @@ export const SmartAttendanceModal: React.FC<SmartAttendanceModalProps> = ({
           isOpen={showEnrollModal}
           onClose={() => setShowEnrollModal(false)}
           employee={activeEmployee}
+          isSuperAdmin={true}
           onSaveFacePhoto={(empId, photoUrl, verificationScore) => {
             if (onUpdateFacePhoto) {
-              onUpdateFacePhoto(empId, photoUrl, verificationScore);
+              onUpdateFacePhoto(empId, photoUrl);
             }
+            const isVerified = verificationScore !== undefined;
             setActiveEmployee((prev) => ({
               ...prev,
               faceRegisteredPhoto: photoUrl,
               avatarUrl: photoUrl,
-              faceTemplateRegistered: true,
-              faceVerificationScore: verificationScore || 95,
-              faceVerifiedAt: new Date().toISOString(),
+              faceTemplateRegistered: isVerified,
+              faceVerified: isVerified,
+              faceVerificationRequired: !isVerified,
+              faceVerificationScore: verificationScore,
+              faceVerifiedAt: isVerified ? new Date().toISOString() : undefined,
             }));
             setShowEnrollModal(false);
+          }}
+          onUpdateEmployee={(updatedEmp) => {
+            setActiveEmployee(updatedEmp);
           }}
         />
       )}

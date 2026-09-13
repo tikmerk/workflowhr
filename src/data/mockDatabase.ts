@@ -1940,7 +1940,12 @@ export const mockDepartments = INITIAL_DEPARTMENTS;
 export const mockDesignations = INITIAL_DESIGNATIONS;
 export const mockShifts = INITIAL_SHIFTS;
 export const mockHolidays = INITIAL_HOLIDAYS;
-export const mockEmployees = INITIAL_EMPLOYEES;
+export const mockEmployees = INITIAL_EMPLOYEES.map((emp) => ({
+  ...emp,
+  username: emp.username || emp.employeeCode,
+  password: emp.password || "123456",
+  hideSalaryFromSelf: emp.hideSalaryFromSelf ?? false,
+}));
 export const mockAttendanceRecords = INITIAL_ATTENDANCE_LOGS;
 export const mockLeaves = INITIAL_LEAVE_APPLICATIONS;
 export const mockPayslips = INITIAL_PAYSLIPS;

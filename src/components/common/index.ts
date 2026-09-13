@@ -5,4 +5,5 @@ export { Logo, Logo as LogoBadge } from "./Logo";
 export { CompanyBrandingModal } from "./CompanyBrandingModal";
 export { DigitalIdCard } from "./DigitalIdCard";
 export { DigitalIdCardModal } from "./DigitalIdCardModal";
+export { ChangeCredentialsModal } from "./ChangeCredentialsModal";
 

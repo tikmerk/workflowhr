@@ -29,11 +29,19 @@ import {
   X,
   Server,
   AlertTriangle,
+  RotateCcw,
+  KeyRound,
+  Lock,
+  Copy,
+  Check,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import { Employee, Branch, UserRole } from "../../types";
 import { useThemeLanguage } from "../../context/ThemeLanguageContext";
 import { useCompanyBranding } from "../../context/CompanyBrandingContext";
 import { checkFirestoreConnection } from "../../services/firestoreService";
+import { ChangeCredentialsModal } from "./ChangeCredentialsModal";
 
 interface HeaderProps {
   currentEmployee: Employee;
@@ -51,6 +59,8 @@ interface HeaderProps {
   onLogout?: () => void;
   onOpenDigitalIdCard?: (emp?: Employee) => void;
   onOpenFaceEnrollModal?: (emp?: Employee) => void;
+  onOpenOrganizationReset?: () => void;
+  onUpdateEmployee?: (updated: Employee) => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -69,6 +79,8 @@ export const Header: React.FC<HeaderProps> = ({
   onLogout,
   onOpenDigitalIdCard,
   onOpenFaceEnrollModal,
+  onOpenOrganizationReset,
+  onUpdateEmployee,
 }) => {
   const { language, toggleLanguage, theme, toggleTheme, t, isBangla } = useThemeLanguage();
   const { setIsBrandingModalOpen } = useCompanyBranding();
@@ -77,6 +89,9 @@ export const Header: React.FC<HeaderProps> = ({
   const [showBranchMenu, setShowBranchMenu] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showDbStatusModal, setShowDbStatusModal] = useState(false);
+  const [showChangeCredsModal, setShowChangeCredsModal] = useState(false);
+  const [showProfilePassword, setShowProfilePassword] = useState(false);
+  const [copySuccess, setCopySuccess] = useState<string | null>(null);
   const [dbStatus, setDbStatus] = useState<{
     checking: boolean;
     ok: boolean;
@@ -585,6 +600,89 @@ export const Header: React.FC<HeaderProps> = ({
                   )}
                 </div>
 
+                {/* User Credentials & Password Change Access Card */}
+                <div className="p-3 rounded-2xl bg-gradient-to-br from-teal-500/10 via-slate-50 to-teal-500/5 dark:from-teal-950/40 dark:via-slate-800/80 dark:to-teal-950/20 border border-teal-500/30 space-y-2.5 mb-2.5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-teal-700 dark:text-teal-300">
+                      <KeyRound className="w-4 h-4 text-teal-600 dark:text-teal-400" />
+                      <span>{t("আমার লগইন তথ্য ও পাসওয়ার্ড", "My Login Credentials")}</span>
+                    </div>
+                    <span className="text-[9px] px-2 py-0.5 rounded-full font-bold bg-teal-500/20 text-teal-700 dark:text-teal-300 uppercase">
+                      {currentEmployee.role}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 text-[11px]">
+                    <div className="p-2 rounded-xl bg-white/90 dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-700/80">
+                      <span className="text-[9.5px] text-slate-400 block font-semibold">
+                        {t("ইউজারনেম / আইডি:", "ID / Username:")}
+                      </span>
+                      <div className="flex items-center justify-between mt-0.5">
+                        <span className="font-mono font-bold text-slate-900 dark:text-white truncate">
+                          {currentEmployee.username || currentEmployee.employeeCode}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard.writeText(currentEmployee.username || currentEmployee.employeeCode);
+                            setCopySuccess("user");
+                            setTimeout(() => setCopySuccess(null), 2000);
+                          }}
+                          title={t("কপি করুন", "Copy")}
+                          className="text-slate-400 hover:text-teal-600 dark:hover:text-teal-400 cursor-pointer p-0.5"
+                        >
+                          {copySuccess === "user" ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="p-2 rounded-xl bg-white/90 dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-700/80">
+                      <span className="text-[9.5px] text-slate-400 block font-semibold">
+                        {t("পাসওয়ার্ড:", "Password:")}
+                      </span>
+                      <div className="flex items-center justify-between mt-0.5">
+                        <span className="font-mono font-bold text-slate-900 dark:text-white">
+                          {showProfilePassword ? (currentEmployee.password || "123456") : "••••••"}
+                        </span>
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => setShowProfilePassword(!showProfilePassword)}
+                            title={showProfilePassword ? t("লুকান", "Hide") : t("দেখান", "Show")}
+                            className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer p-0.5"
+                          >
+                            {showProfilePassword ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              navigator.clipboard.writeText(currentEmployee.password || "123456");
+                              setCopySuccess("pass");
+                              setTimeout(() => setCopySuccess(null), 2000);
+                            }}
+                            title={t("পাসওয়ার্ড কপি করুন", "Copy password")}
+                            className="text-slate-400 hover:text-teal-600 dark:hover:text-teal-400 cursor-pointer p-0.5"
+                          >
+                            {copySuccess === "pass" ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowRoleMenu(false);
+                      setShowChangeCredsModal(true);
+                    }}
+                    className="w-full flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-teal-600 hover:bg-teal-500 text-white text-xs font-bold shadow-xs cursor-pointer transition-all"
+                  >
+                    <Lock className="w-3.5 h-3.5" />
+                    <span>{t("ইউজারনেম বা পাসওয়ার্ড পরিবর্তন করুন", "Change Username / Password")}</span>
+                  </button>
+                </div>
+
                 {/* Quick Preferences & Settings Panel (Theme, Language, Branding) */}
                 <div className="space-y-1.5 pb-2.5 mb-2.5 border-b border-slate-100 dark:border-slate-800">
                   <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 px-1">
@@ -680,6 +778,33 @@ export const Header: React.FC<HeaderProps> = ({
                         </div>
                       </div>
                       <Sparkles className="w-3.5 h-3.5 text-purple-500 shrink-0" />
+                    </button>
+                  )}
+
+                  {/* Super Admin Organization Data Reset Button */}
+                  {isSuperAdmin && onOpenOrganizationReset && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowRoleMenu(false);
+                        onOpenOrganizationReset();
+                      }}
+                      className="w-full flex items-center justify-between p-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-700 dark:text-rose-300 border border-rose-500/25 transition-all text-left cursor-pointer mt-1"
+                    >
+                      <div className="flex items-center gap-2">
+                        <RotateCcw className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0" />
+                        <div>
+                          <div className="text-[11px] font-bold text-rose-700 dark:text-rose-300">
+                            {t("রিসেট প্রতিষ্ঠান (Organization Reset)", "Reset Organization")}
+                          </div>
+                          <div className="text-[9px] text-rose-600/80 dark:text-rose-300/80">
+                            {t("শাখাভিত্তিক বা সার্বিক ডামি ডাটা ক্লিন করুন", "Safely wipe dummy records per branch or company")}
+                          </div>
+                        </div>
+                      </div>
+                      <span className="text-[9px] px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-600 dark:text-rose-300 font-bold uppercase font-mono">
+                        Reset
+                      </span>
                     </button>
                   )}
 
@@ -867,6 +992,24 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Change User Credentials & Password Modal */}
+      {showChangeCredsModal && (
+        <ChangeCredentialsModal
+          isOpen={showChangeCredsModal}
+          onClose={() => setShowChangeCredsModal(false)}
+          employee={currentEmployee}
+          allEmployees={allEmployees}
+          onUpdateEmployee={(updated) => {
+            if (onUpdateEmployee) {
+              onUpdateEmployee(updated);
+            }
+            if (setCurrentEmployee) {
+              setCurrentEmployee(updated);
+            }
+          }}
+        />
       )}
     </header>
   );

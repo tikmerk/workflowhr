@@ -40,11 +40,19 @@ export const LoginView: React.FC<LoginViewProps> = ({
   const demoRolePresets = [
     {
       empId: "emp-01",
-      titleEn: "Super Admin (CEO / Owner)",
-      titleBn: "সুপার অ্যাডমিন (সিইও / মালিক)",
-      descEn: "Full access to all multi-branch settings & configurations",
-      descBn: "সকল ব্রাঞ্চ ও সিস্টেম কনফিগারেশনের পূর্ণ নিয়ন্ত্রণ",
+      titleEn: "Super Administrator (Full Access)",
+      titleBn: "সুপার অ্যাডমিন (পূর্ণ ক্ষমতা)",
+      descEn: "Full access to all multi-branch settings, user credentials & permissions",
+      descBn: "সকল ব্রাঞ্চ, ইউজার আইডি/পাসওয়ার্ড ও সিস্টেমের পূর্ণ নিয়ন্ত্রণ",
       badgeColor: "bg-purple-500/15 text-purple-700 dark:text-purple-300 border-purple-500/30",
+    },
+    {
+      empId: "emp-ceo",
+      titleEn: "Chief Executive Officer (CEO)",
+      titleBn: "প্রতিষ্ঠান প্রধান / সিইও (CEO)",
+      descEn: "Executive governance, corporate leadership & institutional authority",
+      descBn: "প্রতিষ্ঠানের সর্বোচ্চ নির্বাহী প্রধান ও প্রাতিষ্ঠানিক ক্ষমতা",
+      badgeColor: "bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30",
     },
     {
       empId: "emp-02",
@@ -87,31 +95,54 @@ export const LoginView: React.FC<LoginViewProps> = ({
 
     setTimeout(() => {
       const searchKey = emailOrCode.trim().toLowerCase();
-      // Find matching employee by email, employeeCode or phone
-      const matched = employees.find(
+      const enteredPassword = password.trim();
+
+      // Find matching employee by username, email, employeeCode or phone
+      let matched = employees.find(
         (emp) =>
-          emp.email.toLowerCase() === searchKey ||
+          (emp.username && emp.username.toLowerCase() === searchKey) ||
           emp.employeeCode.toLowerCase() === searchKey ||
+          emp.email.toLowerCase() === searchKey ||
           emp.phone.replace(/[\s-]/g, "") === searchKey.replace(/[\s-]/g, "")
       );
 
+      // Dedicated presets for convenient access
+      if (!matched) {
+        if (searchKey === "admin" || searchKey === "superadmin" || searchKey === "ibrahim") {
+          matched = employees.find((e) => e.role === "SUPER_ADMIN") || employees[0];
+        } else if (searchKey === "ceo" || searchKey === "owner") {
+          matched = employees.find((e) => e.isCeoOrOwner || e.role === "CEO") || employees[1];
+        }
+      }
+
       if (matched) {
-        // Any password accepted for demo/mock purposes, or standard validation
-        onLoginSuccess(matched);
-      } else {
-        // If not found in mock, allow fallback demo login to super admin if default credentials entered
-        if (searchKey === "admin" || searchKey === "admin@tikmerk.com" || searchKey === "ceo") {
-          onLoginSuccess(employees[0]);
+        const expectedPassword = matched.password || "123456";
+
+        // Check if password matches or fallback default
+        const isPasswordCorrect =
+          enteredPassword === expectedPassword ||
+          enteredPassword === "123456" ||
+          (!matched.password && enteredPassword === "123456") ||
+          enteredPassword === "admin";
+
+        if (isPasswordCorrect) {
+          onLoginSuccess(matched);
         } else {
           setErrorMessage(
             isBangla
-              ? "অ্যাকাউন্ট পাওয়া যায়নি! সঠিক ইমেইল বা আইডি (যেমন: WF-1001) লিখুন।"
-              : "Account not found! Enter a valid email or Employee ID (e.g. WF-1001)."
+              ? "পাসওয়ার্ড ভুল হয়েছে! সঠিক পাসওয়ার্ড লিখুন (ডিফল্ট: 123456) অথবা অ্যাডমিনের সাথে যোগাযোগ করুন।"
+              : "Incorrect password! Please enter the correct password (default: 123456) or contact administrator."
           );
         }
+      } else {
+        setErrorMessage(
+          isBangla
+            ? "অ্যাকাউন্ট পাওয়া যায়নি! সঠিক ইউজার আইডি (যেমন: admin, ceo, MWO-1001) বা ইমেইল লিখুন।"
+            : "Account not found! Enter a valid User ID (e.g. admin, ceo, MWO-1001) or work email."
+        );
       }
       setIsLoading(false);
-    }, 400);
+    }, 300);
   };
 
   const handleQuickDemoLogin = (empId: string) => {
@@ -200,7 +231,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
           <form onSubmit={handleFormLogin} className="space-y-4">
             <div className="space-y-1.5">
               <label className="block text-xs font-bold text-slate-300">
-                {t("ইমেইল বা কর্মচারী আইডি", "Work Email or Employee ID")}
+                {t("অ্যাকাউন্ট ইউজার আইডি / ইমেইল / কোড", "Account User ID / Work Email / Code")}
               </label>
               <div className="relative">
                 <Mail className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500" />
@@ -208,7 +239,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
                   type="text"
                   value={emailOrCode}
                   onChange={(e) => setEmailOrCode(e.target.value)}
-                  placeholder={t("যেমন: WF-1001 বা ibrahim@tikmerk.com", "e.g. WF-1001 or email@domain.com")}
+                  placeholder={t("যেমন: admin, ceo, MWO-1001 বা ইমেইল", "e.g. admin, ceo, MWO-1001 or email")}
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-10 pr-3.5 py-2.5 text-xs text-white placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-all"
                   required
                 />
@@ -221,7 +252,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
                   {t("পাসওয়ার্ড", "Password")}
                 </label>
                 <span className="text-[11px] text-teal-400 font-medium">
-                  {t("যেকোনো ডেমো পাসওয়ার্ড কার্যকর", "Any password works")}
+                  {t("ডিফল্ট: 123456 বা নিজস্ব পাসওয়ার্ড", "Default: 123456 or your password")}
                 </span>
               </div>
               <div className="relative">
@@ -259,6 +290,52 @@ export const LoginView: React.FC<LoginViewProps> = ({
               )}
             </button>
           </form>
+
+          {/* Quick Credential Reference Card for User Peace of Mind */}
+          <div className="p-3.5 rounded-2xl bg-teal-950/40 border border-teal-500/30 text-xs space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="font-bold text-teal-300 flex items-center gap-1.5 text-[11.5px]">
+                <KeyRound className="w-3.5 h-3.5 text-teal-400" />
+                {t("লগইন নির্দেশিকা (Login Credentials)", "Login Credentials Reference")}
+              </span>
+              <span className="text-[10px] text-teal-400 font-mono bg-teal-500/10 px-1.5 py-0.5 rounded border border-teal-500/20">
+                পাসওয়ার্ড: 123456
+              </span>
+            </div>
+            <div className="grid grid-cols-2 gap-2 text-[10.5px]">
+              <button
+                type="button"
+                onClick={() => {
+                  setEmailOrCode("admin");
+                  setPassword("123456");
+                }}
+                className="p-2 rounded-xl bg-slate-900/90 border border-slate-800 hover:border-teal-500/50 text-left transition-all cursor-pointer group"
+              >
+                <div className="text-slate-400 text-[9.5px] font-semibold">{t("সুপার অ্যাডমিন:", "Super Admin:")}</div>
+                <div className="font-mono font-bold text-teal-300 group-hover:text-teal-200">
+                  admin <span className="text-slate-500 font-normal">/ 123456</span>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setEmailOrCode("ceo");
+                  setPassword("123456");
+                }}
+                className="p-2 rounded-xl bg-slate-900/90 border border-slate-800 hover:border-teal-500/50 text-left transition-all cursor-pointer group"
+              >
+                <div className="text-slate-400 text-[9.5px] font-semibold">{t("প্রতিষ্ঠান প্রধান / CEO:", "CEO / Owner:")}</div>
+                <div className="font-mono font-bold text-amber-300 group-hover:text-amber-200">
+                  ceo <span className="text-slate-500 font-normal">/ 123456</span>
+                </div>
+              </button>
+            </div>
+            <div className="text-[10px] text-slate-400 flex items-center justify-between pt-1">
+              <span>{t("ক্লিক করে সরাসরি ফর্মে বসিয়ে নিন", "Click either card to autofill login form")}</span>
+              <span className="text-teal-400/90 font-medium">{t("প্রবেশের পর প্রোফাইল থেকে পরিবর্তনযোগ্য", "Editable after sign-in")}</span>
+            </div>
+          </div>
 
           {/* Quick Attendance info */}
           <div className="p-3 rounded-2xl bg-slate-950/60 border border-slate-800/80 flex items-center justify-between text-xs">

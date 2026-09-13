@@ -97,6 +97,23 @@ export interface Department {
   description: string;
   totalEmployees: number;
   budgetAllocated?: number;
+  fundingSourceId?: string;
+  fundingSourceName?: string;
+  lastAllocatedAt?: string;
+  allocatedBy?: string;
+}
+
+export interface TreasuryAccount {
+  id: string;
+  accountName: string;
+  accountNumber: string;
+  bankName: string;
+  branchName: string;
+  accountType: "CENTRAL_OPERATING" | "REVENUE_TREASURY" | "DONOR_GRANT" | "RESERVE_FUND";
+  totalFund: number;
+  allocatedFund?: number;
+  currency: string;
+  description: string;
 }
 
 export interface Designation {
@@ -169,6 +186,12 @@ export interface Employee {
   bonusEligibility?: "TWO_EIDS_FIXED" | "PERCENTAGE_BASIC" | "PERFORMANCE" | "NONE";
   fixedBonusAmount?: number;
   bonusPercentage?: number;
+
+  // Employee Login Account & Privacy Credentials (Managed by Admin & Changeable by Employee)
+  username?: string; // User ID / Account address (default to employeeCode or custom)
+  password?: string; // Account password (changeable by employee, resettable by Super Admin)
+  hideSalaryFromSelf?: boolean; // Super Admin toggle: if true, employee cannot view salary in Self-Service Portal
+  passwordLastChangedAt?: string;
   
   // Personal Details
   fullName: string;
@@ -210,9 +233,27 @@ export interface Employee {
   faceVerificationScore?: number;
   faceVerified?: boolean;
   faceVerificationRequired?: boolean;
+  manuallyVerifiedByAdmin?: boolean;
+  verifiedByAdminName?: string;
+  isAttendanceExempt?: boolean; // CEO/Chairman or executive exempt from face attendance punching
   deviceBindingEnabled?: boolean;
   boundDeviceId?: string;
   boundDeviceModel?: string;
+
+  // Account Visibility & Access Control
+  allowedTabs?: string[]; // Specific tab IDs visible to this employee's account
+  accountPermissions?: {
+    canViewSalary?: boolean;
+    canApplyLeaves?: boolean;
+    canViewAttendanceLogs?: boolean;
+    canAccessLoans?: boolean;
+    canAccessProjects?: boolean;
+    canAccessNotices?: boolean;
+    canAccessAssets?: boolean;
+    canAccessCertificates?: boolean;
+    canAccessMeetings?: boolean;
+    canAccessExit?: boolean;
+  };
   
   // Stored Signature & Custom Signatory Title
   savedSignatureUrl?: string;
@@ -563,6 +604,7 @@ export interface CompanyBranding {
   email: string;
   website: string;
   registrationNumber?: string;
+  employeeIdPrefix?: string; // Client-configurable prefix, e.g. "MWO"
 }
 
 export interface Notice {

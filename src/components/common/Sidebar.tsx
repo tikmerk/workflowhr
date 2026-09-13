@@ -25,9 +25,10 @@ import {
   GraduationCap,
   Presentation,
   KeyRound,
+  RotateCcw,
 } from "lucide-react";
 import { Logo } from "./Logo";
-import { UserRole } from "../../types";
+import { UserRole, Employee } from "../../types";
 import { useThemeLanguage } from "../../context/ThemeLanguageContext";
 import { useCompanyBranding } from "../../context/CompanyBrandingContext";
 import { APP_VERSION, APP_BUILD_NAME } from "../../version";
@@ -58,11 +59,13 @@ interface SidebarProps {
   activeTab: NavTabId;
   onTabChange: (tab: NavTabId) => void;
   userRole: UserRole;
+  currentEmployee?: Employee;
   unreadCount?: number;
   isOpenMobile?: boolean;
   onCloseMobile?: () => void;
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
+  onOpenOrganizationReset?: () => void;
 }
 
 interface NavItemDef {
@@ -85,16 +88,23 @@ export const Sidebar: React.FC<SidebarProps> = ({
   activeTab,
   onTabChange,
   userRole,
+  currentEmployee,
   unreadCount = 0,
   isOpenMobile = false,
   onCloseMobile,
   isCollapsed = false,
   onToggleCollapse,
+  onOpenOrganizationReset,
 }) => {
   const { t, isBangla } = useThemeLanguage();
   const { branding, setIsBrandingModalOpen, softwareBranding } = useCompanyBranding();
 
-  const isSuperAdmin = userRole === "SUPER_ADMIN" || userRole === "COMPANY_ADMIN" || userRole === "CEO";
+  const isSuperAdmin =
+    userRole === "SUPER_ADMIN" ||
+    userRole === "COMPANY_ADMIN" ||
+    userRole === "CEO" ||
+    Boolean(currentEmployee?.isSuperAdmin) ||
+    Boolean(currentEmployee?.isCeoOrOwner);
 
   const navGroups: NavGroupDef[] = [
     {
@@ -275,6 +285,23 @@ export const Sidebar: React.FC<SidebarProps> = ({
     },
   ];
 
+  const filteredNavGroups = React.useMemo(() => {
+    if (isSuperAdmin) return navGroups;
+    const allowed = currentEmployee?.allowedTabs;
+    if (!allowed || allowed.length === 0) return navGroups;
+    return navGroups
+      .map((g) => ({
+        ...g,
+        items: g.items.filter(
+          (item) =>
+            allowed.includes(item.id) ||
+            item.id === "dashboard" ||
+            item.id === "my-portal"
+        ),
+      }))
+      .filter((g) => g.items.length > 0);
+  }, [isSuperAdmin, currentEmployee?.allowedTabs, navGroups]);
+
   const handleItemClick = (id: NavTabId) => {
     onTabChange(id);
     if (onCloseMobile) {
@@ -306,7 +333,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Navigation Groups - Clean, High-Contrast Sleek Layout */}
       <nav className={`flex-1 overflow-y-auto no-scrollbar hide-scrollbars ${isCollapsed && !isMobileView ? "px-2 py-3 space-y-3" : "px-3 py-3 space-y-4"}`}>
-        {navGroups.map((group, gIdx) => (
+        {filteredNavGroups.map((group, gIdx) => (
           <div key={gIdx} className="space-y-1">
             {(!isCollapsed || isMobileView) && (
               <div className="px-3 text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
@@ -381,6 +408,36 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
         ))}
       </nav>
+
+      {/* Super Admin Organization Reset Option */}
+      {isSuperAdmin && onOpenOrganizationReset && (
+        <div className={isCollapsed && !isMobileView ? "px-2 py-1" : "px-3 py-1"}>
+          {isCollapsed && !isMobileView ? (
+            <button
+              type="button"
+              onClick={onOpenOrganizationReset}
+              title={isBangla ? "প্রতিষ্ঠান রিসেট (Organization Reset)" : "Reset Organization"}
+              className="w-full h-10 flex items-center justify-center rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 border border-rose-500/25 transition cursor-pointer"
+            >
+              <RotateCcw className="w-4 h-4" />
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={onOpenOrganizationReset}
+              className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/50 border border-rose-200 dark:border-rose-800/60 transition cursor-pointer shadow-2xs"
+            >
+              <div className="flex items-center gap-2">
+                <RotateCcw className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />
+                <span>{isBangla ? "রিসেট প্রতিষ্ঠান (Reset Org)" : "Reset Organization"}</span>
+              </div>
+              <span className="text-[9px] px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-600 dark:text-rose-300 font-bold uppercase font-mono">
+                Super Admin
+              </span>
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Super Admin Quick Branding Setup Button in Sidebar */}
       {isSuperAdmin && (!isCollapsed || isMobileView) && (

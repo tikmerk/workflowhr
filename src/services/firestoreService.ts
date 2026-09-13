@@ -51,6 +51,7 @@ const COL_EMPLOYEES = "employees";
 const COL_ATTENDANCE = "attendance";
 const COL_LEAVES = "leaves";
 const COL_PAYROLL = "payroll";
+const COL_PAYSLIPS = "payroll";
 const COL_SETTINGS = "settings";
 const COL_LOANS = "loans";
 const COL_ASSETS = "assets";
@@ -335,6 +336,52 @@ export async function updateEmployeePhotoPendingVerificationInFirestore(
   } catch (err) {
     console.error("Failed to save pending photo in Firestore:", err);
     return { success: false, optimizedUrl: photoUrl };
+  }
+}
+
+/**
+ * Super Admin Manual Verification Override:
+ * Allows Super Admin to manually approve and verify an employee's face photo
+ * without requiring live camera test (e.g. for CEO, Chairman, or VIP staff).
+ */
+export async function manualVerifyEmployeeFaceInFirestore(
+  employeeId: string,
+  verifiedByAdminName: string = "Super Admin",
+  isAttendanceExempt: boolean = false
+): Promise<{ success: boolean; message: string }> {
+  try {
+    const now = new Date();
+    const updateData: Record<string, any> = {
+      faceTemplateRegistered: true,
+      faceVerified: true,
+      faceVerificationRequired: false,
+      faceVerificationScore: 100,
+      faceVerifiedAt: now.toISOString(),
+      manuallyVerifiedByAdmin: true,
+      verifiedByAdminName,
+      isAttendanceExempt,
+    };
+
+    await setDoc(doc(db, COL_EMPLOYEES, employeeId), cleanForFirestore(updateData), { merge: true });
+    invalidateEmployeeFaceCache(employeeId);
+
+    try {
+      localStorage.setItem(`workflow_hr_cached_verified_${employeeId}`, "true");
+      localStorage.setItem(`workflow_hr_cached_score_${employeeId}`, "100");
+    } catch (e) {
+      console.warn("Local storage cache notice:", e);
+    }
+
+    return {
+      success: true,
+      message: `Employee ${employeeId} manually verified by ${verifiedByAdminName}`,
+    };
+  } catch (err: any) {
+    console.error("Manual verification failed in Firestore:", err);
+    return {
+      success: false,
+      message: err?.message || "Failed to update manual verification",
+    };
   }
 }
 
@@ -802,6 +849,164 @@ export async function deleteCandidateFromFirestore(candidateId: string) {
     await deleteDoc(doc(db, COL_RECRUITMENT_CANDIDATES, candidateId));
   } catch (err) {
     console.error("Failed to delete candidate from Firestore:", err);
+  }
+}
+
+/* ============================================================
+   ORGANIZATION & BRANCH RESET ENGINE (SUPER ADMIN EXCLUSIVE)
+   ============================================================ */
+
+export interface OrganizationResetOptions {
+  branchId?: string; // If specified, only reset this branch; otherwise all branches in org
+  branchName?: string;
+  keepSuperAdminId: string; // The logged-in Super Admin who is NEVER deleted
+  resetEmployees?: boolean; // Default true: delete all employees except Super Admin
+  resetAttendance?: boolean; // Delete attendance punch records
+  resetLeavesAndLoans?: boolean; // Delete leave requests & loan records
+  resetPayroll?: boolean; // Delete payslips
+  resetRecruitment?: boolean; // Delete candidate ATS & job postings
+  resetDepartments?: boolean; // Reset departments
+  resetDesignations?: boolean; // Reset designations
+  cleanSlateTemplates?: boolean; // Keep clean minimum departments/designations or wipe
+}
+
+export async function resetOrganizationDataInFirestore(
+  options: OrganizationResetOptions
+): Promise<{
+  success: boolean;
+  deletedEmployeesCount: number;
+  message: string;
+}> {
+  try {
+    const {
+      branchId,
+      branchName,
+      keepSuperAdminId,
+      resetEmployees = true,
+      resetAttendance = true,
+      resetLeavesAndLoans = true,
+      resetPayroll = true,
+      resetRecruitment = true,
+      resetDepartments = false,
+      resetDesignations = false,
+    } = options;
+
+    let deletedEmployees = 0;
+
+    // 1. Delete target employees (EXCLUDING the current Super Admin!)
+    if (resetEmployees) {
+      const empSnap = await getDocs(collection(db, COL_EMPLOYEES));
+      for (const d of empSnap.docs) {
+        const empData = d.data() as Employee;
+        const empId = d.id;
+
+        // CRITICAL PROTECTION: Never delete the active Super Admin!
+        if (empId === keepSuperAdminId) {
+          continue;
+        }
+
+        // Filter by branch if specific branch is requested
+        if (branchId && branchId !== "ALL" && empData.branchId && empData.branchId !== branchId) {
+          continue;
+        }
+
+        try {
+          await deleteDoc(doc(db, COL_EMPLOYEES, empId));
+          deletedEmployees++;
+          // Clean cache
+          try {
+            localStorage.removeItem(`workflow_hr_cached_avatar_${empId}`);
+            localStorage.removeItem(`workflow_hr_cached_score_${empId}`);
+            localStorage.removeItem(`workflow_hr_cached_verified_${empId}`);
+          } catch {
+            // ignore
+          }
+        } catch (e) {
+          console.warn(`Could not delete employee ${empId}:`, e);
+        }
+      }
+    }
+
+    // 2. Delete attendance records
+    if (resetAttendance) {
+      const attSnap = await getDocs(collection(db, COL_ATTENDANCE));
+      for (const d of attSnap.docs) {
+        const data = d.data() as AttendanceRecord;
+        if (branchId && branchId !== "ALL" && data.branchId && data.branchId !== branchId) {
+          continue;
+        }
+        await deleteDoc(doc(db, COL_ATTENDANCE, d.id)).catch(() => {});
+      }
+    }
+
+    // 3. Delete leaves
+    if (resetLeavesAndLoans) {
+      const leaveSnap = await getDocs(collection(db, COL_LEAVES));
+      for (const d of leaveSnap.docs) {
+        const data = d.data() as LeaveApplication;
+        if (data.employeeId === keepSuperAdminId) continue;
+        await deleteDoc(doc(db, COL_LEAVES, d.id)).catch(() => {});
+      }
+
+      const loanSnap = await getDocs(collection(db, COL_LOANS));
+      for (const d of loanSnap.docs) {
+        const data = d.data() as EmployeeLoan;
+        if (data.employeeId === keepSuperAdminId) continue;
+        await deleteDoc(doc(db, COL_LOANS, d.id)).catch(() => {});
+      }
+    }
+
+    // 4. Delete payroll payslips
+    if (resetPayroll) {
+      const paySnap = await getDocs(collection(db, COL_PAYSLIPS));
+      for (const d of paySnap.docs) {
+        const data = d.data() as Payslip;
+        if (data.employeeId === keepSuperAdminId) continue;
+        await deleteDoc(doc(db, COL_PAYSLIPS, d.id)).catch(() => {});
+      }
+    }
+
+    // 5. Delete recruitment data
+    if (resetRecruitment) {
+      const candSnap = await getDocs(collection(db, COL_RECRUITMENT_CANDIDATES));
+      for (const d of candSnap.docs) {
+        await deleteDoc(doc(db, COL_RECRUITMENT_CANDIDATES, d.id)).catch(() => {});
+      }
+      const jobSnap = await getDocs(collection(db, COL_RECRUITMENT_JOBS));
+      for (const d of jobSnap.docs) {
+        await deleteDoc(doc(db, COL_RECRUITMENT_JOBS, d.id)).catch(() => {});
+      }
+    }
+
+    // 6. Reset departments if requested
+    if (resetDepartments) {
+      const deptSnap = await getDocs(collection(db, COL_DEPARTMENTS));
+      for (const d of deptSnap.docs) {
+        await deleteDoc(doc(db, COL_DEPARTMENTS, d.id)).catch(() => {});
+      }
+    }
+
+    // 7. Reset designations if requested
+    if (resetDesignations) {
+      const desSnap = await getDocs(collection(db, COL_DESIGNATIONS));
+      for (const d of desSnap.docs) {
+        await deleteDoc(doc(db, COL_DESIGNATIONS, d.id)).catch(() => {});
+      }
+    }
+
+    const scopeName = branchName || (branchId && branchId !== "ALL" ? `শাখা ${branchId}` : "সম্পূর্ণ প্রতিষ্ঠান");
+    return {
+      success: true,
+      deletedEmployeesCount: deletedEmployees,
+      message: `${scopeName}-এর সমস্ত পুরনো তথ্য সফলভাবে রিসেট করা হয়েছে। আপনার সুপার অ্যাডমিন অ্যাকাউন্ট নিরাপদ রয়েছে।`,
+    };
+  } catch (err: any) {
+    console.error("Organization reset error:", err);
+    return {
+      success: false,
+      deletedEmployeesCount: 0,
+      message: err?.message || "রিসেট প্রক্রিয়া সম্পন্ন করতে সমস্যা হয়েছে",
+    };
   }
 }
 

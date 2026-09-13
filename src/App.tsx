@@ -10,6 +10,7 @@ import { MobileBottomNav } from "./components/common/MobileBottomNav";
 import { SmartAttendanceModal } from "./components/attendance/SmartAttendanceModal";
 import { FaceEnrollmentModal } from "./components/attendance/FaceEnrollmentModal";
 import { AIHrAssistantModal } from "./components/ai/AIHrAssistantModal";
+import { OrganizationResetModal } from "./components/modals/OrganizationResetModal";
 import { ThemeLanguageProvider, useThemeLanguage } from "./context/ThemeLanguageContext";
 import { CompanyBrandingProvider } from "./context/CompanyBrandingContext";
 
@@ -143,6 +144,7 @@ function AppContent() {
   const [isAttendanceModalOpen, setIsAttendanceModalOpen] = useState(false);
   const [isAiAssistantModalOpen, setIsAiAssistantModalOpen] = useState(false);
   const [isIdCardModalOpen, setIsIdCardModalOpen] = useState(false);
+  const [isResetOrgModalOpen, setIsResetOrgModalOpen] = useState(false);
   const [selectedIdCardEmployee, setSelectedIdCardEmployee] = useState<Employee | null>(null);
   const [faceEnrollTargetEmployee, setFaceEnrollTargetEmployee] = useState<Employee | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -384,6 +386,59 @@ function AppContent() {
   const handleOpenIdCardModal = (emp?: Employee) => {
     setSelectedIdCardEmployee(emp || currentEmployee);
     setIsIdCardModalOpen(true);
+  };
+
+  const handleOrganizationResetComplete = (options: {
+    targetBranchId: string;
+    resetDepartments: boolean;
+    resetDesignations: boolean;
+    newCompanyName?: string;
+  }) => {
+    if (options.targetBranchId === "ALL") {
+      setEmployees((prev) => prev.filter((e) => e.id === currentEmployee.id));
+      setAttendanceLogs((prev) => prev.filter((a) => a.employeeId === currentEmployee.id));
+      setLeaves((prev) => prev.filter((l) => l.employeeId === currentEmployee.id));
+      setLoans((prev) => prev.filter((ln) => ln.employeeId === currentEmployee.id));
+      setPayslips((prev) => prev.filter((p) => p.employeeId === currentEmployee.id));
+      setJobs([]);
+      setCandidates([]);
+    } else {
+      setEmployees((prev) =>
+        prev.filter((e) => e.branchId !== options.targetBranchId || e.id === currentEmployee.id)
+      );
+      setAttendanceLogs((prev) =>
+        prev.filter((a) => {
+          const emp = employees.find((e) => e.id === a.employeeId);
+          return emp?.branchId !== options.targetBranchId || a.employeeId === currentEmployee.id;
+        })
+      );
+      setLeaves((prev) =>
+        prev.filter((l) => {
+          const emp = employees.find((e) => e.id === l.employeeId);
+          return emp?.branchId !== options.targetBranchId || l.employeeId === currentEmployee.id;
+        })
+      );
+    }
+
+    if (options.resetDepartments) {
+      setDepartments((prev) => prev.slice(0, 1));
+    }
+    if (options.resetDesignations) {
+      setDesignations((prev) => prev.slice(0, 1));
+    }
+
+    setToastMessage(
+      isBangla
+        ? "প্রতিষ্ঠানের সমস্ত পুরানো তথ্য ও রেকর্ড সফলভাবে রিসেট করা হয়েছে!"
+        : "Organization data has been successfully reset!"
+    );
+    notifyAndLog(
+      "ORGANIZATION_RESET",
+      `Super Admin reset organizational data for ${
+        options.targetBranchId === "ALL" ? "Entire Organization" : options.targetBranchId
+      }`,
+      "ADMIN"
+    );
   };
 
   // Helper for audit trail & toast notification
@@ -810,10 +865,12 @@ function AppContent() {
           setIsMobileMenuOpen(false);
         }}
         userRole={currentEmployee.role}
+        currentEmployee={currentEmployee}
         isOpenMobile={isMobileMenuOpen}
         onCloseMobile={() => setIsMobileMenuOpen(false)}
         isCollapsed={sidebarCollapsed}
         onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
+        onOpenOrganizationReset={() => setIsResetOrgModalOpen(true)}
       />
 
       {/* Main Content View Area */}
@@ -835,6 +892,27 @@ function AppContent() {
           onLogout={handleLogout}
           onOpenDigitalIdCard={handleOpenIdCardModal}
           onOpenFaceEnrollModal={handleOpenFaceEnrollModal}
+          onOpenOrganizationReset={() => setIsResetOrgModalOpen(true)}
+          onUpdateEmployee={(updatedEmp) => {
+            setEmployees((prev) =>
+              prev.map((e) => (e.id === updatedEmp.id ? updatedEmp : e))
+            );
+            if (currentEmployee.id === updatedEmp.id) {
+              setCurrentEmployee(updatedEmp);
+            }
+            saveEmployeeToFirestore(updatedEmp);
+            try {
+              localStorage.setItem("workflow_hr_current_user", JSON.stringify(updatedEmp));
+            } catch (e) {
+              console.warn(e);
+            }
+            setToastMessage("আপনার লগইন তথ্য ও পাসওয়ার্ড সফলভাবে সংরক্ষিত হয়েছে!");
+            notifyAndLog(
+              "CREDENTIALS_UPDATED",
+              `Credentials updated for ${updatedEmp.fullName} (${updatedEmp.employeeCode})`,
+              "SECURITY"
+            );
+          }}
         />
 
         {/* Scrollable View Container */}
@@ -972,6 +1050,68 @@ function AppContent() {
                   "EMPLOYEES"
                 );
               }}
+              onAddDepartment={(newDept) => {
+                setDepartments((prev) => [newDept, ...prev]);
+                saveDepartmentToFirestore(newDept);
+                notifyAndLog(
+                  "DEPARTMENT_CREATED",
+                  `Created department: ${newDept.name}`,
+                  "HR_OPERATIONS"
+                );
+              }}
+              onUpdateDepartment={(updatedDept) => {
+                setDepartments((prev) =>
+                  prev.map((d) => (d.id === updatedDept.id ? updatedDept : d))
+                );
+                saveDepartmentToFirestore(updatedDept);
+                notifyAndLog(
+                  "DEPARTMENT_UPDATED",
+                  `Updated department: ${updatedDept.name}`,
+                  "HR_OPERATIONS"
+                );
+              }}
+              onDeleteDepartment={(deptId) => {
+                const target = departments.find((d) => d.id === deptId);
+                setDepartments((prev) => prev.filter((d) => d.id !== deptId));
+                deleteDepartmentFromFirestore(deptId);
+                setToastMessage(`ডিপার্টমেন্ট ${target?.name || ""} মুছে ফেলা হয়েছে`);
+                notifyAndLog(
+                  "DEPARTMENT_DELETED",
+                  `Deleted department: ${target?.name || deptId}`,
+                  "HR_OPERATIONS"
+                );
+              }}
+              onAddDesignation={(newDesig) => {
+                setDesignations((prev) => [newDesig, ...prev]);
+                saveDesignationToFirestore(newDesig);
+                notifyAndLog(
+                  "DESIGNATION_CREATED",
+                  `Created designation: ${newDesig.title}`,
+                  "HR_OPERATIONS"
+                );
+              }}
+              onUpdateDesignation={(updatedDesig) => {
+                setDesignations((prev) =>
+                  prev.map((d) => (d.id === updatedDesig.id ? updatedDesig : d))
+                );
+                saveDesignationToFirestore(updatedDesig);
+                notifyAndLog(
+                  "DESIGNATION_UPDATED",
+                  `Updated designation: ${updatedDesig.title}`,
+                  "HR_OPERATIONS"
+                );
+              }}
+              onDeleteDesignation={(desigId) => {
+                const target = designations.find((d) => d.id === desigId);
+                setDesignations((prev) => prev.filter((d) => d.id !== desigId));
+                deleteDesignationFromFirestore(desigId);
+                setToastMessage(`পদবি ${target?.title || ""} মুছে ফেলা হয়েছে`);
+                notifyAndLog(
+                  "DESIGNATION_DELETED",
+                  `Deleted designation: ${target?.title || desigId}`,
+                  "HR_OPERATIONS"
+                );
+              }}
             />
           )}
 
@@ -1047,6 +1187,15 @@ function AppContent() {
               }}
               onEditEmployee={(emp) => {
                 setActiveTab("employees");
+              }}
+              onUpdateEmployee={(updatedEmp) => {
+                setEmployees((prev) =>
+                  prev.map((e) => (e.id === updatedEmp.id ? updatedEmp : e))
+                );
+                if (currentEmployee.id === updatedEmp.id) {
+                  setCurrentEmployee(updatedEmp);
+                }
+                saveEmployeeToFirestore(updatedEmp);
               }}
             />
           )}
@@ -1420,7 +1569,7 @@ function AppContent() {
       />
 
       {/* Enterprise Company Branding & White-Label Modal */}
-      <CompanyBrandingModal />
+      <CompanyBrandingModal currentUser={currentEmployee} />
 
       {/* Digital ID Card Badge Preview & High-Res PNG Download Modal */}
       <DigitalIdCardModal
@@ -1444,6 +1593,15 @@ function AppContent() {
           }}
         />
       )}
+
+      {/* Super Admin Organization Data Reset Modal */}
+      <OrganizationResetModal
+        isOpen={isResetOrgModalOpen}
+        onClose={() => setIsResetOrgModalOpen(false)}
+        currentSuperAdmin={currentEmployee}
+        branches={branches}
+        onResetComplete={handleOrganizationResetComplete}
+      />
     </div>
   );
 }

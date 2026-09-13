@@ -30,6 +30,7 @@ const DEFAULT_BRANDING: CompanyBranding = {
   email: "contact@apexglobal.tech",
   website: "https://apexglobal.tech",
   registrationNumber: "REG-BD-2026-90812",
+  employeeIdPrefix: "MWO",
 };
 
 export const SOFTWARE_BRANDING: SoftwareBrandingInfo = {
@@ -56,6 +57,7 @@ interface CompanyBrandingContextType {
   getCompanyDisplayName: (isBangla?: boolean) => string;
   getCompanyTagline: (isBangla?: boolean) => string;
   getCompanyAddress: (isBangla?: boolean) => string;
+  getEmployeeIdPrefix: () => string;
 }
 
 const CompanyBrandingContext = createContext<CompanyBrandingContextType | undefined>(undefined);
@@ -169,6 +171,10 @@ export const CompanyBrandingProvider: React.FC<{ children: React.ReactNode }> = 
     return branding.address || DEFAULT_BRANDING.address;
   };
 
+  const getEmployeeIdPrefix = () => {
+    return branding.employeeIdPrefix?.trim() || "MWO";
+  };
+
   return (
     <CompanyBrandingContext.Provider
       value={{
@@ -183,6 +189,7 @@ export const CompanyBrandingProvider: React.FC<{ children: React.ReactNode }> = 
         getCompanyDisplayName,
         getCompanyTagline,
         getCompanyAddress,
+        getEmployeeIdPrefix,
       }}
     >
       {children}
