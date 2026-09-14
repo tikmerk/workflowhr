@@ -90,14 +90,18 @@ export const CompanyBrandingProvider: React.FC<{ children: React.ReactNode }> = 
 
   // Sync from Firestore on mount & subscribe to real-time updates
   useEffect(() => {
-    fetchBrandingSettingsFromFirestore().then(({ branding: fbBranding, isDemoModeEnabled: fbDemo }) => {
-      if (fbBranding) {
-        setBrandingState((prev) => ({ ...prev, ...fbBranding }));
-      }
-      if (fbDemo !== null) {
-        setIsDemoModeEnabled(fbDemo);
-      }
-    });
+    fetchBrandingSettingsFromFirestore()
+      .then(({ branding: fbBranding, isDemoModeEnabled: fbDemo }) => {
+        if (fbBranding) {
+          setBrandingState((prev) => ({ ...prev, ...fbBranding }));
+        }
+        if (fbDemo !== null) {
+          setIsDemoModeEnabled(fbDemo);
+        }
+      })
+      .catch((err) => {
+        console.warn("Branding fetch fallback:", err);
+      });
 
     const unsubscribe = subscribeToBrandingSettings((fbBranding, fbDemo) => {
       if (fbBranding) {

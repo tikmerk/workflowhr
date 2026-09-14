@@ -123,13 +123,17 @@ export const FaceEnrollmentModal: React.FC<FaceEnrollmentModalProps> = ({
 
     // Check existing photo if already enrolled
     if (employee.faceTemplateRegistered && employee.faceRegisteredPhoto) {
-      detectFaceInPhoto(employee.faceRegisteredPhoto).then((res) => {
-        setCandidatePhotoAnalysis({
-          hasFace: res.hasFace,
-          qualityScore: res.qualityScore,
-          banglaMessage: res.banglaMessage,
+      detectFaceInPhoto(employee.faceRegisteredPhoto)
+        .then((res) => {
+          setCandidatePhotoAnalysis({
+            hasFace: res.hasFace,
+            qualityScore: res.qualityScore,
+            banglaMessage: res.banglaMessage,
+          });
+        })
+        .catch((err) => {
+          console.warn("Face analysis fallback:", err);
         });
-      });
     }
 
     return () => {

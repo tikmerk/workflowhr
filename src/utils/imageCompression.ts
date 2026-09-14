@@ -10,7 +10,7 @@ export async function compressAndOptimizeImage(
   maxHeight = 480,
   quality = 0.82
 ): Promise<string> {
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     // If it's a remote URL (http/https) and not a huge data URL, return as-is
     if (typeof source === "string" && !source.startsWith("data:")) {
       resolve(source);
@@ -68,13 +68,13 @@ export async function compressAndOptimizeImage(
     };
 
     img.onerror = (err) => {
-      console.warn("Image load for compression failed:", err);
+      console.warn("Image load for compression notice:", err);
       if (typeof source === "string") {
         resolve(source);
       } else {
         const reader = new FileReader();
         reader.onload = (e) => resolve((e.target?.result as string) || "");
-        reader.onerror = reject;
+        reader.onerror = () => resolve("");
         reader.readAsDataURL(source);
       }
     };
@@ -86,7 +86,7 @@ export async function compressAndOptimizeImage(
       reader.onload = (e) => {
         img.src = (e.target?.result as string) || "";
       };
-      reader.onerror = reject;
+      reader.onerror = () => resolve("");
       reader.readAsDataURL(source);
     }
   });

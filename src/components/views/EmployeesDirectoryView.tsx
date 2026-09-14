@@ -45,11 +45,20 @@ import {
   Department,
   Designation,
   Shift,
-  UserRole
+  UserRole,
+  ExitRecord,
 } from "../../types";
 import { exportToCSV } from "../../utils/exportUtils";
 import { FaceEnrollmentModal } from "../attendance/FaceEnrollmentModal";
 import { useCompanyBranding } from "../../context/CompanyBrandingContext";
+import {
+  getNextAvailableEmployeeCredentials,
+  validateEmployeeIdAvailability,
+  formatEmployeeCode,
+  formatUserId,
+  extractEmployeeNumber,
+  DEFAULT_ID_PREFIX,
+} from "../../utils/employeeIdHelper";
 
 export const APP_TAB_OPTIONS = [
   { id: "dashboard", labelBn: "এক্সিকিউটিভ ড্যাশবোর্ড", labelEn: "Executive Dashboard", icon: LayoutDashboard },
@@ -104,6 +113,7 @@ interface EmployeesDirectoryViewProps {
   deletedEmployees?: Employee[];
   onRestoreEmployee?: (empId: string) => void;
   onPermanentDeleteEmployee?: (empId: string) => void;
+  exitRecords?: ExitRecord[];
 }
 
 export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
@@ -126,24 +136,19 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
   deletedEmployees = [],
   onRestoreEmployee,
   onPermanentDeleteEmployee,
+  exitRecords = [],
 }) => {
   const { getEmployeeIdPrefix } = useCompanyBranding();
 
-  // Generate next unique serial ID based on existing employees and configured prefix
+  // Generate next unique serial ID based on existing employees, recycle bin, exit records, and prefix
   const generateNextEmployeeCode = (prefix: string, list: Employee[]): string => {
-    const cleanPrefix = (prefix || "MWO").trim().toUpperCase();
-    let maxNum = 1000;
-    list.forEach((emp) => {
-      if (!emp.employeeCode) return;
-      const match = emp.employeeCode.match(/(\d+)$/);
-      if (match) {
-        const num = parseInt(match[1], 10);
-        if (!isNaN(num) && num > maxNum) {
-          maxNum = num;
-        }
-      }
-    });
-    return `${cleanPrefix}-${maxNum + 1}`;
+    const creds = getNextAvailableEmployeeCredentials(
+      prefix || getEmployeeIdPrefix(),
+      list,
+      deletedEmployees,
+      exitRecords
+    );
+    return creds.employeeCode;
   };
 
   const [searchTerm, setSearchTerm] = useState("");
@@ -302,6 +307,18 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
   const handleEditSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingEmployee) return;
+
+    const availability = validateEmployeeIdAvailability(
+      editEmpCode,
+      employees,
+      deletedEmployees,
+      exitRecords,
+      editingEmployee.id
+    );
+    if (!availability.available) {
+      alert(`আইডি ত্রুটি: ${availability.reason}`);
+      return;
+    }
 
     const branch = branches.find((b) => b.id === editBranchId) || branches[0];
     const dept = departments.find((d) => d.id === editDeptId) || departments[0];
@@ -549,9 +566,13 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
   };
 
   // New Employee Form State (Comprehensive 30+ Enterprise Fields)
-  const [newEmpCode, setNewEmpCode] = useState(() =>
-    generateNextEmployeeCode(getEmployeeIdPrefix(), employees)
+  const initialNewCreds = getNextAvailableEmployeeCredentials(
+    getEmployeeIdPrefix(),
+    employees,
+    deletedEmployees,
+    exitRecords
   );
+  const [newEmpCode, setNewEmpCode] = useState(initialNewCreds.employeeCode);
   const [newFullName, setNewFullName] = useState("");
   const [newEmail, setNewEmail] = useState("");
   const [newPhone, setNewPhone] = useState("+880 1");
@@ -566,18 +587,8 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
   const [newBloodGroup, setNewBloodGroup] = useState<any>("O+");
   const [newAddress, setNewAddress] = useState("");
 
-  const handleOpenAddModal = () => {
-    setNewEmpCode(generateNextEmployeeCode(getEmployeeIdPrefix(), employees));
-    setNewFullName("");
-    setNewEmail("");
-    setNewPhone("+880 1");
-    setNewUsername("");
-    setNewPassword("123456");
-    setShowAddModal(true);
-  };
-
   // New Employee Account & Permissions
-  const [newUsername, setNewUsername] = useState("");
+  const [newUsername, setNewUsername] = useState(initialNewCreds.username);
   const [newPassword, setNewPassword] = useState("123456");
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [newIsSuperAdmin, setNewIsSuperAdmin] = useState(false);
@@ -589,6 +600,50 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
   const [newFlexibleHours, setNewFlexibleHours] = useState(false);
   const [newSalaryProtected, setNewSalaryProtected] = useState(false);
   const [newFixedContractSalary, setNewFixedContractSalary] = useState(false);
+
+  const handleOpenAddModal = () => {
+    const creds = getNextAvailableEmployeeCredentials(
+      getEmployeeIdPrefix(),
+      employees,
+      deletedEmployees,
+      exitRecords
+    );
+    setNewEmpCode(creds.employeeCode);
+    setNewUsername(creds.username);
+    setNewFullName("");
+    setNewEmail("");
+    setNewPhone("+880 1");
+    setNewPassword("123456");
+    setShowAddModal(true);
+  };
+
+  const handleAutoAssignId = () => {
+    const creds = getNextAvailableEmployeeCredentials(
+      getEmployeeIdPrefix(),
+      employees,
+      deletedEmployees,
+      exitRecords
+    );
+    setNewEmpCode(creds.employeeCode);
+    setNewUsername(creds.username);
+  };
+
+  const addIdValidation = validateEmployeeIdAvailability(
+    newEmpCode,
+    employees,
+    deletedEmployees,
+    exitRecords
+  );
+
+  const editIdValidation = editingEmployee
+    ? validateEmployeeIdAvailability(
+        editEmpCode,
+        employees,
+        deletedEmployees,
+        exitRecords,
+        editingEmployee.id
+      )
+    : { available: true };
 
   const filteredEmployees = employees.filter((emp) => {
     const matchesSearch =
@@ -617,6 +672,18 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
 
   const handleCreateSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+
+    const availability = validateEmployeeIdAvailability(
+      newEmpCode,
+      employees,
+      deletedEmployees,
+      exitRecords
+    );
+    if (!availability.available) {
+      alert(`আইডি সংক্রান্ত সমস্যা: ${availability.reason}`);
+      return;
+    }
+
     const branch = branches.find((b) => b.id === newBranchId) || branches[0];
     const dept = departments.find((d) => d.id === newDeptId) || departments[0];
     const desig = designations.find((d) => d.id === newDesigId) || designations[0];
@@ -624,9 +691,13 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
 
     const gross = Math.round(newBasicSalary * 1.77);
 
+    const cleanNum = extractEmployeeNumber(newEmpCode);
+    const defaultGeneratedUsername = cleanNum ? formatUserId(cleanNum, getEmployeeIdPrefix()) : newEmpCode.trim().toLowerCase();
+    const finalUsername = newUsername.trim() || defaultGeneratedUsername;
+
     const newEmp: Employee = {
       id: `emp-${Date.now()}`,
-      employeeCode: newEmpCode,
+      employeeCode: newEmpCode.trim().toUpperCase(),
       companyId: "comp-01",
       branchId: branch.id,
       branchName: branch.name,
@@ -658,7 +729,7 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
       isFixedContractSalary: newFixedContractSalary,
       isAttendancePenaltyExempt: newSalaryProtected || newFlexibleHours,
       // Account credentials & role flags
-      username: newUsername.trim() || newEmail.split("@")[0] || newEmpCode.toLowerCase(),
+      username: finalUsername,
       password: newPassword.trim() || "123456",
       isSuperAdmin: newIsSuperAdmin || newRole === "SUPER_ADMIN",
       isCeoOrOwner: newIsCeoOrOwner,
@@ -1622,17 +1693,48 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
             <form onSubmit={handleCreateSubmit} className="space-y-4 text-xs">
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-slate-600 dark:text-slate-400 mb-1">
-                    Employee Code / ID (অটো জেনারেট / পরিবর্তনযোগ্য)
-                  </label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-slate-600 dark:text-slate-400 font-semibold">
+                      Employee Code / ID (ইউনিক আইডি) *
+                    </label>
+                    <button
+                      type="button"
+                      onClick={handleAutoAssignId}
+                      className="text-[10px] text-indigo-600 dark:text-indigo-400 hover:underline font-medium cursor-pointer"
+                    >
+                      অটো সিরিয়াল নিন
+                    </button>
+                  </div>
                   <input
                     type="text"
                     value={newEmpCode}
-                    onChange={(e) => setNewEmpCode(e.target.value)}
-                    placeholder="e.g. MWO-1001"
-                    className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white font-mono"
+                    onChange={(e) => {
+                      const val = e.target.value.toUpperCase();
+                      setNewEmpCode(val);
+                      const num = extractEmployeeNumber(val);
+                      if (num !== null) {
+                        setNewUsername(formatUserId(num, getEmployeeIdPrefix()));
+                      }
+                    }}
+                    placeholder="e.g. MWO1001"
+                    className={`w-full bg-white dark:bg-slate-950 border rounded-xl p-2.5 text-slate-900 dark:text-white font-mono font-bold tracking-wide ${
+                      addIdValidation.available
+                        ? "border-emerald-300 dark:border-emerald-700/60 focus:ring-emerald-500"
+                        : "border-rose-400 dark:border-rose-700 focus:ring-rose-500"
+                    }`}
                     required
                   />
+                  <div className="mt-1">
+                    {addIdValidation.available ? (
+                      <span className="text-[10px] text-emerald-600 dark:text-emerald-400 flex items-center gap-1 font-medium">
+                        <CheckCircle2 className="w-3 h-3 flex-shrink-0" /> ইউনিক ও ব্যবহারযোগ্য আইডি ({newEmpCode})
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-rose-600 dark:text-rose-400 flex items-center gap-1 font-medium">
+                        <AlertTriangle className="w-3 h-3 flex-shrink-0" /> {addIdValidation.reason}
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <div>
                   <label className="block text-slate-600 dark:text-slate-400 mb-1">Full Legal Name</label>
@@ -1875,11 +1977,11 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
                     <input
                       type="text"
                       value={newUsername}
-                      onChange={(e) => setNewUsername(e.target.value)}
-                      placeholder={newEmail ? newEmail.split("@")[0] : newEmpCode.toLowerCase()}
-                      className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2 text-slate-900 dark:text-white font-mono"
+                      onChange={(e) => setNewUsername(e.target.value.toLowerCase())}
+                      placeholder={newEmpCode ? formatUserId(extractEmployeeNumber(newEmpCode) || 1001, getEmployeeIdPrefix()) : "mwo1001"}
+                      className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2 text-slate-900 dark:text-white font-mono lowercase"
                     />
-                    <span className="text-[10px] text-slate-400">খালি রাখলে স্বয়ংক্রিয় ইউজার আইডি তৈরি হবে</span>
+                    <span className="text-[10px] text-slate-400">ছোট হাতের অক্ষরে আইডি (যেমন: {formatUserId(extractEmployeeNumber(newEmpCode) || 1001, getEmployeeIdPrefix())}), কোনো হাইফেন নেই</span>
                   </div>
                   <div>
                     <label className="block text-slate-600 dark:text-slate-400 mb-1 font-semibold">
@@ -2175,10 +2277,19 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
                   <input
                     type="text"
                     value={editEmpCode}
-                    onChange={(e) => setEditEmpCode(e.target.value)}
-                    className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white font-mono"
+                    onChange={(e) => setEditEmpCode(e.target.value.toUpperCase())}
+                    className={`w-full bg-white dark:bg-slate-950 border rounded-xl p-2.5 text-slate-900 dark:text-white font-mono font-bold ${
+                      editIdValidation.available
+                        ? "border-slate-200 dark:border-slate-700"
+                        : "border-rose-400 dark:border-rose-700 focus:ring-rose-500"
+                    }`}
                     required
                   />
+                  {!editIdValidation.available && (
+                    <span className="text-[10px] text-rose-600 dark:text-rose-400 flex items-center gap-1 font-medium mt-1">
+                      <AlertTriangle className="w-3 h-3 flex-shrink-0" /> {editIdValidation.reason}
+                    </span>
+                  )}
                 </div>
                 <div>
                   <label className="block text-slate-600 dark:text-slate-400 mb-1 font-semibold">

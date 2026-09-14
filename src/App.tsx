@@ -302,7 +302,9 @@ function AppContent() {
   // Realtime Firestore Database Subscriptions & Initialization
   useEffect(() => {
     // 1. Initialize Firestore collections if empty
-    initializeFirestoreDatabase();
+    initializeFirestoreDatabase().catch((err) => {
+      console.warn("Firestore database initialization notice:", err);
+    });
 
     // 2. Realtime Subscriptions
     const unsubEmployees = subscribeToEmployees((updatedEmps) => {
@@ -1082,6 +1084,7 @@ function AppContent() {
               designations={designations}
               shifts={shifts}
               currentUser={currentEmployee}
+              exitRecords={exitRecords}
               onAddEmployee={(newEmp) => {
                 setEmployees((prev) => [newEmp, ...prev]);
                 saveEmployeeToFirestore(newEmp);

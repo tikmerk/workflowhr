@@ -5,7 +5,9 @@ import {defineConfig} from 'vite';
 
 export default defineConfig(() => {
   return {
-    base: process.env.VITE_BASE_PATH || '/', // <--- এই লাইনটি যোগ করা হয়েছে
+    // Using './' ensures that assets load properly on GitHub Pages (e.g. https://user.github.io/repo/),
+    // cPanel subfolders (e.g. https://domain.com/workflowhr/), or custom domains without a blank white screen.
+    base: (process.env.VITE_BASE_PATH && process.env.VITE_BASE_PATH.trim() !== '') ? process.env.VITE_BASE_PATH : './',
     plugins: [react(), tailwindcss()],
     resolve: {
       alias: {
