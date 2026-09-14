@@ -49,6 +49,10 @@ import {
   updateLoanStatusInFirestore,
   savePayslipsToFirestore,
   saveAuditLogToFirestore,
+  savePayrollPolicyToFirestore,
+  subscribeToPayrollPolicy,
+  saveDeletedEmployeesToFirestore,
+  subscribeToDeletedEmployees,
 } from "./services/firestoreService";
 import { compressAndOptimizeImage } from "./utils/imageCompression";
 
@@ -101,6 +105,7 @@ import {
   INITIAL_MEETINGS_CONFERENCES,
   INITIAL_ROLE_PERMISSIONS,
   INITIAL_PAYROLL_POLICY,
+  INITIAL_TREASURY_ACCOUNTS,
 } from "./data/mockDatabase";
 import { calculateMonthlyPayroll } from "./utils/payrollEngine";
 import {
@@ -128,6 +133,7 @@ import {
   MeetingConference,
   RolePermissionConfig,
   PayrollPolicyConfig,
+  TreasuryAccount,
 } from "./types";
 import { CheckCircle2, Info, X } from "lucide-react";
 
@@ -194,9 +200,34 @@ function AppContent() {
   const [payrollPolicy, setPayrollPolicy] = useState<PayrollPolicyConfig>(() => {
     try {
       const local = localStorage.getItem("wf_payroll_policy");
-      return local ? JSON.parse(local) : INITIAL_PAYROLL_POLICY;
+      if (local) {
+        const parsed = JSON.parse(local);
+        return {
+          ...INITIAL_PAYROLL_POLICY,
+          ...parsed,
+          customBonuses: parsed.customBonuses?.length ? parsed.customBonuses : INITIAL_PAYROLL_POLICY.customBonuses,
+        };
+      }
+      return INITIAL_PAYROLL_POLICY;
     } catch {
       return INITIAL_PAYROLL_POLICY;
+    }
+  });
+  const [deletedEmployees, setDeletedEmployees] = useState<Employee[]>(() => {
+    try {
+      const saved = localStorage.getItem("wf_deleted_employees");
+      if (saved) return JSON.parse(saved);
+    } catch {
+      // ignore
+    }
+    return [];
+  });
+  const [treasuryAccounts, setTreasuryAccounts] = useState<TreasuryAccount[]>(() => {
+    try {
+      const local = localStorage.getItem("wf_treasury_accounts");
+      return local ? JSON.parse(local) : INITIAL_TREASURY_ACCOUNTS;
+    } catch {
+      return INITIAL_TREASURY_ACCOUNTS;
     }
   });
 
@@ -211,6 +242,14 @@ function AppContent() {
   useEffect(() => {
     localStorage.setItem("wf_payroll_policy", JSON.stringify(payrollPolicy));
   }, [payrollPolicy]);
+
+  useEffect(() => {
+    localStorage.setItem("wf_deleted_employees", JSON.stringify(deletedEmployees));
+  }, [deletedEmployees]);
+
+  useEffect(() => {
+    localStorage.setItem("wf_treasury_accounts", JSON.stringify(treasuryAccounts));
+  }, [treasuryAccounts]);
 
   // Active Logged-in Persona & Auth state
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
@@ -348,6 +387,26 @@ function AppContent() {
       setCandidates(updatedCandidates);
     });
 
+    const unsubPayrollPolicy = subscribeToPayrollPolicy((updatedPolicy) => {
+      setPayrollPolicy((prev) => {
+        if (JSON.stringify(prev) === JSON.stringify(updatedPolicy)) return prev;
+        return {
+          ...prev,
+          ...updatedPolicy,
+          customBonuses: updatedPolicy.customBonuses || prev.customBonuses || [],
+        };
+      });
+    });
+
+    const unsubDeletedEmployees = subscribeToDeletedEmployees((updatedDeleted) => {
+      if (Array.isArray(updatedDeleted)) {
+        setDeletedEmployees((prev) => {
+          if (JSON.stringify(prev) === JSON.stringify(updatedDeleted)) return prev;
+          return updatedDeleted;
+        });
+      }
+    });
+
     return () => {
       unsubEmployees();
       unsubAttendance();
@@ -359,6 +418,8 @@ function AppContent() {
       unsubAudit();
       unsubJobs();
       unsubCandidates();
+      unsubPayrollPolicy();
+      unsubDeletedEmployees();
     };
   }, []);
 
@@ -630,12 +691,13 @@ function AppContent() {
 
   // Handlers for Payroll
   const handleGeneratePayroll = (month: string) => {
-    const activeStaff = employees.filter((e) => e.status === "ACTIVE");
+    const activeStaff = employees.filter((e) => e.status === "ACTIVE" && !e.deletedAt);
     const newSlips = calculateMonthlyPayroll(
       month,
       activeStaff,
       attendanceLogs,
-      loans
+      loans,
+      payrollPolicy.customBonuses || []
     );
     // Replace current month's slips or append
     setPayslips((prev) => [
@@ -645,7 +707,7 @@ function AppContent() {
     savePayslipsToFirestore(newSlips);
     notifyAndLog(
       "PAYROLL_CALCULATION",
-      `Generated ${month} automated payroll for ${activeStaff.length} active employees`,
+      `Generated ${month} automated payroll with festival bonuses for ${activeStaff.length} active employees`,
       "PAYROLL"
     );
   };
@@ -1039,14 +1101,68 @@ function AppContent() {
                 saveEmployeeToFirestore(updatedEmp);
               }}
               onOpenDigitalIdCard={handleOpenIdCardModal}
+              deletedEmployees={deletedEmployees}
+              onRestoreEmployee={(empId) => {
+                const target = deletedEmployees.find((e) => e.id === empId);
+                if (!target) return;
+                const restoredEmp: Employee = {
+                  ...target,
+                  status: "ACTIVE",
+                  isExited: false,
+                  deletedAt: undefined,
+                  deletedBy: undefined,
+                };
+                const updatedDeleted = deletedEmployees.filter((e) => e.id !== empId);
+                setDeletedEmployees(updatedDeleted);
+                saveDeletedEmployeesToFirestore(updatedDeleted);
+                setEmployees((prev) => [restoredEmp, ...prev]);
+                saveEmployeeToFirestore(restoredEmp);
+                setToastMessage(`কর্মী ${restoredEmp.fullName} সফলভাবে সক্রিয় ডিরেক্টরিতে ফিরিয়ে আনা হয়েছে`);
+                notifyAndLog(
+                  "EMPLOYEE_RESTORED",
+                  `Restored employee: ${restoredEmp.fullName} (${restoredEmp.employeeCode})`,
+                  "EMPLOYEES"
+                );
+              }}
+              onPermanentDeleteEmployee={(empId) => {
+                const target = deletedEmployees.find((e) => e.id === empId);
+                const updatedDeleted = deletedEmployees.filter((e) => e.id !== empId);
+                setDeletedEmployees(updatedDeleted);
+                saveDeletedEmployeesToFirestore(updatedDeleted);
+                deleteEmployeeFromFirestore(empId);
+                setToastMessage(`কর্মী ${target?.fullName || empId} স্থায়ীভাবে মুছে ফেলা হয়েছে`);
+                notifyAndLog(
+                  "EMPLOYEE_PERMANENTLY_PURGED",
+                  `Permanently deleted employee: ${target?.fullName || empId}`,
+                  "EMPLOYEES"
+                );
+              }}
               onDeleteEmployee={(empId) => {
                 const target = employees.find((e) => e.id === empId);
+                if (!target) return;
+                const archivedEmp: Employee = {
+                  ...target,
+                  status: "EXITED",
+                  isExited: true,
+                  exitDate: target.exitDate || new Date().toISOString().split("T")[0],
+                  deletedAt: new Date().toISOString(),
+                  deletedBy: currentEmployee.fullName,
+                };
+                // Remove from active list and add to recycle bin
+                const updatedDeleted = [archivedEmp, ...deletedEmployees.filter((d) => d.id !== empId)];
                 setEmployees((prev) => prev.filter((e) => e.id !== empId));
+                setDeletedEmployees(updatedDeleted);
+                saveDeletedEmployeesToFirestore(updatedDeleted);
+                // Clean up orphan exit records, attendance records, leaves & loans for deleted employee
+                setExitRecords((prev) => prev.filter((r) => r.employeeId !== empId));
+                setAttendanceLogs((prev) => prev.filter((a) => a.employeeId !== empId));
+                setLeaves((prev) => prev.filter((l) => l.employeeId !== empId));
+                setLoans((prev) => prev.filter((ln) => ln.employeeId !== empId));
                 deleteEmployeeFromFirestore(empId);
-                setToastMessage(`কর্মচারী ${target?.fullName || ""} সফলভাবে ডিলিট করা হয়েছে`);
+                setToastMessage(`কর্মী ${target.fullName} ডিলিট করা হয়েছে (রিসাইকেল বিন বা এডিট লগ থেকে রিস্টোর করতে পারবেন)`);
                 notifyAndLog(
                   "EMPLOYEE_DELETED",
-                  `Deleted staff record: ${target?.fullName || empId}`,
+                  `Deleted staff record moved to recycle bin: ${target.fullName} (${target.employeeCode})`,
                   "EMPLOYEES"
                 );
               }}
@@ -1120,6 +1236,8 @@ function AppContent() {
               departments={departments}
               designations={designations}
               employees={employees}
+              treasuryAccounts={treasuryAccounts}
+              onUpdateTreasuryAccounts={setTreasuryAccounts}
               onAddDepartment={(newDept) => {
                 setDepartments((prev) => [newDept, ...prev]);
                 saveDepartmentToFirestore(newDept);
@@ -1289,6 +1407,7 @@ function AppContent() {
             <AttendanceLogsView
               attendanceLogs={attendanceLogs}
               branches={branches}
+              employees={employees}
               onOpenAttendanceModal={() => setIsAttendanceModalOpen(true)}
             />
           )}
@@ -1323,6 +1442,21 @@ function AppContent() {
               payslips={payslips}
               employees={employees}
               branches={branches}
+              customBonuses={payrollPolicy.customBonuses || []}
+              onUpdateCustomBonuses={(updatedBonuses) => {
+                const nextPolicy = {
+                  ...payrollPolicy,
+                  customBonuses: updatedBonuses,
+                };
+                setPayrollPolicy(nextPolicy);
+                savePayrollPolicyToFirestore(nextPolicy);
+                notifyAndLog(
+                  "BONUS_CONFIG_UPDATED",
+                  `Updated festival & custom bonus configuration`,
+                  "PAYROLL"
+                );
+                setToastMessage("উৎসব বোনাস তালিকা সফলভাবে আপডেট হয়েছে");
+              }}
               onGeneratePayroll={handleGeneratePayroll}
               onDisburseAll={handleDisburseAll}
             />
@@ -1438,6 +1572,15 @@ function AppContent() {
               employees={employees}
               onAddExit={handleAddExit}
               onUpdateClearance={handleUpdateClearance}
+              onDeleteExitRecord={(exitId) => {
+                setExitRecords((prev) => prev.filter((r) => r.id !== exitId));
+                setToastMessage("এক্সিট নোটিশ সফলভাবে মুছে ফেলা হয়েছে");
+                notifyAndLog(
+                  "EXIT_NOTICE_DELETED",
+                  `Deleted exit clearance notice record`,
+                  "HR_OPERATIONS"
+                );
+              }}
             />
           )}
 
@@ -1481,6 +1624,7 @@ function AppContent() {
               payrollPolicy={payrollPolicy}
               onUpdatePayrollPolicy={(updatedPolicy) => {
                 setPayrollPolicy(updatedPolicy);
+                savePayrollPolicyToFirestore(updatedPolicy);
                 notifyAndLog(
                   "POLICY_UPDATED",
                   `Updated tardiness exemption & festival bonus policy`,

@@ -33,7 +33,6 @@ import {
   KeyRound,
   Lock,
   Copy,
-  Check,
   Eye,
   EyeOff,
 } from "lucide-react";

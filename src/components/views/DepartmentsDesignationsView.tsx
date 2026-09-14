@@ -22,14 +22,19 @@ import {
   Award,
   DollarSign,
   AlertTriangle,
+  Landmark,
+  PieChart,
 } from "lucide-react";
-import { Department, Designation, Employee } from "../../types";
+import { Department, Designation, Employee, TreasuryAccount } from "../../types";
 import { useThemeLanguage } from "../../context/ThemeLanguageContext";
+import { INITIAL_TREASURY_ACCOUNTS } from "../../data/mockDatabase";
+import { BudgetAllocationSection } from "../organization/BudgetAllocationSection";
 
 interface DepartmentsDesignationsViewProps {
   departments: Department[];
   designations: Designation[];
   employees?: Employee[];
+  treasuryAccounts?: TreasuryAccount[];
   onAddDepartment: (dept: Department) => void;
   onUpdateDepartment?: (dept: Department) => void;
   onDeleteDepartment?: (id: string) => void;
@@ -39,12 +44,14 @@ interface DepartmentsDesignationsViewProps {
   onViewEmployee?: (emp: Employee) => void;
   onEditEmployee?: (emp: Employee) => void;
   onUpdateEmployee?: (emp: Employee) => void;
+  onUpdateTreasuryAccounts?: (accounts: TreasuryAccount[]) => void;
 }
 
 export const DepartmentsDesignationsView: React.FC<DepartmentsDesignationsViewProps> = ({
   departments,
   designations,
   employees = [],
+  treasuryAccounts = INITIAL_TREASURY_ACCOUNTS,
   onAddDepartment,
   onUpdateDepartment,
   onDeleteDepartment,
@@ -54,10 +61,11 @@ export const DepartmentsDesignationsView: React.FC<DepartmentsDesignationsViewPr
   onViewEmployee,
   onEditEmployee,
   onUpdateEmployee,
+  onUpdateTreasuryAccounts,
 }) => {
   const { isBangla } = useThemeLanguage();
 
-  const [activeTab, setActiveTab] = useState<"DEPARTMENTS" | "DESIGNATIONS">("DEPARTMENTS");
+  const [activeTab, setActiveTab] = useState<"DEPARTMENTS" | "DESIGNATIONS" | "BUDGET_TREASURY">("DEPARTMENTS");
   const [showDeptModal, setShowDeptModal] = useState(false);
   const [showDesigModal, setShowDesigModal] = useState(false);
 
@@ -78,12 +86,14 @@ export const DepartmentsDesignationsView: React.FC<DepartmentsDesignationsViewPr
   const [newDeptCode, setNewDeptCode] = useState("");
   const [newDeptDesc, setNewDeptDesc] = useState("");
   const [newDeptBudget, setNewDeptBudget] = useState(1500000);
+  const [newDeptFundingSourceId, setNewDeptFundingSourceId] = useState(treasuryAccounts[0]?.id || "");
 
   // Edit Department Form
   const [editDeptName, setEditDeptName] = useState("");
   const [editDeptCode, setEditDeptCode] = useState("");
   const [editDeptDesc, setEditDeptDesc] = useState("");
   const [editDeptBudget, setEditDeptBudget] = useState(1500000);
+  const [editDeptFundingSourceId, setEditDeptFundingSourceId] = useState("");
 
   // New Designation Form
   const [newDesigTitle, setNewDesigTitle] = useState("");
@@ -196,6 +206,7 @@ export const DepartmentsDesignationsView: React.FC<DepartmentsDesignationsViewPr
   // Handle Add Department
   const handleDeptSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    const fundingAccount = treasuryAccounts.find((a) => a.id === newDeptFundingSourceId) || treasuryAccounts[0];
     onAddDepartment({
       id: `dept-${Date.now()}`,
       name: newDeptName,
@@ -203,6 +214,10 @@ export const DepartmentsDesignationsView: React.FC<DepartmentsDesignationsViewPr
       description: newDeptDesc || "Enterprise operations & governance",
       totalEmployees: 0,
       budgetAllocated: newDeptBudget,
+      fundingSourceId: fundingAccount?.id,
+      fundingSourceName: fundingAccount ? `${fundingAccount.bankName} (${fundingAccount.accountName})` : undefined,
+      lastAllocatedAt: new Date().toISOString().split("T")[0],
+      allocatedBy: "Super Admin (Finance Directorate)",
     });
     setShowDeptModal(false);
     setNewDeptName("");
@@ -217,6 +232,7 @@ export const DepartmentsDesignationsView: React.FC<DepartmentsDesignationsViewPr
     setEditDeptCode(dept.code || "");
     setEditDeptDesc(dept.description || "");
     setEditDeptBudget(dept.budgetAllocated || 1500000);
+    setEditDeptFundingSourceId(dept.fundingSourceId || treasuryAccounts[0]?.id || "");
   };
 
   // Handle Edit Department Submit
@@ -224,12 +240,18 @@ export const DepartmentsDesignationsView: React.FC<DepartmentsDesignationsViewPr
     e.preventDefault();
     if (!editingDept) return;
 
+    const fundingAccount = treasuryAccounts.find((a) => a.id === editDeptFundingSourceId) || treasuryAccounts[0];
+
     const updated: Department = {
       ...editingDept,
       name: editDeptName,
       code: editDeptCode.toUpperCase(),
       description: editDeptDesc,
       budgetAllocated: Number(editDeptBudget),
+      fundingSourceId: fundingAccount?.id,
+      fundingSourceName: fundingAccount ? `${fundingAccount.bankName} (${fundingAccount.accountName})` : undefined,
+      lastAllocatedAt: new Date().toISOString().split("T")[0],
+      allocatedBy: editingDept.allocatedBy || "Super Admin (Finance Directorate)",
     };
 
     if (onUpdateDepartment) {
@@ -365,9 +387,20 @@ export const DepartmentsDesignationsView: React.FC<DepartmentsDesignationsViewPr
             >
               {isBangla ? `পদবি ও পে-স্কেল (${designations.length})` : `Designations (${designations.length})`}
             </button>
+            <button
+              onClick={() => setActiveTab("BUDGET_TREASURY")}
+              className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
+                activeTab === "BUDGET_TREASURY"
+                  ? "bg-teal-600 text-white shadow-xs"
+                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+              }`}
+            >
+              <Landmark className="w-3.5 h-3.5" />
+              <span>{isBangla ? `বাজেট ও অ্যাকাউন্টস (${treasuryAccounts.length})` : `Budget & Accounts (${treasuryAccounts.length})`}</span>
+            </button>
           </div>
 
-          {activeTab === "DEPARTMENTS" ? (
+          {activeTab === "DEPARTMENTS" && (
             <button
               onClick={() => setShowDeptModal(true)}
               className="px-4 py-2 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-teal-500/20 flex items-center gap-2 transition-all cursor-pointer"
@@ -375,7 +408,8 @@ export const DepartmentsDesignationsView: React.FC<DepartmentsDesignationsViewPr
               <Plus className="w-4 h-4" />
               <span>{isBangla ? "+ ডিপার্টমেন্ট যোগ করুন" : "+ Add Department"}</span>
             </button>
-          ) : (
+          )}
+          {activeTab === "DESIGNATIONS" && (
             <button
               onClick={() => setShowDesigModal(true)}
               className="px-4 py-2 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-teal-500/20 flex items-center gap-2 transition-all cursor-pointer"
@@ -449,8 +483,11 @@ export const DepartmentsDesignationsView: React.FC<DepartmentsDesignationsViewPr
                       <span className="text-[10px] text-slate-500 dark:text-slate-400 block font-semibold">
                         {isBangla ? "বাজেট বরাদ্দ" : "Budget Allocated"}
                       </span>
-                      <span className="font-bold text-emerald-600 dark:text-emerald-400 text-xs font-mono mt-1 block">
+                      <span className="font-bold text-emerald-600 dark:text-emerald-400 text-xs font-mono mt-0.5 block">
                         ৳{((dept.budgetAllocated ?? 1500000) / 100000).toFixed(1)}L BDT
+                      </span>
+                      <span className="text-[9px] text-slate-400 dark:text-slate-500 block truncate mt-0.5" title={dept.fundingSourceName || "Central Operating Treasury"}>
+                        {dept.fundingSourceName || "Central Operating Treasury"}
                       </span>
                     </div>
                   </div>
@@ -474,6 +511,16 @@ export const DepartmentsDesignationsView: React.FC<DepartmentsDesignationsViewPr
             );
           })}
         </div>
+      )}
+
+      {/* Budget & Treasury Accounts Tab Content */}
+      {activeTab === "BUDGET_TREASURY" && (
+        <BudgetAllocationSection
+          departments={departments}
+          treasuryAccounts={treasuryAccounts}
+          onUpdateDepartment={onUpdateDepartment}
+          onUpdateTreasuryAccounts={onUpdateTreasuryAccounts}
+        />
       )}
 
       {/* Designations Tab Content with Requested Top Dashboard Overview */}
@@ -972,6 +1019,23 @@ export const DepartmentsDesignationsView: React.FC<DepartmentsDesignationsViewPr
 
               <div>
                 <label className="block text-slate-600 dark:text-slate-400 mb-1">
+                  {isBangla ? "তহবিল উৎস ব্যাংক অ্যাকাউন্ট *" : "Funding Treasury Account *"}
+                </label>
+                <select
+                  value={editDeptFundingSourceId}
+                  onChange={(e) => setEditDeptFundingSourceId(e.target.value)}
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white focus:outline-none focus:border-teal-500"
+                >
+                  {treasuryAccounts.map((acc) => (
+                    <option key={acc.id} value={acc.id}>
+                      {acc.bankName} - {acc.accountName} (তহবিল: ৳{(acc.totalFund / 100000).toFixed(1)}L)
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-slate-600 dark:text-slate-400 mb-1">
                   {isBangla ? "বিবরণ ও দায়িত্ব" : "Description & Scope"}
                 </label>
                 <textarea
@@ -1185,6 +1249,21 @@ export const DepartmentsDesignationsView: React.FC<DepartmentsDesignationsViewPr
                   onChange={(e) => setNewDeptBudget(Number(e.target.value))}
                   className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white font-mono focus:outline-none focus:border-teal-500"
                 />
+              </div>
+
+              <div>
+                <label className="block text-slate-600 dark:text-slate-400 mb-1">{isBangla ? "তহবিল উৎস ব্যাংক অ্যাকাউন্ট *" : "Funding Treasury Account *"}</label>
+                <select
+                  value={newDeptFundingSourceId}
+                  onChange={(e) => setNewDeptFundingSourceId(e.target.value)}
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white focus:outline-none focus:border-teal-500"
+                >
+                  {treasuryAccounts.map((acc) => (
+                    <option key={acc.id} value={acc.id}>
+                      {acc.bankName} - {acc.accountName} (তহবিল: ৳{(acc.totalFund / 100000).toFixed(1)}L)
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div>

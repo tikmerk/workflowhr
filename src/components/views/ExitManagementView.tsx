@@ -15,7 +15,8 @@ import {
   ShieldCheck,
   Search,
   ArrowRight,
-  Filter
+  Filter,
+  Trash2
 } from "lucide-react";
 import { ExitRecord, Employee } from "../../types";
 import { useThemeLanguage } from "../../context/ThemeLanguageContext";
@@ -28,6 +29,7 @@ interface ExitManagementViewProps {
     exitId: string,
     dept: "itClearance" | "accountsClearance" | "adminClearance" | "hrClearance"
   ) => void;
+  onDeleteExitRecord?: (exitId: string) => void;
 }
 
 export const ExitManagementView: React.FC<ExitManagementViewProps> = ({
@@ -35,6 +37,7 @@ export const ExitManagementView: React.FC<ExitManagementViewProps> = ({
   employees = [],
   onAddExit,
   onUpdateClearance,
+  onDeleteExitRecord,
 }) => {
   const { isBangla, toBanglaDigits } = useThemeLanguage();
   const [showResignModal, setShowResignModal] = useState(false);
@@ -101,7 +104,12 @@ export const ExitManagementView: React.FC<ExitManagementViewProps> = ({
     setReason("");
   };
 
-  const filteredRecords = exitRecords.filter((rec) => {
+  // Filter out any records that belong to deleted/non-existent employees
+  const validRecords = exitRecords.filter((rec) =>
+    employees.some((e) => e.id === rec.employeeId)
+  );
+
+  const filteredRecords = validRecords.filter((rec) => {
     const matchesSearch =
       rec.employeeName.toLowerCase().includes(searchQuery.toLowerCase()) ||
       rec.branchName.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -115,10 +123,10 @@ export const ExitManagementView: React.FC<ExitManagementViewProps> = ({
     return matchesSearch && matchesStatus;
   });
 
-  // Calculate statistics safely
-  const totalExits = exitRecords.length;
-  const inNoticePeriod = exitRecords.filter((r) => r.status === "NOTICE_PERIOD" || r.status === "CLEARANCE_IN_PROGRESS" || r.status === "INITIATED").length;
-  const fullySettled = exitRecords.filter((r) => r.status === "SETTLED" || r.status === "COMPLETED").length;
+  // Calculate statistics safely based on valid records
+  const totalExits = validRecords.length;
+  const inNoticePeriod = validRecords.filter((r) => r.status === "NOTICE_PERIOD" || r.status === "CLEARANCE_IN_PROGRESS" || r.status === "INITIATED").length;
+  const fullySettled = validRecords.filter((r) => r.status === "SETTLED" || r.status === "COMPLETED").length;
 
   return (
     <div id="exit-management-view" className="space-y-6 animate-in fade-in duration-300">
@@ -307,16 +315,28 @@ export const ExitManagementView: React.FC<ExitManagementViewProps> = ({
                     </div>
                   </div>
 
-                  <div className="text-xs text-slate-500 dark:text-slate-400 space-y-1 text-left sm:text-right bg-slate-50 dark:bg-slate-950/60 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800">
-                    <div>
-                      {isBangla ? "সর্বশেষ কর্মদিবস:" : "Last Working Day:"}{" "}
-                      <strong className="text-slate-900 dark:text-white">{rec.lastWorkingDay || "N/A"}</strong>
+                  <div className="flex items-center gap-2">
+                    <div className="text-xs text-slate-500 dark:text-slate-400 space-y-1 text-left sm:text-right bg-slate-50 dark:bg-slate-950/60 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800">
+                      <div>
+                        {isBangla ? "সর্বশেষ কর্মদিবস:" : "Last Working Day:"}{" "}
+                        <strong className="text-slate-900 dark:text-white">{rec.lastWorkingDay || "N/A"}</strong>
+                      </div>
+                      <div className="text-[11px]">
+                        {isBangla
+                          ? `নোটিশ পিরিয়ড: ${toBanglaDigits(rec.noticePeriodDays || 30)} দিন`
+                          : `Notice Period: ${rec.noticePeriodDays || 30} Days`}
+                      </div>
                     </div>
-                    <div className="text-[11px]">
-                      {isBangla
-                        ? `নোটিশ পিরিয়ড: ${toBanglaDigits(rec.noticePeriodDays || 30)} দিন`
-                        : `Notice Period: ${rec.noticePeriodDays || 30} Days`}
-                    </div>
+                    {onDeleteExitRecord && (
+                      <button
+                        type="button"
+                        onClick={() => onDeleteExitRecord(rec.id)}
+                        title={isBangla ? "নোটিশ রেকর্ডটি মুছে ফেলুন" : "Delete exit notice record"}
+                        className="p-2.5 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-xl transition-colors cursor-pointer"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
                   </div>
                 </div>
 

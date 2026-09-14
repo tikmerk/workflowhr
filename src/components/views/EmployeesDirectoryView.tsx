@@ -37,6 +37,7 @@ import {
   Check,
   LayoutDashboard,
   UserCheck,
+  Archive,
 } from "lucide-react";
 import {
   Employee,
@@ -100,6 +101,9 @@ interface EmployeesDirectoryViewProps {
   onAddDesignation?: (desig: Designation) => void;
   onUpdateDesignation?: (desig: Designation) => void;
   onDeleteDesignation?: (id: string) => void;
+  deletedEmployees?: Employee[];
+  onRestoreEmployee?: (empId: string) => void;
+  onPermanentDeleteEmployee?: (empId: string) => void;
 }
 
 export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
@@ -119,6 +123,9 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
   onAddDesignation,
   onUpdateDesignation,
   onDeleteDesignation,
+  deletedEmployees = [],
+  onRestoreEmployee,
+  onPermanentDeleteEmployee,
 }) => {
   const { getEmployeeIdPrefix } = useCompanyBranding();
 
@@ -182,6 +189,14 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
   const [editIsAttendanceExempt, setEditIsAttendanceExempt] = useState(false);
   const [editFaceVerified, setEditFaceVerified] = useState(false);
   const [editAllowedTabs, setEditAllowedTabs] = useState<string[]>(DEFAULT_EMPLOYEE_ALLOWED_TABS);
+  const [editFlexibleHours, setEditFlexibleHours] = useState(false);
+  const [editSalaryProtected, setEditSalaryProtected] = useState(false);
+  const [editFixedContractSalary, setEditFixedContractSalary] = useState(false);
+
+  // Directory View Mode (Active vs Recycle Bin)
+  const [activeDirectoryTab, setActiveDirectoryTab] = useState<"active" | "recycle_bin">("active");
+  const [recycleSearchTerm, setRecycleSearchTerm] = useState("");
+  const [permanentDeleteTarget, setPermanentDeleteTarget] = useState<Employee | null>(null);
 
   // Quick Account Reset Modal State (Super Admin power to reset user ID & password)
   const [quickResetEmployee, setQuickResetEmployee] = useState<Employee | null>(null);
@@ -279,6 +294,9 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
     setEditIsAttendanceExempt(Boolean(emp.isAttendanceExempt));
     setEditFaceVerified(Boolean(emp.faceVerified));
     setEditAllowedTabs(emp.allowedTabs || DEFAULT_EMPLOYEE_ALLOWED_TABS);
+    setEditFlexibleHours(Boolean(emp.flexibleHours));
+    setEditSalaryProtected(Boolean(emp.salaryProtected));
+    setEditFixedContractSalary(Boolean(emp.isFixedSalary || emp.isFixedContractSalary));
   };
 
   const handleEditSubmit = (e: React.FormEvent) => {
@@ -318,6 +336,12 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
       nidNumber: editNid,
       bloodGroup: editBloodGroup,
       presentAddress: editAddress,
+      // Field Staff, Flexible Hours & Salary Protection Flags
+      flexibleHours: editFlexibleHours,
+      salaryProtected: editSalaryProtected,
+      isFixedSalary: editFixedContractSalary,
+      isFixedContractSalary: editFixedContractSalary,
+      isAttendancePenaltyExempt: editSalaryProtected || editFlexibleHours,
       // Credentials & Super Admin Flags
       username: editUsername.trim() || editingEmployee.username || editingEmployee.email.split("@")[0],
       password: editPassword.trim() || editingEmployee.password || "123456",
@@ -562,6 +586,9 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
   const [newIsAttendanceExempt, setNewIsAttendanceExempt] = useState(false);
   const [newFaceVerified, setNewFaceVerified] = useState(false);
   const [newAllowedTabs, setNewAllowedTabs] = useState<string[]>(DEFAULT_EMPLOYEE_ALLOWED_TABS);
+  const [newFlexibleHours, setNewFlexibleHours] = useState(false);
+  const [newSalaryProtected, setNewSalaryProtected] = useState(false);
+  const [newFixedContractSalary, setNewFixedContractSalary] = useState(false);
 
   const filteredEmployees = employees.filter((emp) => {
     const matchesSearch =
@@ -575,6 +602,17 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
     const matchesStatus = filterStatus === "ALL" || emp.status === filterStatus;
 
     return matchesSearch && matchesBranch && matchesDept && matchesStatus;
+  });
+
+  const filteredDeletedEmployees = deletedEmployees.filter((emp) => {
+    const term = recycleSearchTerm.toLowerCase();
+    return (
+      emp.fullName.toLowerCase().includes(term) ||
+      emp.employeeCode.toLowerCase().includes(term) ||
+      emp.email.toLowerCase().includes(term) ||
+      (emp.designationTitle && emp.designationTitle.toLowerCase().includes(term)) ||
+      (emp.branchName && emp.branchName.toLowerCase().includes(term))
+    );
   });
 
   const handleCreateSubmit = (e: React.FormEvent) => {
@@ -613,6 +651,12 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
       status: "ACTIVE",
       shiftId: shift.id,
       shiftName: shift.name,
+      // Field Staff, Flexible Hours & Salary Protection Flags
+      flexibleHours: newFlexibleHours,
+      salaryProtected: newSalaryProtected,
+      isFixedSalary: newFixedContractSalary,
+      isFixedContractSalary: newFixedContractSalary,
+      isAttendancePenaltyExempt: newSalaryProtected || newFlexibleHours,
       // Account credentials & role flags
       username: newUsername.trim() || newEmail.split("@")[0] || newEmpCode.toLowerCase(),
       password: newPassword.trim() || "123456",
@@ -661,6 +705,9 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
     setNewIsAttendanceExempt(false);
     setNewFaceVerified(false);
     setNewAllowedTabs(DEFAULT_EMPLOYEE_ALLOWED_TABS);
+    setNewFlexibleHours(false);
+    setNewSalaryProtected(false);
+    setNewFixedContractSalary(false);
   };
 
   const handleExportCSV = () => {
@@ -683,8 +730,81 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
 
   return (
     <div id="employees-directory-view" className="space-y-6 animate-in fade-in duration-300">
+      {/* Workforce Mode Selector Bar */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setActiveDirectoryTab("active")}
+            className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+              activeDirectoryTab === "active"
+                ? "bg-teal-600 text-white shadow-md shadow-teal-500/20"
+                : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700"
+            }`}
+          >
+            <Users className="w-4 h-4" />
+            <span>সক্রিয় কর্মী ডাটাবেজ (Active Workforce)</span>
+            <span
+              className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold ${
+                activeDirectoryTab === "active"
+                  ? "bg-white/20 text-white"
+                  : "bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300"
+              }`}
+            >
+              {employees.length}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveDirectoryTab("recycle_bin")}
+            className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+              activeDirectoryTab === "recycle_bin"
+                ? "bg-rose-600 text-white shadow-md shadow-rose-500/20"
+                : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700"
+            }`}
+          >
+            <Archive className="w-4 h-4" />
+            <span>রিসাইকেল বিন / আর্কাইভড কর্মী</span>
+            <span
+              className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold ${
+                activeDirectoryTab === "recycle_bin"
+                  ? "bg-white/20 text-white"
+                  : deletedEmployees.length > 0
+                  ? "bg-rose-100 dark:bg-rose-900/40 text-rose-600 dark:text-rose-400"
+                  : "bg-slate-200 dark:bg-slate-700 text-slate-500"
+              }`}
+            >
+              {deletedEmployees.length}
+            </span>
+          </button>
+        </div>
+
+        {activeDirectoryTab === "active" && (
+          <div className="flex items-center gap-2.5">
+            <button
+              onClick={handleExportCSV}
+              className="px-3.5 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 text-xs font-bold rounded-xl shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+            >
+              <Download className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
+              <span>Export CSV</span>
+            </button>
+
+            <button
+              onClick={handleOpenAddModal}
+              className="px-4 py-2 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-teal-500/20 flex items-center gap-2 transition-all transform active:scale-95 cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Add New Employee</span>
+            </button>
+          </div>
+        )}
+      </div>
+
       {/* Top Action & Search Bar */}
-      <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
+      {activeDirectoryTab === "active" && (
+        <>
+        <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h2 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
@@ -706,7 +826,7 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
             </button>
 
             <button
-              onClick={() => setShowAddModal(true)}
+              onClick={handleOpenAddModal}
               className="px-4 py-2 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-teal-500/20 flex items-center gap-2 transition-all transform active:scale-95 cursor-pointer"
             >
               <Plus className="w-4 h-4" />
@@ -1142,6 +1262,148 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
           </table>
         </div>
       </div>
+      </>
+      )}
+
+      {/* Recycle Bin & Archive View */}
+      {activeDirectoryTab === "recycle_bin" && (
+        <div className="space-y-4 animate-in fade-in duration-300">
+          {/* Policy & Safety Notice */}
+          <div className="p-4 sm:p-5 rounded-2xl bg-amber-500/10 dark:bg-amber-500/5 border border-amber-500/20 text-amber-900 dark:text-amber-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <div className="p-2.5 rounded-xl bg-amber-500/20 text-amber-600 dark:text-amber-400 shrink-0">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-sm font-bold">কর্মী রিসাইকেল বিন ও নিরাপদ পুনরুদ্ধার সিস্টেম</h3>
+                <p className="text-xs text-amber-800 dark:text-amber-300/90 leading-relaxed max-w-3xl">
+                  ভুলবশত কাউকে মুছে ফেলা হলে আপনি <strong>"পুনরুদ্ধার (Restore)"</strong> বাটনে ক্লিক করে তার পদবী, বেতন ও শাখাসহ পুনরায় সক্রিয় তালিকায় ফিরিয়ে আনতে পারবেন। আর কোনো কর্মীকে যদি <strong>"স্থায়ীভাবে মুছুন (Permanent Delete)"</strong> করেন, তবে ডাটাবেজ থেকে তার সমস্ত তথ্য চিরতরে মুছে যাবে এবং সিস্টেমের অন্য কোথাও আর পাওয়া যাবে না।
+                </p>
+              </div>
+            </div>
+            <div className="text-xs font-mono font-bold bg-amber-500/20 text-amber-900 dark:text-amber-200 px-3 py-1.5 rounded-xl shrink-0">
+              মোট আর্কাইভড: {deletedEmployees.length} জন
+            </div>
+          </div>
+
+          {/* Search & Filter for Deleted Employees */}
+          <div className="p-4 sm:p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="relative flex-1 max-w-md">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                <input
+                  type="text"
+                  value={recycleSearchTerm}
+                  onChange={(e) => setRecycleSearchTerm(e.target.value)}
+                  placeholder="মুছে ফেলা কর্মীর নাম, আইডি, পদবী বা শাখা দিয়ে খুঁজুন..."
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl pl-9 pr-3 py-2 text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-rose-500"
+                />
+              </div>
+              <span className="text-xs text-slate-500 dark:text-slate-400">
+                দেখাচ্ছে {filteredDeletedEmployees.length} / {deletedEmployees.length} জন রেকর্ড
+              </span>
+            </div>
+
+            {filteredDeletedEmployees.length === 0 ? (
+              <div className="p-12 text-center rounded-xl bg-slate-50 dark:bg-slate-950/50 border border-dashed border-slate-200 dark:border-slate-800 space-y-3">
+                <div className="w-12 h-12 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-400 flex items-center justify-center mx-auto">
+                  <Archive className="w-6 h-6" />
+                </div>
+                <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200">রিসাইকেল বিন খালি</h4>
+                <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto">
+                  বর্তমানে কোনো মুছে ফেলা বা আর্কাইভড কর্মীর রেকর্ড নেই। কোনো কর্মীকে সাময়িকভাবে ডিলিট করা হলে তা এখানে জমা থাকবে।
+                </p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-50 dark:bg-slate-800/60 text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-700 font-semibold">
+                    <tr>
+                      <th className="py-3 px-4">কর্মী পরিচিতি</th>
+                      <th className="py-3 px-4">পদবী ও বিভাগ</th>
+                      <th className="py-3 px-4">শাখা</th>
+                      <th className="py-3 px-4">মুছে ফেলার বিবরণ</th>
+                      <th className="py-3 px-4 text-right">কার্যক্রম (Actions)</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200 dark:divide-slate-800 text-slate-700 dark:text-slate-300">
+                    {filteredDeletedEmployees.map((emp) => (
+                      <tr key={emp.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors">
+                        <td className="py-3 px-4">
+                          <div className="flex items-center gap-3">
+                            <img
+                              src={emp.avatarUrl}
+                              alt={emp.fullName}
+                              className="w-10 h-10 rounded-xl object-cover border border-slate-200 dark:border-slate-700 grayscale opacity-80"
+                            />
+                            <div>
+                              <div className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                                <span>{emp.fullName}</span>
+                                <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20">
+                                  আর্কাইভড
+                                </span>
+                              </div>
+                              <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400">{emp.employeeCode}</span>
+                              <span className="text-[10px] text-slate-400 block">{emp.email}</span>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="py-3 px-4">
+                          <div className="font-medium text-slate-800 dark:text-slate-200">{emp.designationTitle}</div>
+                          <div className="text-[10px] text-slate-500 dark:text-slate-400">{emp.departmentName}</div>
+                        </td>
+                        <td className="py-3 px-4">
+                          <span className="inline-flex items-center gap-1 text-slate-600 dark:text-slate-400">
+                            <Building2 className="w-3.5 h-3.5 text-slate-400" />
+                            <span>{emp.branchName}</span>
+                          </span>
+                        </td>
+                        <td className="py-3 px-4">
+                          <div className="text-[11px] font-medium text-slate-800 dark:text-slate-200">
+                            {emp.deletedAt
+                              ? new Date(emp.deletedAt).toLocaleString("bn-BD", {
+                                  year: "numeric",
+                                  month: "short",
+                                  day: "numeric",
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                })
+                              : "তারিখ সংরক্ষিত নেই"}
+                          </div>
+                          <div className="text-[10px] text-slate-500">মুছেছেন: {emp.deletedBy || "অ্যাডমিন"}</div>
+                        </td>
+                        <td className="py-3 px-4 text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            <button
+                              type="button"
+                              onClick={() => onRestoreEmployee?.(emp.id)}
+                              className="px-3 py-1.5 bg-teal-50 dark:bg-teal-950/40 hover:bg-teal-100 dark:hover:bg-teal-900/60 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-800 rounded-xl font-bold flex items-center gap-1.5 transition-colors cursor-pointer text-xs"
+                              title="সক্রিয় তালিকায় ফিরিয়ে আনুন"
+                            >
+                              <RotateCcw className="w-3.5 h-3.5" />
+                              <span>রিস্টোর করুন</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => setPermanentDeleteTarget(emp)}
+                              className="px-3 py-1.5 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800 rounded-xl font-bold flex items-center gap-1.5 transition-colors cursor-pointer text-xs"
+                              title="স্থায়ীভাবে মুছে ফেলুন (ডাটাবেজ থেকে সম্পূর্ণ অপসারণ)"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                              <span>স্থায়ীভাবে মুছুন</span>
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Modal: View Full Employee Profile Details */}
       {selectedEmployee && (
@@ -1360,11 +1622,14 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
             <form onSubmit={handleCreateSubmit} className="space-y-4 text-xs">
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-slate-600 dark:text-slate-400 mb-1">Employee Code / ID</label>
+                  <label className="block text-slate-600 dark:text-slate-400 mb-1">
+                    Employee Code / ID (অটো জেনারেট / পরিবর্তনযোগ্য)
+                  </label>
                   <input
                     type="text"
                     value={newEmpCode}
                     onChange={(e) => setNewEmpCode(e.target.value)}
+                    placeholder="e.g. MWO-1001"
                     className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white font-mono"
                     required
                   />
@@ -1375,7 +1640,7 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
                     type="text"
                     value={newFullName}
                     onChange={(e) => setNewFullName(e.target.value)}
-                    placeholder="e.g. Mahfuzur Rahman"
+                    placeholder="e.g. Mohammad Rahim / John Doe"
                     className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white"
                     required
                   />
@@ -1386,7 +1651,7 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
                     type="email"
                     value={newEmail}
                     onChange={(e) => setNewEmail(e.target.value)}
-                    placeholder="mahfuz@apexglobal.tech"
+                    placeholder="example@xyz.com"
                     className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white"
                     required
                   />
@@ -1400,6 +1665,7 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
                     type="text"
                     value={newPhone}
                     onChange={(e) => setNewPhone(e.target.value)}
+                    placeholder="e.g. +880 1712-345678"
                     className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white"
                     required
                   />
@@ -1729,6 +1995,63 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
                       <p className="text-[10px] text-slate-500">ফেস ডাটা আগেই অনুমোদিত বলে গণ্য হবে</p>
                     </div>
                   </label>
+                </div>
+
+                {/* Field Staff, Flexible Hours & Salary Protection Toggles */}
+                <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/20 space-y-2.5">
+                  <div className="flex items-center gap-2 text-amber-800 dark:text-amber-300 font-bold">
+                    <Clock className="w-4 h-4 text-amber-600" />
+                    <span>ফিল্ড স্টাফ, কাজের সময় স্বাধীনতা ও বেতন সুরক্ষা নীতি</span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                    <label className="flex items-start gap-2 p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 cursor-pointer hover:border-amber-400 transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={newFlexibleHours}
+                        onChange={(e) => setNewFlexibleHours(e.target.checked)}
+                        className="mt-0.5 rounded text-amber-600 focus:ring-amber-500"
+                      />
+                      <div>
+                        <div className="font-bold text-slate-900 dark:text-white flex items-center gap-1">
+                          <Clock className="w-3.5 h-3.5 text-amber-600" />
+                          <span>ফ্লেক্সিবল শিফট</span>
+                        </div>
+                        <p className="text-[10px] text-slate-500">যখন খুশি কাজ করতে পারবেন, কোনো নির্দিষ্ট অফিস টাইম বাধা নেই</p>
+                      </div>
+                    </label>
+
+                    <label className="flex items-start gap-2 p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 cursor-pointer hover:border-emerald-400 transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={newSalaryProtected}
+                        onChange={(e) => setNewSalaryProtected(e.target.checked)}
+                        className="mt-0.5 rounded text-emerald-600 focus:ring-emerald-500"
+                      />
+                      <div>
+                        <div className="font-bold text-slate-900 dark:text-white flex items-center gap-1">
+                          <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                          <span>বেতন সুরক্ষা (Protected)</span>
+                        </div>
+                        <p className="text-[10px] text-slate-500">দেরি বা অনুপস্থিতিতে কোনো বেতন কর্তন হবে না</p>
+                      </div>
+                    </label>
+
+                    <label className="flex items-start gap-2 p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 cursor-pointer hover:border-blue-400 transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={newFixedContractSalary}
+                        onChange={(e) => setNewFixedContractSalary(e.target.checked)}
+                        className="mt-0.5 rounded text-blue-600 focus:ring-blue-500"
+                      />
+                      <div>
+                        <div className="font-bold text-slate-900 dark:text-white flex items-center gap-1">
+                          <Banknote className="w-3.5 h-3.5 text-blue-600" />
+                          <span>চুক্তিভিত্তিক ফিক্সড পে</span>
+                        </div>
+                        <p className="text-[10px] text-slate-500">কাজের দিন কম-বেশি হলেও শতভাগ অপরিবর্তিত ফিক্সড বেতন</p>
+                      </div>
+                    </label>
+                  </div>
                 </div>
 
                 {/* Allowed Tabs & Navigation Permissions */}
@@ -2481,6 +2804,63 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
                   </label>
                 </div>
 
+                {/* Field Staff, Flexible Hours & Salary Protection Toggles */}
+                <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/20 space-y-2.5">
+                  <div className="flex items-center gap-2 text-amber-800 dark:text-amber-300 font-bold">
+                    <Clock className="w-4 h-4 text-amber-600" />
+                    <span>ফিল্ড স্টাফ, কাজের সময় স্বাধীনতা ও বেতন সুরক্ষা নীতি</span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                    <label className="flex items-start gap-2 p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 cursor-pointer hover:border-amber-400 transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={editFlexibleHours}
+                        onChange={(e) => setEditFlexibleHours(e.target.checked)}
+                        className="mt-0.5 rounded text-amber-600 focus:ring-amber-500"
+                      />
+                      <div>
+                        <div className="font-bold text-slate-900 dark:text-white flex items-center gap-1">
+                          <Clock className="w-3.5 h-3.5 text-amber-600" />
+                          <span>ফ্লেক্সিবল শিফট</span>
+                        </div>
+                        <p className="text-[10px] text-slate-500">যখন খুশি কাজ করতে পারবেন, কোনো নির্দিষ্ট অফিস টাইম বাধা নেই</p>
+                      </div>
+                    </label>
+
+                    <label className="flex items-start gap-2 p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 cursor-pointer hover:border-emerald-400 transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={editSalaryProtected}
+                        onChange={(e) => setEditSalaryProtected(e.target.checked)}
+                        className="mt-0.5 rounded text-emerald-600 focus:ring-emerald-500"
+                      />
+                      <div>
+                        <div className="font-bold text-slate-900 dark:text-white flex items-center gap-1">
+                          <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                          <span>বেতন সুরক্ষা (Protected)</span>
+                        </div>
+                        <p className="text-[10px] text-slate-500">দেরি বা অনুপস্থিতিতে কোনো বেতন কর্তন হবে না</p>
+                      </div>
+                    </label>
+
+                    <label className="flex items-start gap-2 p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 cursor-pointer hover:border-blue-400 transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={editFixedContractSalary}
+                        onChange={(e) => setEditFixedContractSalary(e.target.checked)}
+                        className="mt-0.5 rounded text-blue-600 focus:ring-blue-500"
+                      />
+                      <div>
+                        <div className="font-bold text-slate-900 dark:text-white flex items-center gap-1">
+                          <Banknote className="w-3.5 h-3.5 text-blue-600" />
+                          <span>চুক্তিভিত্তিক ফিক্সড পে</span>
+                        </div>
+                        <p className="text-[10px] text-slate-500">কাজের দিন কম-বেশি হলেও শতভাগ অপরিবর্তিত ফিক্সড বেতন</p>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+
                 {/* Allowed Tabs & Navigation Permissions */}
                 <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 space-y-2.5">
                   <div className="flex items-center justify-between">
@@ -2971,22 +3351,25 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
         </div>
       )}
 
-      {/* Modal: Delete Employee Confirmation (No window.confirm!) */}
+      {/* Modal: Delete Employee Confirmation (Moves to Recycle Bin) */}
       {employeeToDelete && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs">
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl p-6 w-full max-w-md text-slate-900 dark:text-slate-100 shadow-2xl space-y-4">
-            <div className="flex items-center gap-3 text-rose-600">
-              <div className="p-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-900">
-                <AlertTriangle className="w-6 h-6" />
+            <div className="flex items-center gap-3 text-amber-600 dark:text-amber-400">
+              <div className="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-900">
+                <Archive className="w-6 h-6" />
               </div>
               <div>
-                <h3 className="text-base font-bold text-slate-900 dark:text-white">কর্মী মুছে ফেলার নিশ্চিতকরণ</h3>
-                <p className="text-xs text-slate-500">ডাটাবেস ও সিস্টেম থেকে প্রোফাইল অপসারণ</p>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">কর্মী অপসারণ (Move to Recycle Bin)</h3>
+                <p className="text-xs text-slate-500">সক্রিয় তালিকা থেকে সরিয়ে রিসাইকেল বিনে স্থানান্তর</p>
               </div>
             </div>
 
             <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-              আপনি কি নিশ্চিত যে কর্মী <strong>"{employeeToDelete.fullName}" ({employeeToDelete.employeeCode})</strong>-কে সিস্টেম থেকে স্থায়ীভাবে মুছে ফেলতে চান?
+              আপনি কি নিশ্চিত যে কর্মী <strong>"{employeeToDelete.fullName}" ({employeeToDelete.employeeCode})</strong>-কে সক্রিয় তালিকা থেকে মুছে ফেলতে চান?
+            </p>
+            <p className="text-[11px] text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/50 p-2.5 rounded-xl border border-amber-200 dark:border-amber-900/50">
+              মুছে ফেলা কর্মী রিসাইকেল বিনে জমা থাকবে। ভুলবশত মুছে ফেললে আপনি যেকোনো সময় রিসাইকেল বিন থেকে তাকে পুনরায় <strong>পুনরুদ্ধার (Restore)</strong> করতে পারবেন।
             </p>
 
             <div className="flex justify-end gap-2.5 pt-3 border-t border-slate-200 dark:border-slate-800">
@@ -3003,6 +3386,53 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
                 className="px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-bold shadow-lg shadow-rose-600/20 cursor-pointer text-xs"
               >
                 হ্যাঁ, মুছে ফেলুন
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Permanent Delete Confirmation (Permanent Purge) */}
+      {permanentDeleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl p-6 w-full max-w-md text-slate-900 dark:text-slate-100 shadow-2xl space-y-4">
+            <div className="flex items-center gap-3 text-rose-600">
+              <div className="p-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-900">
+                <AlertTriangle className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">স্থায়ীভাবে মুছে ফেলা নিশ্চিতকরণ</h3>
+                <p className="text-xs text-rose-500 font-semibold">সতর্কতা: এটি চিরতরে মুছে যাবে, আর ফেরত আনা যাবে না</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+              আপনি কি নিশ্চিত যে কর্মী <strong>"{permanentDeleteTarget.fullName}" ({permanentDeleteTarget.employeeCode})</strong>-এর রেকর্ড ডাটাবেজ থেকে স্থায়ীভাবে মুছে ফেলতে চান?
+            </p>
+            <p className="text-[11px] text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/50 p-2.5 rounded-xl border border-rose-200 dark:border-rose-900/50">
+              স্থায়ীভাবে ডিলিট করলে এই কর্মীর সমস্ত ব্যক্তিগত তথ্য ও হিস্ট্রি ডাটাবেজ থেকে সম্পূর্ণ মুছে ফেলা হবে এবং সিস্টেমের অন্য কোথাও আর পাওয়া যাবে না।
+            </p>
+
+            <div className="flex justify-end gap-2.5 pt-3 border-t border-slate-200 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={() => setPermanentDeleteTarget(null)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl font-bold cursor-pointer text-xs"
+              >
+                বাতিল করুন
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (permanentDeleteTarget && onPermanentDeleteEmployee) {
+                    onPermanentDeleteEmployee(permanentDeleteTarget.id);
+                  }
+                  setPermanentDeleteTarget(null);
+                }}
+                className="px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-bold shadow-lg shadow-rose-600/20 cursor-pointer text-xs flex items-center gap-1.5"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>হ্যাঁ, চিরতরে মুছে ফেলুন</span>
               </button>
             </div>
           </div>

@@ -18,14 +18,22 @@ import {
   Sparkles,
   Lock,
   Layers,
-  HeartHandshake
+  HeartHandshake,
+  Plus,
+  Trash2,
+  Edit3,
+  Calendar,
+  Percent,
+  X,
+  Check
 } from "lucide-react";
 import {
   RolePermissionConfig,
   PayrollPolicyConfig,
   UserRole,
   NavigationTab,
-  Employee
+  Employee,
+  CustomBonusConfig
 } from "../../types";
 import { useThemeLanguage } from "../../context/ThemeLanguageContext";
 
@@ -112,12 +120,184 @@ export const RolesPermissionsView: React.FC<RolesPermissionsViewProps> = ({
     setTimeout(() => setSavedSuccess(null), 3000);
   };
 
+  // Custom bonus modal and state
+  const [showBonusModal, setShowBonusModal] = useState(false);
+  const [editingBonusId, setEditingBonusId] = useState<string | null>(null);
+  const [bonusTitle, setBonusTitle] = useState("");
+  const [bonusCategory, setBonusCategory] = useState<CustomBonusConfig["category"]>("EID_UL_FITR");
+  const [bonusEffectiveMonth, setBonusEffectiveMonth] = useState("2026-04");
+  const [bonusEffectiveDate, setBonusEffectiveDate] = useState("2026-04-14");
+  const [bonusCalcType, setBonusCalcType] = useState<"PERCENTAGE" | "FIXED_AMOUNT">("PERCENTAGE");
+  const [bonusValue, setBonusValue] = useState<number>(20);
+  const [bonusMaxCap, setBonusMaxCap] = useState<number>(25000);
+  const [bonusTarget, setBonusTarget] = useState<CustomBonusConfig["targetEligibility"]>("ALL_EMPLOYEES");
+  const [bonusDescription, setBonusDescription] = useState("");
+
+  const handleOpenAddBonus = (presetCategory?: CustomBonusConfig["category"]) => {
+    setEditingBonusId(null);
+    if (presetCategory === "POHELA_BOISHAKH") {
+      setBonusTitle("পহেলা বৈশাখী উৎসব ভাতা");
+      setBonusCategory("POHELA_BOISHAKH");
+      setBonusEffectiveMonth("2026-04");
+      setBonusEffectiveDate("2026-04-14");
+      setBonusCalcType("PERCENTAGE");
+      setBonusValue(20);
+      setBonusMaxCap(25000);
+      setBonusTarget("ALL_EMPLOYEES");
+      setBonusDescription("বাংলা নববর্ষ ১৪৩৩ উপলক্ষে সরকারি ও প্রাতিষ্ঠানিক ২০% বৈশাখী ভাতা");
+    } else if (presetCategory === "EID_UL_FITR") {
+      setBonusTitle("পবিত্র ঈদ-উল-ফিতর উৎসব বোনাস");
+      setBonusCategory("EID_UL_FITR");
+      setBonusEffectiveMonth("2026-03");
+      setBonusEffectiveDate("2026-03-28");
+      setBonusCalcType("PERCENTAGE");
+      setBonusValue(50);
+      setBonusMaxCap(50000);
+      setBonusTarget("ALL_EMPLOYEES");
+      setBonusDescription("পবিত্র ঈদ-উল-ফিতর বার্ষিক উৎসব বোনাস");
+    } else if (presetCategory === "EID_UL_ADHA") {
+      setBonusTitle("পবিত্র ঈদ-উল-আযহা উৎসব বোনাস");
+      setBonusCategory("EID_UL_ADHA");
+      setBonusEffectiveMonth("2026-06");
+      setBonusEffectiveDate("2026-06-05");
+      setBonusCalcType("PERCENTAGE");
+      setBonusValue(50);
+      setBonusMaxCap(50000);
+      setBonusTarget("ALL_EMPLOYEES");
+      setBonusDescription("পবিত্র ঈদ-উল-আযহা বাৎসরিক কোরবানি ঈদ বোনাস");
+    } else if (presetCategory === "DURGA_PUJA") {
+      setBonusTitle("শারদীয় দুর্গোৎসব বিশেষ অনুদান ও পূজা বোনাস");
+      setBonusCategory("DURGA_PUJA");
+      setBonusEffectiveMonth("2026-10");
+      setBonusEffectiveDate("2026-10-18");
+      setBonusCalcType("FIXED_AMOUNT");
+      setBonusValue(15000);
+      setBonusMaxCap(20000);
+      setBonusTarget("ALL_EMPLOYEES");
+      setBonusDescription("সনাতন ধর্মাবলম্বী ও সকল কর্মকর্তা-কর্মচারীদের জন্য শারদীয় দুর্গোৎসব অনুদান");
+    } else {
+      setBonusTitle("");
+      setBonusCategory("EID_UL_FITR");
+      setBonusEffectiveMonth("2026-04");
+      setBonusEffectiveDate("2026-04-14");
+      setBonusCalcType("PERCENTAGE");
+      setBonusValue(20);
+      setBonusMaxCap(25000);
+      setBonusTarget("ALL_EMPLOYEES");
+      setBonusDescription("");
+    }
+    setShowBonusModal(true);
+  };
+
+  const handleOpenEditBonus = (bonus: CustomBonusConfig) => {
+    setEditingBonusId(bonus.id);
+    setBonusTitle(bonus.title);
+    setBonusCategory(bonus.category);
+    setBonusEffectiveMonth(bonus.effectiveMonth);
+    setBonusEffectiveDate(bonus.effectiveDate || `${bonus.effectiveMonth}-15`);
+    setBonusCalcType(bonus.calculationType);
+    setBonusValue(bonus.calculationType === "PERCENTAGE" ? bonus.percentageRate || 50 : bonus.fixedAmount || 15000);
+    setBonusMaxCap(bonus.maxCapAmount || 50000);
+    setBonusTarget(bonus.targetEligibility);
+    setBonusDescription(bonus.description || "");
+    setShowBonusModal(true);
+  };
+
+  const handleSaveCustomBonus = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!bonusTitle.trim()) return;
+
+    const newOrUpdatedBonus: CustomBonusConfig = {
+      id: editingBonusId || `bonus-${Date.now()}`,
+      title: bonusTitle.trim(),
+      category: bonusCategory,
+      effectiveMonth: bonusEffectiveMonth,
+      effectiveDate: bonusEffectiveDate,
+      calculationType: bonusCalcType,
+      percentageRate: bonusCalcType === "PERCENTAGE" ? Number(bonusValue) : undefined,
+      fixedAmount: bonusCalcType === "FIXED_AMOUNT" ? Number(bonusValue) : undefined,
+      maxCapAmount: bonusMaxCap ? Number(bonusMaxCap) : undefined,
+      targetEligibility: bonusTarget,
+      status: "ACTIVE",
+      description: bonusDescription.trim(),
+    };
+
+    const currentList = policyState.customBonuses || [];
+    let updatedList: CustomBonusConfig[];
+    if (editingBonusId) {
+      updatedList = currentList.map((b) => (b.id === editingBonusId ? newOrUpdatedBonus : b));
+    } else {
+      updatedList = [newOrUpdatedBonus, ...currentList];
+    }
+
+    const updatedPolicy: PayrollPolicyConfig = {
+      ...policyState,
+      customBonuses: updatedList,
+    };
+
+    setPolicyState(updatedPolicy);
+    onUpdatePayrollPolicy(updatedPolicy);
+    setShowBonusModal(false);
+    setSavedSuccess(isBangla ? "উৎসব বোনাস সফলভাবে সংরক্ষিত হয়েছে!" : "Custom bonus saved successfully!");
+    setTimeout(() => setSavedSuccess(null), 3000);
+  };
+
+  const handleDeleteCustomBonus = (bonusId: string) => {
+    const updatedList = (policyState.customBonuses || []).filter((b) => b.id !== bonusId);
+    const updatedPolicy: PayrollPolicyConfig = {
+      ...policyState,
+      customBonuses: updatedList,
+    };
+    setPolicyState(updatedPolicy);
+    onUpdatePayrollPolicy(updatedPolicy);
+    setSavedSuccess(isBangla ? "বোনাসটি তালিকা থেকে মুছে ফেলা হয়েছে" : "Bonus deleted successfully");
+    setTimeout(() => setSavedSuccess(null), 3000);
+  };
+
+  const handleToggleCustomBonusActive = (bonusId: string) => {
+    const updatedList = (policyState.customBonuses || []).map((b) => {
+      if (b.id === bonusId) {
+        return {
+          ...b,
+          status: (b.status === "ACTIVE" ? "PAUSED" : "ACTIVE") as "ACTIVE" | "PAUSED",
+        };
+      }
+      return b;
+    });
+    const updatedPolicy: PayrollPolicyConfig = {
+      ...policyState,
+      customBonuses: updatedList,
+    };
+    setPolicyState(updatedPolicy);
+    onUpdatePayrollPolicy(updatedPolicy);
+  };
+
   // Toggle staff exemption
   const handleToggleStaffExemption = (emp: Employee) => {
     if (!onUpdateEmployee) return;
     const updated: Employee = {
       ...emp,
       isAttendancePenaltyExempt: !emp.isAttendancePenaltyExempt,
+    };
+    onUpdateEmployee(updated);
+  };
+
+  // Toggle staff flexible hours
+  const handleToggleStaffFlexibleHours = (emp: Employee) => {
+    if (!onUpdateEmployee) return;
+    const updated: Employee = {
+      ...emp,
+      flexibleHours: !emp.flexibleHours,
+    };
+    onUpdateEmployee(updated);
+  };
+
+  // Toggle staff salary protected
+  const handleToggleStaffSalaryProtected = (emp: Employee) => {
+    if (!onUpdateEmployee) return;
+    const updated: Employee = {
+      ...emp,
+      salaryProtected: !emp.salaryProtected,
     };
     onUpdateEmployee(updated);
   };
@@ -383,96 +563,187 @@ export const RolesPermissionsView: React.FC<RolesPermissionsViewProps> = ({
       {/* TAB 2: ATTENDANCE & TWO EIDS BONUS POLICY CONFIGURATION */}
       {activeTab === "POLICY_CONFIG" && (
         <form onSubmit={handleSavePolicy} className="space-y-6 max-w-4xl">
-          {/* Section 1: Festival Bonus Configuration */}
-          <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
-            <div className="flex items-center gap-2">
-              <Award className="w-5 h-5 text-amber-500" />
-              <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                {isBangla ? "বাৎসরিক ২ ঈদের উৎসব বোনাস নীতিমালা (Two Eids Festival Bonus)" : "Annual 2 Eids Festival Bonus Policy"}
-              </h3>
-            </div>
-            <p className="text-xs text-slate-600 dark:text-slate-400">
-              {isBangla
-                ? "সুপার অ্যাডমিন প্রতি বছর ঈদ-উল-ফিতর এবং ঈদ-উল-আযহার বোনাস ফিক্সড অ্যামাউন্ট অথবা মূল বেতনের শতকরা হারে ফিক্স করতে পারেন।"
-                : "Super Admin can configure festival bonuses for Eid-ul-Fitr and Eid-ul-Adha as either a fixed amount or a percentage of Basic Salary annually."}
-            </p>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
-              <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 space-y-3">
-                <label className="flex items-center gap-2 cursor-pointer font-bold text-xs text-slate-900 dark:text-white">
-                  <input
-                    type="radio"
-                    name="bonusType"
-                    checked={policyState.isBonusFixedAmount}
-                    onChange={() => setPolicyState({ ...policyState, isBonusFixedAmount: true })}
-                    className="text-teal-600 focus:ring-teal-500"
-                  />
-                  <span>{isBangla ? "ফিক্সড টাকার পরিমাণ (Fixed Amount ৳)" : "Fixed Amount (BDT ৳)"}</span>
-                </label>
-                <div className="pl-6">
-                  <span className="text-[11px] text-slate-500 block mb-1">
-                    {isBangla ? "প্রতি ঈদে এককালীন বোনাস টাকা:" : "Per Eid Lump-sum Bonus:"}
-                  </span>
-                  <input
-                    type="number"
-                    value={policyState.twoEidsFixedBonusAmount}
-                    onChange={(e) => setPolicyState({ ...policyState, twoEidsFixedBonusAmount: Number(e.target.value) })}
-                    disabled={!policyState.isBonusFixedAmount}
-                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white font-mono text-sm focus:outline-none focus:border-teal-500 disabled:opacity-50"
-                  />
+          {/* Section 1: Dynamic Festival & Custom Bonus Configuration */}
+          <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <Award className="w-5 h-5 text-amber-500" />
+                  <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                    {isBangla ? "উৎসব বোনাস ও বিশেষ ভাতা নীতিমালা (Festival & Custom Bonus Policy)" : "Festival & Custom Bonus Policy"}
+                  </h3>
                 </div>
+                <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
+                  {isBangla
+                    ? "ঈদ-উল-ফিতর, ঈদ-উল-আযহা, পহেলা বৈশাখী ভাতা (২০%), শারদীয় দুর্গোৎসব বা যেকোনো কাস্টম বোনাস তৈরি করুন। নির্ধারিত মাসের পে-রোলে এটি স্বয়ংক্রিয়ভাবে যোগ হবে।"
+                    : "Configure Eid, Pohela Boishakh (20%), Durga Puja, or custom festival allowances. Automatically applied to payroll during the effective cycle."}
+                </p>
               </div>
 
-              <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 space-y-3">
-                <label className="flex items-center gap-2 cursor-pointer font-bold text-xs text-slate-900 dark:text-white">
-                  <input
-                    type="radio"
-                    name="bonusType"
-                    checked={!policyState.isBonusFixedAmount}
-                    onChange={() => setPolicyState({ ...policyState, isBonusFixedAmount: false })}
-                    className="text-teal-600 focus:ring-teal-500"
-                  />
-                  <span>{isBangla ? "মূল বেতনের শতকরা হার (Percentage of Basic %)" : "Percentage of Basic Salary (%)"}</span>
-                </label>
-                <div className="pl-6">
-                  <span className="text-[11px] text-slate-500 block mb-1">
-                    {isBangla ? "শতকরা হার (যেমন ৫০% বা ১০০%):" : "Percentage rate (e.g. 50% or 100%):"}
-                  </span>
-                  <input
-                    type="number"
-                    value={policyState.percentageBonusRate}
-                    onChange={(e) => setPolicyState({ ...policyState, percentageBonusRate: Number(e.target.value) })}
-                    disabled={policyState.isBonusFixedAmount}
-                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white font-mono text-sm focus:outline-none focus:border-teal-500 disabled:opacity-50"
-                  />
-                </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleOpenAddBonus()}
+                  className="px-4 py-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-white font-bold text-xs rounded-xl shadow-md shadow-amber-500/20 flex items-center gap-1.5 transition-all cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>{isBangla ? "+ নতুন বোনাস/ভাতা তৈরি করুন" : "+ Add Custom Bonus"}</span>
+                </button>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-slate-600 dark:text-slate-400 mb-1 text-xs font-bold">
-                  {isBangla ? "সর্বোচ্চ বোনাস সীমা (Maximum Bonus Cap ৳)" : "Maximum Bonus Cap (৳)"}
-                </label>
-                <input
-                  type="number"
-                  value={policyState.bonusMaxCap}
-                  onChange={(e) => setPolicyState({ ...policyState, bonusMaxCap: Number(e.target.value) })}
-                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white font-mono text-xs focus:outline-none focus:border-teal-500"
-                />
+            {/* Quick Presets */}
+            <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 space-y-2">
+              <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 block">
+                {isBangla ? "এক-ক্লিকে প্রি-সেট বোনাস তৈরি করুন (Quick Presets):" : "Quick Preset Bonus Templates:"}
+              </span>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleOpenAddBonus("POHELA_BOISHAKH")}
+                  className="px-3 py-1.5 rounded-lg bg-orange-500/10 hover:bg-orange-500/20 text-orange-700 dark:text-orange-300 border border-orange-500/20 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <span>🌸 {isBangla ? "বৈশাখী ভাতা (২০% - এপ্রিল)" : "Boishakhi Allowance (20%)"}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleOpenAddBonus("EID_UL_FITR")}
+                  className="px-3 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/20 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <span>🌙 {isBangla ? "ঈদ-উল-ফিতর (৫০% - মার্চ)" : "Eid-ul-Fitr (50%)"}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleOpenAddBonus("EID_UL_ADHA")}
+                  className="px-3 py-1.5 rounded-lg bg-teal-500/10 hover:bg-teal-500/20 text-teal-700 dark:text-teal-300 border border-teal-500/20 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <span>🕌 {isBangla ? "ঈদ-উল-আযহা (৫০% - জুন)" : "Eid-ul-Adha (50%)"}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleOpenAddBonus("DURGA_PUJA")}
+                  className="px-3 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-700 dark:text-rose-300 border border-rose-500/20 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <span>🪔 {isBangla ? "শারদীয় দুর্গোৎসব (ফিক্সড - অক্টোবর)" : "Durga Puja (Fixed)"}</span>
+                </button>
               </div>
+            </div>
 
-              <div>
-                <label className="block text-slate-600 dark:text-slate-400 mb-1 text-xs font-bold">
-                  {isBangla ? "কার্যকরী বছর (Effective Year)" : "Effective Year"}
-                </label>
-                <input
-                  type="number"
-                  value={policyState.effectiveYear}
-                  onChange={(e) => setPolicyState({ ...policyState, effectiveYear: Number(e.target.value) })}
-                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white font-mono text-xs focus:outline-none focus:border-teal-500"
-                />
-              </div>
+            {/* List of configured bonuses */}
+            <div className="space-y-3">
+              <h4 className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center justify-between">
+                <span>{isBangla ? "কার্যকর বোনাস ও উৎসব ভাতার তালিকা" : "Configured Bonuses & Festival Allowances"}</span>
+                <span className="text-[11px] font-normal text-slate-500">
+                  {policyState.customBonuses?.length || 0} {isBangla ? "টি বোনাস নির্ধারণ করা আছে" : "configured"}
+                </span>
+              </h4>
+
+              {(!policyState.customBonuses || policyState.customBonuses.length === 0) ? (
+                <div className="p-6 text-center rounded-xl border border-dashed border-slate-200 dark:border-slate-800 text-slate-500 text-xs">
+                  {isBangla ? "কোনো কাস্টম বোনাস তৈরি করা নেই। ওপরের বাটনে ক্লিক করে নতুন বোনাস যোগ করুন।" : "No custom bonuses configured. Click above to create one."}
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {policyState.customBonuses.map((bonus) => {
+                    const isActive = bonus.status !== "PAUSED";
+                    const isPercentage = bonus.calculationType === "PERCENTAGE";
+
+                    let categoryBadgeColor = "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300";
+                    if (bonus.category === "POHELA_BOISHAKH") categoryBadgeColor = "bg-orange-500/15 text-orange-700 dark:text-orange-300 border border-orange-500/30";
+                    else if (bonus.category === "EID_UL_FITR" || bonus.category === "EID_UL_ADHA") categoryBadgeColor = "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30";
+                    else if (bonus.category === "DURGA_PUJA") categoryBadgeColor = "bg-rose-500/15 text-rose-700 dark:text-rose-300 border border-rose-500/30";
+                    else if (bonus.category === "PERFORMANCE_BONUS") categoryBadgeColor = "bg-purple-500/15 text-purple-700 dark:text-purple-300 border border-purple-500/30";
+
+                    return (
+                      <div
+                        key={bonus.id}
+                        className={`p-4 rounded-xl border transition-all ${
+                          isActive
+                            ? "bg-slate-50/50 dark:bg-slate-800/40 border-slate-200 dark:border-slate-700"
+                            : "bg-slate-50/20 dark:bg-slate-900/40 border-slate-200/50 dark:border-slate-800/50 opacity-60"
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${categoryBadgeColor}`}>
+                                {bonus.category.replace(/_/g, " ")}
+                              </span>
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${isActive ? "bg-emerald-500/20 text-emerald-600" : "bg-amber-500/20 text-amber-600"}`}>
+                                {isActive ? (isBangla ? "সক্রিয়" : "Active") : (isBangla ? "স্থগিত" : "Paused")}
+                              </span>
+                            </div>
+                            <h5 className="font-bold text-xs text-slate-900 dark:text-white">
+                              {bonus.title}
+                            </h5>
+                          </div>
+
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => handleToggleCustomBonusActive(bonus.id)}
+                              title={isActive ? "Pause" : "Activate"}
+                              className="p-1.5 text-slate-500 hover:text-teal-600 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors cursor-pointer"
+                            >
+                              <RotateCcw className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEditBonus(bonus)}
+                              title="Edit"
+                              className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors cursor-pointer"
+                            >
+                              <Edit3 className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteCustomBonus(bonus.id)}
+                              title="Delete"
+                              className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-100 dark:hover:bg-rose-950/40 rounded-lg transition-colors cursor-pointer"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="mt-3 pt-3 border-t border-slate-200/60 dark:border-slate-700/60 grid grid-cols-2 gap-2 text-[11px]">
+                          <div>
+                            <span className="text-slate-400 block">{isBangla ? "প্রযোজ্য মাস ও তারিখ:" : "Effective Cycle:"}</span>
+                            <span className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1">
+                              <Calendar className="w-3 h-3 text-teal-600 dark:text-teal-400" />
+                              {bonus.effectiveMonth} ({bonus.effectiveDate || "N/A"})
+                            </span>
+                          </div>
+
+                          <div>
+                            <span className="text-slate-400 block">{isBangla ? "বোনাসের পরিমাণ/হার:" : "Calculation Rate:"}</span>
+                            <span className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1">
+                              {isPercentage ? (
+                                <>
+                                  <Percent className="w-3 h-3 text-amber-500" />
+                                  <span>মূল বেতনের {bonus.percentageRate}%</span>
+                                </>
+                              ) : (
+                                <>
+                                  <DollarSign className="w-3 h-3 text-emerald-500" />
+                                  <span>ফিক্সড ৳{(bonus.fixedAmount || 0).toLocaleString()}</span>
+                                </>
+                              )}
+                            </span>
+                          </div>
+
+                          {bonus.maxCapAmount && (
+                            <div className="col-span-2 text-[10px] text-slate-500">
+                              {isBangla ? "সর্বোচ্চ সীমা:" : "Max Cap:"} ৳{bonus.maxCapAmount.toLocaleString()} •{" "}
+                              {isBangla ? "প্রযোজ্য:" : "Target:"} {bonus.targetEligibility}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
 
@@ -620,26 +891,58 @@ export const RolesPermissionsView: React.FC<RolesPermissionsViewProps> = ({
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-3 shrink-0">
+                  <div className="flex items-center gap-2 flex-wrap shrink-0">
                     {/* Exemption Toggle */}
                     <button
                       type="button"
                       onClick={() => handleToggleStaffExemption(emp)}
-                      className={`px-3 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer ${
+                      title="Toggle Tardiness Fine Exemption"
+                      className={`px-2.5 py-1 rounded-xl font-bold text-[11px] flex items-center gap-1.5 transition-all cursor-pointer ${
                         isExempt
                           ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30"
                           : "bg-slate-100 dark:bg-slate-800 text-slate-500 hover:bg-slate-200"
                       }`}
                     >
                       <ShieldCheck className="w-3.5 h-3.5" />
-                      <span>{isExempt ? (isBangla ? "জরিমানা অব্যাহতিপ্রাপ্ত" : "Fine Exempt") : (isBangla ? "সাধারণ নিয়ম" : "Standard Rules")}</span>
+                      <span>{isExempt ? (isBangla ? "জরিমানা অব্যাহতি" : "Fine Exempt") : (isBangla ? "জরিমানা প্রযোজ্য" : "Standard Rules")}</span>
+                    </button>
+
+                    {/* Flexible Hours Toggle */}
+                    <button
+                      type="button"
+                      onClick={() => handleToggleStaffFlexibleHours(emp)}
+                      title="Toggle Flexible Working Hours (No fixed 9-5 requirement)"
+                      className={`px-2.5 py-1 rounded-xl font-bold text-[11px] flex items-center gap-1.5 transition-all cursor-pointer ${
+                        emp.flexibleHours
+                          ? "bg-blue-500/15 text-blue-700 dark:text-blue-300 border border-blue-500/30"
+                          : "bg-slate-100 dark:bg-slate-800 text-slate-500 hover:bg-slate-200"
+                      }`}
+                    >
+                      <Clock className="w-3.5 h-3.5" />
+                      <span>{emp.flexibleHours ? (isBangla ? "৯-৫ মুক্ত (ফ্লেক্সিবল)" : "Flexible Hours") : (isBangla ? "শিফট বাধ্যবাধক" : "Fixed Shift")}</span>
+                    </button>
+
+                    {/* Salary Protection Toggle */}
+                    <button
+                      type="button"
+                      onClick={() => handleToggleStaffSalaryProtected(emp)}
+                      title="Toggle Salary Protection (Immune to deductions)"
+                      className={`px-2.5 py-1 rounded-xl font-bold text-[11px] flex items-center gap-1.5 transition-all cursor-pointer ${
+                        emp.salaryProtected
+                          ? "bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30"
+                          : "bg-slate-100 dark:bg-slate-800 text-slate-500 hover:bg-slate-200"
+                      }`}
+                    >
+                      <ShieldAlert className="w-3.5 h-3.5" />
+                      <span>{emp.salaryProtected ? (isBangla ? "বেতন সুরক্ষিত (নো পেনাল্টি)" : "Salary Protected") : (isBangla ? "স্বাভাবিক নীতি" : "Standard")}</span>
                     </button>
 
                     {/* Fixed Salary Toggle */}
                     <button
                       type="button"
                       onClick={() => handleToggleStaffFixedSalary(emp)}
-                      className={`px-3 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer ${
+                      title="Toggle Fixed Contractual Salary"
+                      className={`px-2.5 py-1 rounded-xl font-bold text-[11px] flex items-center gap-1.5 transition-all cursor-pointer ${
                         isFixed
                           ? "bg-purple-500/15 text-purple-700 dark:text-purple-300 border border-purple-500/30"
                           : "bg-slate-100 dark:bg-slate-800 text-slate-500 hover:bg-slate-200"
@@ -652,6 +955,208 @@ export const RolesPermissionsView: React.FC<RolesPermissionsViewProps> = ({
                 </div>
               );
             })}
+          </div>
+        </div>
+      )}
+
+      {/* CUSTOM BONUS CREATION & EDIT MODAL */}
+      {showBonusModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-amber-500/10 text-amber-600">
+                  <Award className="w-5 h-5" />
+                </div>
+                <h3 className="font-bold text-sm text-slate-900 dark:text-white">
+                  {editingBonusId
+                    ? (isBangla ? "উৎসব বোনাস সম্পাদনা করুন" : "Edit Festival / Custom Bonus")
+                    : (isBangla ? "নতুন উৎসব বোনাস বা বিশেষ ভাতা তৈরি করুন" : "Create New Festival Bonus / Allowance")}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowBonusModal(false)}
+                className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-white rounded-lg cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveCustomBonus} className="space-y-4 text-xs">
+              <div>
+                <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
+                  {isBangla ? "বোনাস বা ভাতার শিরোনাম *" : "Bonus Title *"}
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder={isBangla ? "যেমন: পহেলা বৈশাখী উৎসব ভাতা" : "e.g., Pohela Boishakh Festival Allowance"}
+                  value={bonusTitle}
+                  onChange={(e) => setBonusTitle(e.target.value)}
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white font-medium focus:outline-none focus:border-amber-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
+                    {isBangla ? "উৎসবের ক্যাটাগরি" : "Bonus Category"}
+                  </label>
+                  <select
+                    value={bonusCategory}
+                    onChange={(e) => setBonusCategory(e.target.value as CustomBonusConfig["category"])}
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white"
+                  >
+                    <option value="POHELA_BOISHAKH">🌸 পহেলা বৈশাখী ভাতা (Pohela Boishakh)</option>
+                    <option value="EID_UL_FITR">🌙 ঈদ-উল-ফিতর (Eid-ul-Fitr)</option>
+                    <option value="EID_UL_ADHA">🕌 ঈদ-উল-আযহা (Eid-ul-Adha)</option>
+                    <option value="DURGA_PUJA">🪔 শারদীয় দুর্গোৎসব (Durga Puja)</option>
+                    <option value="PERFORMANCE_BONUS">🏆 বাৎসরিক পারফরম্যান্স বোনাস (Performance)</option>
+                    <option value="SPECIAL_ALLOWANCE">⭐ বিশেষ ভাতা (Special Allowance)</option>
+                    <option value="OTHER">✨ অন্যান্য কাস্টম ভাতা (Other)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
+                    {isBangla ? "প্রযোজ্য মাস (Effective Month) *" : "Effective Month *"}
+                  </label>
+                  <input
+                    type="month"
+                    required
+                    value={bonusEffectiveMonth}
+                    onChange={(e) => {
+                      setBonusEffectiveMonth(e.target.value);
+                      if (!bonusEffectiveDate || !bonusEffectiveDate.startsWith(e.target.value)) {
+                        setBonusEffectiveDate(`${e.target.value}-15`);
+                      }
+                    }}
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
+                    {isBangla ? "উৎসবের সুনির্দিষ্ট তারিখ" : "Specific Date"}
+                  </label>
+                  <input
+                    type="date"
+                    value={bonusEffectiveDate}
+                    onChange={(e) => setBonusEffectiveDate(e.target.value)}
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
+                    {isBangla ? "প্রযোজ্য কর্মী শ্রেণি" : "Target Eligibility"}
+                  </label>
+                  <select
+                    value={bonusTarget}
+                    onChange={(e) => setBonusTarget(e.target.value as CustomBonusConfig["targetEligibility"])}
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white"
+                  >
+                    <option value="ALL_EMPLOYEES">সকল কর্মকর্তা-কর্মচারী (All Staff)</option>
+                    <option value="PERMANENT_ONLY">শুধুমাত্র নিশ্চিত/স্থায়ী কর্মী (Permanent)</option>
+                    <option value="MUSLIM_EMPLOYEES">শুধুমাত্র মুসলিম কর্মীগণ (Eid)</option>
+                    <option value="HINDU_EMPLOYEES">সনাতন ধর্মাবলম্বী কর্মীগণ (Puja)</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Calculation Method */}
+              <div className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-950 space-y-3">
+                <label className="block font-bold text-slate-800 dark:text-slate-200">
+                  {isBangla ? "বোনাস হিসাবের পদ্ধতি (Calculation Method):" : "Calculation Method:"}
+                </label>
+                <div className="flex items-center gap-6">
+                  <label className="flex items-center gap-2 cursor-pointer font-medium text-slate-700 dark:text-slate-300">
+                    <input
+                      type="radio"
+                      name="modalCalcType"
+                      checked={bonusCalcType === "PERCENTAGE"}
+                      onChange={() => setBonusCalcType("PERCENTAGE")}
+                      className="text-amber-500 focus:ring-amber-400"
+                    />
+                    <span>{isBangla ? "মূল বেতনের শতকরা হার (%)" : "Percentage of Basic (%)"}</span>
+                  </label>
+
+                  <label className="flex items-center gap-2 cursor-pointer font-medium text-slate-700 dark:text-slate-300">
+                    <input
+                      type="radio"
+                      name="modalCalcType"
+                      checked={bonusCalcType === "FIXED_AMOUNT"}
+                      onChange={() => setBonusCalcType("FIXED_AMOUNT")}
+                      className="text-amber-500 focus:ring-amber-400"
+                    />
+                    <span>{isBangla ? "নির্দিষ্ট ফিক্সড টাকা (৳)" : "Fixed Amount (৳)"}</span>
+                  </label>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                  <div>
+                    <label className="block text-slate-500 mb-1">
+                      {bonusCalcType === "PERCENTAGE"
+                        ? (isBangla ? "শতকরা হার (যেমন ২০% বা ৫০%):" : "Percentage Rate (%):")
+                        : (isBangla ? "ফিক্সড টাকার পরিমাণ (৳):" : "Fixed Lump-sum Amount (৳):")}
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      required
+                      value={bonusValue}
+                      onChange={(e) => setBonusValue(Number(e.target.value))}
+                      className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-2 text-slate-900 dark:text-white font-mono"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-500 mb-1">
+                      {isBangla ? "সর্বোচ্চ সীমা (Max Cap ৳ - ঐচ্ছিক):" : "Max Cap (৳ - Optional):"}
+                    </label>
+                    <input
+                      type="number"
+                      value={bonusMaxCap}
+                      onChange={(e) => setBonusMaxCap(Number(e.target.value))}
+                      className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-2 text-slate-900 dark:text-white font-mono"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
+                  {isBangla ? "বিবরণ বা প্রাতিষ্ঠানিক অনুমোদন নোট" : "Description / Notes"}
+                </label>
+                <textarea
+                  rows={2}
+                  placeholder={isBangla ? "যেমন: সরকারি নীতিমালা ও পরিচালনা পর্ষদের অনুমোদনক্রমে" : "e.g., As approved by Board of Trustees"}
+                  value={bonusDescription}
+                  onChange={(e) => setBonusDescription(e.target.value)}
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white resize-none"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-2 border-t border-slate-200 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setShowBonusModal(false)}
+                  className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold cursor-pointer"
+                >
+                  {isBangla ? "বাতিল" : "Cancel"}
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-white font-bold shadow-md shadow-amber-500/20 flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Save className="w-4 h-4" />
+                  <span>{isBangla ? "বোনাস নিশ্চিত করুন ও সেভ করুন" : "Save Bonus"}</span>
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

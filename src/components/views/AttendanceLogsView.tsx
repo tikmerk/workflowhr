@@ -19,19 +19,21 @@ import {
   ArrowUpDown,
   UserCheck
 } from "lucide-react";
-import { AttendanceRecord, Branch } from "../../types";
+import { AttendanceRecord, Branch, Employee } from "../../types";
 import { exportToCSV } from "../../utils/exportUtils";
 import { useThemeLanguage } from "../../context/ThemeLanguageContext";
 
 interface AttendanceLogsViewProps {
   attendanceLogs: AttendanceRecord[];
   branches: Branch[];
+  employees?: Employee[];
   onOpenAttendanceModal: () => void;
 }
 
 export const AttendanceLogsView: React.FC<AttendanceLogsViewProps> = ({
   attendanceLogs,
   branches,
+  employees = [],
   onOpenAttendanceModal,
 }) => {
   const { t, isBangla } = useThemeLanguage();
@@ -87,6 +89,10 @@ export const AttendanceLogsView: React.FC<AttendanceLogsViewProps> = ({
 
   const filteredLogs = useMemo(() => {
     return attendanceLogs.filter((log) => {
+      if (employees.length > 0 && !employees.some((e) => e.id === log.employeeId)) {
+        return false;
+      }
+
       const matchesSearch =
         log.employeeName.toLowerCase().includes(searchTerm.toLowerCase()) ||
         log.employeeCode.toLowerCase().includes(searchTerm.toLowerCase()) ||

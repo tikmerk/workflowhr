@@ -182,6 +182,10 @@ export interface Employee {
 
   // Attendance & Salary Penalty Policies (Flexible for Field Staff & Fixed Salary)
   isAttendancePenaltyExempt?: boolean; // True = no late/early punch fine; flexible hours for field/volunteer staff
+  flexibleHours?: boolean; // ৯-টু-৫ ডিউটির প্রয়োজন নেই, যখন মন চায় কাজ করতে পারবেন
+  salaryProtected?: boolean; // স্যালারি ফিক্সড থাকবে, কোনো লেট বা জরিমানা কাটা যাবে না
+  isFixedSalary?: boolean; // ফিক্সড স্যালারি
+  isFixedContractSalary?: boolean; // চুক্তিবদ্ধ ফিক্সড স্যালারি
   salaryStructureType?: "FIXED" | "STANDARD_ALLOWANCES" | "CUSTOM";
   bonusEligibility?: "TWO_EIDS_FIXED" | "PERCENTAGE_BASIC" | "PERFORMANCE" | "NONE";
   fixedBonusAmount?: number;
@@ -213,7 +217,12 @@ export interface Employee {
   // Employment Details
   joiningDate: string;
   employmentType: "FULL_TIME" | "PART_TIME" | "CONTRACTUAL" | "INTERN" | "PROBATION";
-  status: "ACTIVE" | "ON_LEAVE" | "SUSPENDED" | "RESIGNED" | "TERMINATED";
+  status: "ACTIVE" | "ON_LEAVE" | "SUSPENDED" | "RESIGNED" | "TERMINATED" | "PROBATION" | "EXITED";
+  exitDate?: string; // প্রস্থান / ছেড়ে দেওয়ার তারিখ (যেমন ২০২৫ সালের তারিখ)
+  exitReason?: string; // প্রতিষ্ঠান ছাড়ার কারণ
+  isExited?: boolean; // সাবেক কর্মী চিহ্নিতকরণ
+  deletedAt?: string; // ট্র্যাশ / ডিলিট হিস্ট্রি ট্র্যাকিং
+  deletedBy?: string;
   shiftId?: string;
   shiftName?: string;
   reportingManagerId?: string;
@@ -909,6 +918,29 @@ export interface RolePermissionConfig {
   canViewAuditLogs: boolean;
 }
 
+// Dynamic Custom Festival Bonus & Allowance Model
+export interface CustomBonusConfig {
+  id: string;
+  title: string; // e.g., "ঈদ-উল-ফিতর উৎসব বোনাস", "পহেলা বৈশাখী ভাতা (Pohela Boishakh)", "শারদীয় দুর্গাপূজা উৎসব ভাতা", "বার্ষিক পারফরম্যান্স ইনসেন্টিভ"
+  category: "EID_UL_FITR" | "EID_UL_ADHA" | "BOISHAKHI" | "PUJA" | "PERFORMANCE" | "YEAR_END" | "SPECIAL_ALLOWANCE" | "OTHER" | "POHELA_BOISHAKH" | "DURGA_PUJA";
+  effectiveMonth: string; // "YYYY-MM", e.g. "2026-04" or "2026-06"
+  effectiveDate?: string; // e.g. "2026-04-14"
+  calculationType: "PERCENTAGE" | "FIXED_AMOUNT";
+  amountOrPercentage?: number; // e.g. 50 (50% of Basic) or 15000 (৳15,000 fixed)
+  percentageRate?: number;
+  fixedAmount?: number;
+  maxCap?: number; // Optional maximum ceiling
+  maxCapAmount?: number;
+  targetEligibility: "ALL_EMPLOYEES" | "MUSLIM_ONLY" | "HINDU_ONLY" | "CUSTOM_DEPARTMENT" | "PERMANENT_ONLY";
+  targetDepartmentId?: string;
+  targetDepartmentName?: string;
+  status: "ACTIVE" | "SCHEDULED" | "COMPLETED";
+  description?: string;
+  notes?: string;
+  createdAt?: string;
+  authorizedBy?: string;
+}
+
 // Global Super Admin Payroll & Attendance Penalty Policy
 export interface PayrollPolicyConfig {
   id: string;
@@ -923,5 +955,6 @@ export interface PayrollPolicyConfig {
   exemptFieldStaffFromPenalty: boolean; // Default true: Field and flexible staff have no penalty
   fixedSalaryStaffNoDeductions: boolean; // Default true: staff on fixed salary get no deductions
   effectiveYear: number;
+  customBonuses?: CustomBonusConfig[]; // Dynamic custom festival bonuses & allowances
 }
 

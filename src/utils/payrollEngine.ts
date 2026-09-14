@@ -1,4 +1,4 @@
-import { Employee, Payslip, EmployeeLoan, AttendanceRecord } from "../types";
+import { Employee, Payslip, EmployeeLoan, AttendanceRecord, CustomBonusConfig } from "../types";
 
 export interface PayrollCalculationInput {
   employee: Employee;
@@ -11,6 +11,7 @@ export interface PayrollCalculationInput {
   holidayDays: number;
   overtimeHours: number;
   bonusAmount?: number;
+  bonusTitle?: string;
   activeLoans?: EmployeeLoan[];
   advanceSalary?: number;
 }
@@ -53,12 +54,23 @@ export function generateEmployeePayslip(input: PayrollCalculationInput): Payslip
   // Daily rate for deduction calculation
   const dailyRate = basicSalary / totalDaysInMonth;
 
-  // Rule: 1 day basic salary deducted for every 3 late attendances
-  const lateDeductionDays = Math.floor(lateDays / 3);
-  const latePenaltyDeduction = Math.round(lateDeductionDays * dailyRate);
+  // Flexible Working Hours / Attendance Exemption & Protected Salary Check:
+  // If employee has flexibleHours, isAttendanceExempt, isAttendancePenaltyExempt, or salaryProtected,
+  // do NOT deduct any late arrival penalty or absent penalties.
+  const isExemptFromLate = Boolean(
+    employee.flexibleHours ||
+    employee.isAttendanceExempt ||
+    employee.isAttendancePenaltyExempt ||
+    employee.salaryProtected
+  );
+  const isSalaryProtected = Boolean(employee.salaryProtected);
 
-  // Absenteeism deduction: daily rate * absent days
-  const absenteeismDeduction = Math.round(absentDays * dailyRate);
+  // Rule: 1 day basic salary deducted for every 3 late attendances
+  const lateDeductionDays = isExemptFromLate ? 0 : Math.floor(lateDays / 3);
+  const latePenaltyDeduction = isExemptFromLate ? 0 : Math.round(lateDeductionDays * dailyRate);
+
+  // Absenteeism deduction: daily rate * absent days (0 if salary is protected)
+  const absenteeismDeduction = isSalaryProtected ? 0 : Math.round(absentDays * dailyRate);
 
   // Provident Fund deduction (e.g. 8% of basic)
   const pfPerc = employee.salary?.providentFundPercentage ?? 8;
@@ -130,9 +142,13 @@ export function calculateMonthlyPayroll(
   month: string,
   employees: Employee[],
   attendanceLogs: AttendanceRecord[] = [],
-  loans: EmployeeLoan[] = []
+  loans: EmployeeLoan[] = [],
+  customBonuses: CustomBonusConfig[] = []
 ): Payslip[] {
-  return employees.map((emp) => {
+  // Only process active/probation employees or those who were active during the month
+  const eligibleEmployees = employees.filter((emp) => emp.status !== "EXITED" && !emp.deletedAt);
+
+  return eligibleEmployees.map((emp) => {
     // calculate attendance for this employee
     const empAtt = attendanceLogs.filter((a) => a.employeeId === emp.id);
     const presentDays = empAtt.filter((a) => a.status === "PRESENT" || a.status === "LATE").length || 21;
@@ -140,6 +156,36 @@ export function calculateMonthlyPayroll(
     const absentDays = empAtt.filter((a) => a.status === "ABSENT").length || 0;
     const leaveDays = empAtt.filter((a) => a.status === "ON_LEAVE").length || 1;
     const overtimeHours = empAtt.reduce((sum, a) => sum + (a.overtimeMinutes || 0) / 60, 0) || 4;
+
+    // Calculate dynamic custom festival bonus applicable for this month and employee
+    let calculatedBonus = 0;
+    const matchingBonuses = customBonuses.filter(
+      (b) => b.effectiveMonth === month && (b.status === "ACTIVE" || b.status === "SCHEDULED" || b.status === "COMPLETED")
+    );
+
+    for (const b of matchingBonuses) {
+      // Check target eligibility
+      if (b.targetEligibility === "CUSTOM_DEPARTMENT" && b.targetDepartmentId && b.targetDepartmentId !== emp.departmentId) {
+        continue;
+      }
+      if (b.targetEligibility === "PERMANENT_ONLY" && emp.employmentType !== "FULL_TIME") {
+        continue;
+      }
+
+      const basic = emp.salary?.basic || 50000;
+      let singleBonus = 0;
+      if (b.calculationType === "PERCENTAGE") {
+        singleBonus = Math.round(basic * (b.amountOrPercentage / 100));
+      } else {
+        singleBonus = b.amountOrPercentage;
+      }
+
+      if (b.maxCap && b.maxCap > 0) {
+        singleBonus = Math.min(singleBonus, b.maxCap);
+      }
+
+      calculatedBonus += singleBonus;
+    }
 
     return generateEmployeePayslip({
       employee: emp,
@@ -151,7 +197,9 @@ export function calculateMonthlyPayroll(
       leaveDays,
       holidayDays: 2,
       overtimeHours: Math.round(overtimeHours),
+      bonusAmount: calculatedBonus,
       activeLoans: loans,
     });
   });
 }
+

@@ -25,6 +25,7 @@ import {
   CompanyBranding,
   JobPosting,
   Candidate,
+  PayrollPolicyConfig,
 } from "../types";
 import {
   INITIAL_EMPLOYEES,
@@ -547,6 +548,88 @@ export function subscribeToBrandingSettings(
         }
       },
       (err) => console.warn("Firestore branding listener error:", err)
+    );
+  } catch (e) {
+    console.warn(e);
+    return () => {};
+  }
+}
+
+export async function savePayrollPolicyToFirestore(policy: PayrollPolicyConfig) {
+  try {
+    await setDoc(
+      doc(db, COL_SETTINGS, "payroll_policy"),
+      cleanForFirestore({
+        policy,
+        updatedAt: new Date().toISOString(),
+      }),
+      { merge: true }
+    );
+  } catch (err) {
+    console.error("Failed to save payroll policy to Firestore:", err);
+  }
+}
+
+export function subscribeToPayrollPolicy(onUpdate: (policy: PayrollPolicyConfig) => void) {
+  try {
+    return onSnapshot(
+      doc(db, COL_SETTINGS, "payroll_policy"),
+      (snap) => {
+        if (snap.metadata.hasPendingWrites) return;
+        if (snap.exists()) {
+          const data = snap.data();
+          if (data.policy) {
+            onUpdate(data.policy as PayrollPolicyConfig);
+          }
+        }
+      },
+      (err) => console.warn("Firestore payroll policy listener error:", err)
+    );
+  } catch (e) {
+    console.warn(e);
+    return () => {};
+  }
+}
+
+export async function saveDeletedEmployeesToFirestore(deletedList: Employee[]) {
+  try {
+    const sanitized = deletedList.map((emp) => {
+      const copy = { ...emp };
+      if (copy.avatarUrl && copy.avatarUrl.length > 50000) {
+        copy.avatarUrl = "";
+      }
+      if (copy.faceRegisteredPhoto && copy.faceRegisteredPhoto.length > 50000) {
+        copy.faceRegisteredPhoto = "";
+      }
+      return copy;
+    });
+    await setDoc(
+      doc(db, COL_SETTINGS, "deleted_employees"),
+      cleanForFirestore({
+        employees: sanitized,
+        updatedAt: new Date().toISOString(),
+      }),
+      { merge: true }
+    );
+  } catch (err) {
+    console.error("Failed to save deleted employees to Firestore:", err);
+  }
+}
+
+export function subscribeToDeletedEmployees(onUpdate: (employees: Employee[]) => void) {
+  try {
+    return onSnapshot(
+      doc(db, COL_SETTINGS, "deleted_employees"),
+      (snap) => {
+        if (snap.metadata.hasPendingWrites) return;
+        if (snap.exists()) {
+          const data = snap.data();
+          if (Array.isArray(data.employees)) {
+            onUpdate(data.employees as Employee[]);
+          }
+        }
+      },
+      (err) => console.warn("Firestore deleted employees listener error:", err)
     );
   } catch (e) {
     console.warn(e);
