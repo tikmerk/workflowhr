@@ -893,7 +893,6 @@ function AppContent() {
             allBranches={branches}
             branches={branches}
             onAttendanceSuccess={handleAttendanceSuccess}
-            onSwitchEmployee={(emp) => setCurrentEmployee(emp)}
             onUpdateFacePhoto={handleUpdateFacePhoto}
           />
         )}
@@ -1679,7 +1678,6 @@ function AppContent() {
           allBranches={branches}
           branches={branches}
           onAttendanceSuccess={handleAttendanceSuccess}
-          onSwitchEmployee={(emp) => setCurrentEmployee(emp)}
           onUpdateFacePhoto={handleUpdateFacePhoto}
         />
       )}

@@ -1,50 +1,36 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
+  ScanFace,
   X,
+  CheckCircle2,
+  AlertTriangle,
   Camera,
   MapPin,
+  Clock,
   ShieldCheck,
-  AlertTriangle,
-  RefreshCw,
-  CheckCircle2,
-  ScanFace,
+  ShieldAlert,
+  Users,
+  UserCheck,
+  Building2,
+  UserX,
+  Sparkles,
   Eye,
   Smile,
-  Clock,
-  Building2,
-  Sparkles,
-  ChevronRight,
-  UserCheck,
-  UserX,
-  Users,
-  ShieldAlert,
-  ArrowRightLeft,
-  Image as ImageIcon,
-  Zap
+  RefreshCw,
+  ImageIcon,
 } from "lucide-react";
+import { Employee, AttendanceRecord, Branch } from "../../types";
 import {
-  Employee,
-  Branch,
-  AttendanceRecord,
-} from "../../types";
-import {
-  calculateDistanceInMeters,
-  getMockAddressFromCoords
-} from "../../utils/geoUtils";
-import {
-  requestUserMediaStream,
-  captureFrameAsBase64,
-  LIVENESS_CHALLENGES,
-  ChallengePrompt
-} from "../../utils/faceUtils";
-import {
-  drawBiometricMeshOverlay,
   detectLiveFaceInVideo,
   verifyLiveFaceWithEmployee,
   autoIdentifyLiveFaceFromAllEmployees,
+  drawBiometricMeshOverlay,
+  playBiometricSound,
   FaceBoundingBox,
-  FaceMatchResult
+  FaceMatchResult,
 } from "../../utils/faceRecognitionEngine";
+import { requestUserMediaStream } from "../../utils/faceUtils";
+import { calculateDistanceInMeters, getMockAddressFromCoords } from "../../utils/geoUtils";
 import { FaceEnrollmentModal } from "./FaceEnrollmentModal";
 
 interface SmartAttendanceModalProps {
@@ -92,13 +78,13 @@ export const SmartAttendanceModal: React.FC<SmartAttendanceModalProps> = ({
   allBranches = [],
   branches = [],
   onAttendanceSuccess,
-  onSwitchEmployee,
   onUpdateFacePhoto,
   existingTodayRecord,
 }) => {
   const staffList = allEmployees.length > 0 ? allEmployees : employees;
   const branchList = allBranches.length > 0 ? allBranches : branches;
 
+  // activeEmployee is the employee whose attendance is being recorded
   const [activeEmployee, setActiveEmployee] = useState<Employee>(initialEmployee);
   const initialBranch =
     selectedBranch ||
@@ -120,24 +106,26 @@ export const SmartAttendanceModal: React.FC<SmartAttendanceModalProps> = ({
   // Camera Elements & Streams
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [stream, setStream] = useState<MediaStream | null>(null);
+  const [, setStream] = useState<MediaStream | null>(null);
   const [cameraLoading, setCameraLoading] = useState<boolean>(true);
   const [cameraError, setCameraError] = useState<string | null>(null);
 
   // Real-time Detection States
   const [hasFaceInFrame, setHasFaceInFrame] = useState<boolean>(false);
-  const [faceBoundingBox, setFaceBoundingBox] = useState<FaceBoundingBox | undefined>(undefined);
+  const [, setFaceBoundingBox] = useState<FaceBoundingBox | undefined>(undefined);
   const [isProcessingMatch, setIsProcessingMatch] = useState<boolean>(false);
 
   // Face Matching Results
   const [matchResult, setMatchResult] = useState<FaceMatchResult | null>(null);
   const [capturedSelfie, setCapturedSelfie] = useState<string | null>(null);
-  const [detectedColleague, setDetectedColleague] = useState<Employee | null>(null);
 
-  // Fast 2-Step Liveness Check (Blink + Smile only)
+  // Real-Time Liveness Engine States (100% Automated, No Manual Clicks)
   const [livenessBlinkPassed, setLivenessBlinkPassed] = useState<boolean>(false);
   const [livenessSmilePassed, setLivenessSmilePassed] = useState<boolean>(false);
   const [activeChallengeStep, setActiveChallengeStep] = useState<"ALIGN" | "BLINK" | "SMILE" | "COMPLETED">("ALIGN");
+  const [liveSmileGauge, setLiveSmileGauge] = useState<number>(0);
+  const [liveEyeOpenness, setLiveEyeOpenness] = useState<number>(80);
+  const [autoSubmitCountdown, setAutoSubmitCountdown] = useState<number | null>(null);
 
   // Geolocation
   const [userCoords, setUserCoords] = useState<{ lat: number; lng: number } | null>(null);
@@ -152,6 +140,7 @@ export const SmartAttendanceModal: React.FC<SmartAttendanceModalProps> = ({
     setLivenessBlinkPassed(false);
     setLivenessSmilePassed(false);
     setActiveChallengeStep("ALIGN");
+    setAutoSubmitCountdown(null);
   }, [initialEmployee]);
 
   // Request GPS Location
@@ -222,7 +211,67 @@ export const SmartAttendanceModal: React.FC<SmartAttendanceModalProps> = ({
     };
   }, [isOpen]);
 
-  // Real-time Video Stream Computer Vision Frame Loop
+  // Capture video frame as Base64 image
+  const captureFrameAsBase64 = (video: HTMLVideoElement): string => {
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.min(video.videoWidth || 640, 480);
+    canvas.height = Math.min(video.videoHeight || 480, 480);
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return "";
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL("image/jpeg", 0.85);
+  };
+
+  // Run Real-Time Biometric Face Matching (Triggered in ALIGN step)
+  const runRealTimeFaceScan = useCallback(async () => {
+    if (!videoRef.current || isProcessingMatch) return;
+    setIsProcessingMatch(true);
+
+    try {
+      if (isAutoKioskMode) {
+        // 1:N Auto-detect from enrolled employees
+        const result = await autoIdentifyLiveFaceFromAllEmployees(videoRef.current, staffList);
+        setMatchResult(result);
+
+        if (result.matched && result.matchedEmployee) {
+          setActiveEmployee(result.matchedEmployee);
+          playBiometricSound("match");
+
+          if (videoRef.current) {
+            setCapturedSelfie(captureFrameAsBase64(videoRef.current));
+          }
+
+          // Advance to automated Blink check
+          setActiveChallengeStep("BLINK");
+        } else if (result.reason === "MISMATCH_LOW_CONFIDENCE") {
+          playBiometricSound("error");
+        }
+      } else {
+        // 1:1 Targeted Profile Match against the logged-in employee's reference photo
+        const result = await verifyLiveFaceWithEmployee(videoRef.current, activeEmployee);
+        setMatchResult(result);
+
+        if (result.matched) {
+          playBiometricSound("match");
+
+          if (videoRef.current) {
+            setCapturedSelfie(captureFrameAsBase64(videoRef.current));
+          }
+
+          // Advance to automated Blink check
+          setActiveChallengeStep("BLINK");
+        } else if (result.reason === "MISMATCH_LOW_CONFIDENCE") {
+          playBiometricSound("error");
+        }
+      }
+    } catch (err) {
+      console.error("Face verification error:", err);
+    } finally {
+      setIsProcessingMatch(false);
+    }
+  }, [isAutoKioskMode, activeEmployee, staffList, isProcessingMatch]);
+
+  // Real-time Video Stream Optical Analysis Loop
   useEffect(() => {
     if (!isOpen || cameraLoading || cameraError) return;
 
@@ -234,13 +283,17 @@ export const SmartAttendanceModal: React.FC<SmartAttendanceModalProps> = ({
         const liveFace = detectLiveFaceInVideo(videoRef.current);
         setHasFaceInFrame(liveFace.hasFace);
         setFaceBoundingBox(liveFace.boundingBox);
+        setLiveSmileGauge(liveFace.smileScore);
+        setLiveEyeOpenness(liveFace.eyeOpenness);
 
-        // Draw HUD overlay on canvas
+        // Draw dynamic HUD overlay on canvas
         if (canvasRef.current) {
           const ctx = canvasRef.current.getContext("2d");
           if (ctx) {
             const isMatched = Boolean(matchResult && matchResult.matched);
-            const isMismatch = Boolean(matchResult && !matchResult.matched && matchResult.reason === "MISMATCH_LOW_CONFIDENCE");
+            const isMismatch = Boolean(
+              matchResult && !matchResult.matched && matchResult.reason === "MISMATCH_LOW_CONFIDENCE"
+            );
             drawBiometricMeshOverlay(
               ctx,
               canvasRef.current.width,
@@ -253,11 +306,37 @@ export const SmartAttendanceModal: React.FC<SmartAttendanceModalProps> = ({
           }
         }
 
-        // Automatic Face Recognition Trigger (Runs every ~600ms when face is steady)
+        // --- STEP 1: ALIGN & FACE MATCH ---
         const now = Date.now();
-        if (liveFace.hasFace && now - lastScanTime > 600 && !isProcessingMatch && !matchResult?.matched) {
+        if (
+          liveFace.hasFace &&
+          activeChallengeStep === "ALIGN" &&
+          now - lastScanTime > 500 &&
+          !isProcessingMatch &&
+          !matchResult?.matched
+        ) {
           lastScanTime = now;
           runRealTimeFaceScan();
+        }
+
+        // --- STEP 2: AUTOMATED BLINK CHECK ---
+        if (activeChallengeStep === "BLINK" && liveFace.hasFace) {
+          if (liveFace.blinkDetected && !livenessBlinkPassed) {
+            playBiometricSound("blink");
+            setLivenessBlinkPassed(true);
+            setActiveChallengeStep("SMILE");
+          }
+        }
+
+        // --- STEP 3: AUTOMATED SMILE CHECK ---
+        if (activeChallengeStep === "SMILE" && liveFace.hasFace) {
+          if (liveFace.smileDetected && !livenessSmilePassed) {
+            playBiometricSound("smile");
+            setLivenessSmilePassed(true);
+            setActiveChallengeStep("COMPLETED");
+            playBiometricSound("success");
+            setAutoSubmitCountdown(2);
+          }
         }
       }
       animationFrameId = requestAnimationFrame(processFrame);
@@ -268,96 +347,20 @@ export const SmartAttendanceModal: React.FC<SmartAttendanceModalProps> = ({
     return () => {
       cancelAnimationFrame(animationFrameId);
     };
-  }, [isOpen, cameraLoading, cameraError, isAutoKioskMode, activeEmployee, staffList, matchResult, isProcessingMatch]);
-
-  // Execute Real Computer Vision Face Matching
-  const runRealTimeFaceScan = useCallback(async () => {
-    if (!videoRef.current) return;
-    setIsProcessingMatch(true);
-
-    try {
-      if (isAutoKioskMode) {
-        // 1:N Auto-detect who is standing in front of camera
-        const result = await autoIdentifyLiveFaceFromAllEmployees(videoRef.current, staffList);
-        setMatchResult(result);
-        if (result.matched && result.matchedEmployee) {
-          setDetectedColleague(result.matchedEmployee);
-          if (result.matchedEmployee.id !== activeEmployee.id) {
-            setActiveEmployee(result.matchedEmployee);
-            if (onSwitchEmployee) {
-              onSwitchEmployee(result.matchedEmployee);
-            }
-          }
-          // Proceed to Blink step
-          if (activeChallengeStep === "ALIGN") {
-            setActiveChallengeStep("BLINK");
-          }
-        }
-      } else {
-        // 1:1 Targeted Profile Match against registered reference face
-        const result = await verifyLiveFaceWithEmployee(videoRef.current, activeEmployee);
-        setMatchResult(result);
-        if (result.matched) {
-          if (activeChallengeStep === "ALIGN") {
-            setActiveChallengeStep("BLINK");
-          }
-        }
-      }
-
-      // Capture selfie frame
-      if (videoRef.current) {
-        const snap = captureFrameAsBase64(videoRef.current);
-        setCapturedSelfie(snap);
-      }
-    } catch (err) {
-      console.error("Face verification process error:", err);
-    } finally {
-      setIsProcessingMatch(false);
-    }
-  }, [isAutoKioskMode, activeEmployee, staffList, activeChallengeStep, onSwitchEmployee]);
-
-  // Fast 2-Step Liveness Check Handlers
-  const handlePassBlinkStep = () => {
-    setLivenessBlinkPassed(true);
-    setActiveChallengeStep("SMILE");
-  };
-
-  const handlePassSmileStep = () => {
-    setLivenessSmilePassed(true);
-    setActiveChallengeStep("COMPLETED");
-  };
-
-  // Instant 1-Click Fast Verification (Runs Real Vision + Blink + Smile in 1.2s)
-  const handleInstantFastVerify = async () => {
-    if (!videoRef.current) return;
-    setIsProcessingMatch(true);
-
-    const snap = captureFrameAsBase64(videoRef.current);
-    setCapturedSelfie(snap);
-
-    let result: FaceMatchResult;
-    if (isAutoKioskMode) {
-      result = await autoIdentifyLiveFaceFromAllEmployees(videoRef.current, staffList);
-      if (result.matched && result.matchedEmployee) {
-        setActiveEmployee(result.matchedEmployee);
-        if (onSwitchEmployee) onSwitchEmployee(result.matchedEmployee);
-      }
-    } else {
-      result = await verifyLiveFaceWithEmployee(videoRef.current, activeEmployee);
-    }
-
-    setMatchResult(result);
-    setIsProcessingMatch(false);
-
-    if (result.matched) {
-      setLivenessBlinkPassed(true);
-      setLivenessSmilePassed(true);
-      setActiveChallengeStep("COMPLETED");
-    }
-  };
+  }, [
+    isOpen,
+    cameraLoading,
+    cameraError,
+    activeChallengeStep,
+    matchResult,
+    isProcessingMatch,
+    livenessBlinkPassed,
+    livenessSmilePassed,
+    runRealTimeFaceScan,
+  ]);
 
   // Final Attendance Submission
-  const handleFinalSubmitAttendance = () => {
+  const handleFinalSubmitAttendance = useCallback(() => {
     if (!matchResult?.matched || !livenessBlinkPassed || !livenessSmilePassed) return;
 
     const now = new Date();
@@ -442,26 +445,74 @@ export const SmartAttendanceModal: React.FC<SmartAttendanceModalProps> = ({
 
     onAttendanceSuccess(record);
     onClose();
-  };
+  }, [
+    matchResult,
+    livenessBlinkPassed,
+    livenessSmilePassed,
+    attendanceType,
+    activeEmployee,
+    activeBranch,
+    userCoords,
+    locationAddress,
+    distanceMeters,
+    isInsideGeofence,
+    capturedSelfie,
+    existingTodayRecord,
+    onAttendanceSuccess,
+    onClose,
+  ]);
+
+  // Countdown auto-submit timer when verification completes
+  useEffect(() => {
+    if (autoSubmitCountdown === null || autoSubmitCountdown <= 0) return;
+
+    const timer = setTimeout(() => {
+      if (autoSubmitCountdown === 1) {
+        handleFinalSubmitAttendance();
+      } else {
+        setAutoSubmitCountdown((prev) => (prev !== null ? prev - 1 : null));
+      }
+    }, 1000);
+
+    return () => clearTimeout(timer);
+  }, [autoSubmitCountdown, handleFinalSubmitAttendance]);
 
   const hasRegisteredPhoto = Boolean(
-    (activeEmployee.faceRegisteredPhoto && activeEmployee.faceRegisteredPhoto.trim() !== "" && activeEmployee.faceRegisteredPhoto !== "#") ||
-    (activeEmployee.avatarUrl && activeEmployee.avatarUrl.trim() !== "" && activeEmployee.avatarUrl !== "#")
+    (activeEmployee.faceRegisteredPhoto &&
+      activeEmployee.faceRegisteredPhoto.trim() !== "" &&
+      activeEmployee.faceRegisteredPhoto !== "#") ||
+      (activeEmployee.avatarUrl &&
+        activeEmployee.avatarUrl.trim() !== "" &&
+        activeEmployee.avatarUrl !== "#" &&
+        !activeEmployee.avatarUrl.includes("placeholder"))
   );
 
+  const registeredPhotoUrl =
+    activeEmployee.faceRegisteredPhoto &&
+    activeEmployee.faceRegisteredPhoto.trim() !== "" &&
+    activeEmployee.faceRegisteredPhoto !== "#"
+      ? activeEmployee.faceRegisteredPhoto
+      : activeEmployee.avatarUrl;
+
   const isAllReadyToSubmit = Boolean(
-    matchResult?.matched &&
-    livenessBlinkPassed &&
-    livenessSmilePassed &&
-    isInsideGeofence
+    matchResult?.matched && livenessBlinkPassed && livenessSmilePassed && isInsideGeofence
   );
+
+  // Manual Reset to re-scan
+  const handleResetScan = () => {
+    setMatchResult(null);
+    setLivenessBlinkPassed(false);
+    setLivenessSmilePassed(false);
+    setActiveChallengeStep("ALIGN");
+    setAutoSubmitCountdown(null);
+  };
 
   if (!isOpen) return null;
 
   return (
     <div
       id="smart-attendance-modal-backdrop"
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md overflow-y-auto animate-in fade-in duration-200"
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/85 backdrop-blur-md overflow-y-auto animate-in fade-in duration-200"
     >
       <div
         id="smart-attendance-modal-content"
@@ -483,7 +534,7 @@ export const SmartAttendanceModal: React.FC<SmartAttendanceModalProps> = ({
                 </span>
               </div>
               <p className="text-xs text-slate-400">
-                128D Deep Feature Vector Scanning • Multi-Angle Tracking • Zero False Positives
+                স্বয়ংক্রিয় লাইভনেস চেক (ব্লিংক + স্মাইল) • ১০০% রিয়েল-টাইম শনাক্তকরণ • নিরাপদ উপস্থিতি
               </p>
             </div>
           </div>
@@ -499,52 +550,59 @@ export const SmartAttendanceModal: React.FC<SmartAttendanceModalProps> = ({
         {/* Top Control Bar: Mode Toggle & Re-Enroll Action */}
         <div className="px-6 py-2.5 bg-slate-950/90 border-b border-slate-800/80 flex flex-wrap items-center justify-between gap-3 text-xs">
           <div className="flex items-center gap-2">
-            <span className="text-slate-400 font-semibold">Detection Mode:</span>
+            <span className="text-slate-400 font-semibold">ভেরিফিকেশন মোড:</span>
             <div className="flex items-center gap-1.5 p-1 bg-slate-900 rounded-xl border border-slate-800">
               <button
                 type="button"
                 onClick={() => {
                   setIsAutoKioskMode(false);
-                  setMatchResult(null);
-                  setActiveChallengeStep("ALIGN");
+                  setActiveEmployee(initialEmployee);
+                  handleResetScan();
                 }}
                 className={`px-3 py-1.5 rounded-lg font-bold transition-all flex items-center gap-1.5 ${
-                  !isAutoKioskMode
-                    ? "bg-teal-600 text-white shadow"
-                    : "text-slate-400 hover:text-white"
+                  !isAutoKioskMode ? "bg-teal-600 text-white shadow" : "text-slate-400 hover:text-white"
                 }`}
               >
                 <UserCheck className="w-3.5 h-3.5" />
-                <span>1:1 Profile Match ({(activeEmployee?.fullName || "Employee").split(" ")[0]})</span>
+                <span>1:1 প্রোফাইল ভেরিফিকেশন ({(activeEmployee?.fullName || "Employee").split(" ")[0]})</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => {
                   setIsAutoKioskMode(true);
-                  setMatchResult(null);
-                  setActiveChallengeStep("ALIGN");
+                  handleResetScan();
                 }}
                 className={`px-3 py-1.5 rounded-lg font-bold transition-all flex items-center gap-1.5 ${
-                  isAutoKioskMode
-                    ? "bg-blue-600 text-white shadow"
-                    : "text-slate-400 hover:text-white"
+                  isAutoKioskMode ? "bg-blue-600 text-white shadow" : "text-slate-400 hover:text-white"
                 }`}
               >
                 <Users className="w-3.5 h-3.5" />
-                <span>1:N Auto-Detect Kiosk (সবাই)</span>
+                <span>1:N অটো কিয়স্ক ডিটেকশন (সকল কর্মী)</span>
               </button>
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={() => setShowEnrollModal(true)}
-            className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-teal-300 text-xs font-semibold rounded-lg flex items-center gap-1.5 transition-all"
-          >
-            <ImageIcon className="w-3.5 h-3.5 text-teal-400" />
-            <span>Enroll / Update Face Photo</span>
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleResetScan}
+              className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-semibold rounded-lg flex items-center gap-1 transition-all border border-slate-700"
+              title="পুনরায় ফেস স্ক্যান শুরু করুন"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>রিসেট</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setShowEnrollModal(true)}
+              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-teal-300 text-xs font-semibold rounded-lg flex items-center gap-1.5 transition-all"
+            >
+              <ImageIcon className="w-3.5 h-3.5 text-teal-400" />
+              <span>ছবি এনরোল / আপডেট</span>
+            </button>
+          </div>
         </div>
 
         {/* Modal Body */}
@@ -591,19 +649,23 @@ export const SmartAttendanceModal: React.FC<SmartAttendanceModalProps> = ({
                 ></div>
                 <span className="font-mono font-medium text-slate-200">
                   {matchResult?.matched
-                    ? `MATCHED (${matchResult.matchScore}%)`
+                    ? `স্বীকৃত (${matchResult.matchScore}%)`
                     : matchResult?.reason === "MISMATCH_LOW_CONFIDENCE"
-                    ? "FACE MISMATCH"
+                    ? "চেহারা মেলেনি"
                     : hasFaceInFrame
-                    ? "FACE DETECTED"
-                    : "NO FACE IN FRAME"}
+                    ? "চেহারা শনাক্ত হচ্ছে..."
+                    : "ক্যামেরার সামনে সোজা তাকান"}
                 </span>
               </div>
 
               {/* GPS Geofence Pill */}
               <div className="absolute top-3 right-3 bg-slate-950/85 backdrop-blur-md border border-slate-700/80 px-3 py-1.5 rounded-full flex items-center gap-1.5 text-xs">
                 <MapPin className={`w-3.5 h-3.5 ${isInsideGeofence ? "text-emerald-400" : "text-amber-400"}`} />
-                <span className={isInsideGeofence ? "text-emerald-300 font-semibold" : "text-amber-300 font-semibold"}>
+                <span
+                  className={
+                    isInsideGeofence ? "text-emerald-300 font-semibold" : "text-amber-300 font-semibold"
+                  }
+                >
                   {distanceMeters}m (Zone: {activeBranch.code})
                 </span>
               </div>
@@ -613,7 +675,7 @@ export const SmartAttendanceModal: React.FC<SmartAttendanceModalProps> = ({
                 <div className="flex items-center gap-2.5">
                   <div
                     className={`p-2 rounded-lg ${
-                      matchResult?.matched && activeChallengeStep === "COMPLETED"
+                      activeChallengeStep === "COMPLETED"
                         ? "bg-emerald-500/20 text-emerald-300"
                         : matchResult?.reason === "MISMATCH_LOW_CONFIDENCE"
                         ? "bg-red-500/20 text-red-400"
@@ -626,110 +688,147 @@ export const SmartAttendanceModal: React.FC<SmartAttendanceModalProps> = ({
                   >
                     {activeChallengeStep === "BLINK" && <Eye className="w-5 h-5 animate-pulse" />}
                     {activeChallengeStep === "SMILE" && <Smile className="w-5 h-5 animate-bounce" />}
-                    {activeChallengeStep === "COMPLETED" && <CheckCircle2 className="w-5 h-5 text-emerald-400" />}
+                    {activeChallengeStep === "COMPLETED" && (
+                      <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+                    )}
                     {activeChallengeStep === "ALIGN" && <ScanFace className="w-5 h-5" />}
                   </div>
 
                   <div>
                     <p className="text-xs font-bold text-white">
-                      {matchResult?.reason === "NO_PHOTO_ENROLLED" || !hasRegisteredPhoto
+                      {!hasRegisteredPhoto
                         ? "কোনো ছবি এনরোল করা নেই"
                         : matchResult?.reason === "MISMATCH_LOW_CONFIDENCE"
                         ? "চেহারা মেলেনি (Mismatch)"
                         : activeChallengeStep === "ALIGN"
-                        ? "ধাপ ১: ফেস স্ক্যান ও শনাক্তকরণ"
+                        ? "ধাপ ১: ফেস স্ক্যান ও বায়োমেট্রিক ম্যাচ"
                         : activeChallengeStep === "BLINK"
-                        ? "ধাপ ২: চোখের পলক ফেলুন (Blink Eyes)"
+                        ? "ধাপ ২: স্বাভাবিকভাবে চোখের পলক ফেলুন (স্বয়ংক্রিয় ডিটেকশন)"
                         : activeChallengeStep === "SMILE"
-                        ? "ধাপ ৩: সামান্য হাসুন (Smile Check)"
-                        : matchResult?.matched
-                        ? `ভেরিফিকেশন সফল (${matchResult.matchScore}% মিল)`
-                        : "ভেরিফিকেশন পেন্ডিং"}
+                        ? "ধাপ ৩: ক্যামেরার দিকে তাকিয়ে একটু হাসুন (স্বয়ংক্রিয় ডিটেকশন)"
+                        : `ভেরিফিকেশন সম্পন্ন (${matchResult?.matchScore}% মিল)`}
                     </p>
                     <p className="text-[11px] text-slate-300">
                       {!hasRegisteredPhoto
                         ? "এই প্রোফাইলে বায়োমেট্রিক ছবি নিবন্ধিত নেই। প্রথমে ছবি আপলোড করুন।"
-                        : matchResult?.banglaStatusMessage ||
-                        (activeChallengeStep === "ALIGN"
-                          ? "ক্যামেরার মাঝখানে সোজা তাকান।"
-                          : activeChallengeStep === "BLINK"
-                          ? "লাইভ উপস্থিতি নিশ্চিত করতে চোখের পলক ফেলুন।"
-                          : activeChallengeStep === "SMILE"
-                          ? "মুখের স্বাভাবিক মুভমেন্ট নিশ্চিত করতে সামান্য হাসুন।"
-                          : "বায়োমেট্রিক চেহারা ও লাইভনেস সম্পূর্ণ যাচাইকৃত।")}
+                        : matchResult?.reason === "MISMATCH_LOW_CONFIDENCE"
+                        ? matchResult.banglaStatusMessage
+                        : activeChallengeStep === "ALIGN"
+                        ? "ক্যামেরার ফ্রেমের মাঝখানে সোজা তাকিয়ে স্থির থাকুন।"
+                        : activeChallengeStep === "BLINK"
+                        ? liveEyeOpenness < 35
+                          ? "চোখ বন্ধ শনাক্ত হয়েছে... এখন চোখ খুলুন।"
+                          : "লাইভনেস প্রমাণের জন্য চোখের স্বাভাবিক পলক ফেলুন (কোনো ক্লিক করতে হবে না)।"
+                        : activeChallengeStep === "SMILE"
+                        ? liveSmileGauge >= 55
+                          ? "হাসি সফলভাবে শনাক্ত হয়েছে! ✓"
+                          : "ক্যামেরার দিকে তাকিয়ে একটু হাসুন (রিয়েল-টাইম স্মাইল গেজ দেখুন)।"
+                        : "বায়োমেট্রিক চেহারা ও অ্যান্টি-স্পুফিং লাইভনেস সম্পূর্ণ সফল! ✓"}
                     </p>
                   </div>
                 </div>
 
-                {/* Quick Next Step Action Trigger */}
-                {matchResult?.matched && (
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    {activeChallengeStep === "BLINK" && (
-                      <button
-                        type="button"
-                        onClick={handlePassBlinkStep}
-                        className="px-3 py-1.5 bg-teal-600 hover:bg-teal-500 text-white text-xs font-bold rounded-lg shadow transition-all flex items-center gap-1"
-                      >
-                        <span>Blink Done</span>
-                        <ChevronRight className="w-3.5 h-3.5" />
-                      </button>
-                    )}
-
-                    {activeChallengeStep === "SMILE" && (
-                      <button
-                        type="button"
-                        onClick={handlePassSmileStep}
-                        className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg shadow transition-all flex items-center gap-1"
-                      >
-                        <span>Smile Done</span>
-                        <ChevronRight className="w-3.5 h-3.5" />
-                      </button>
-                    )}
-                  </div>
+                {/* Status Indicator */}
+                {activeChallengeStep === "COMPLETED" && autoSubmitCountdown !== null && (
+                  <span className="px-2.5 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 font-mono text-xs font-bold shrink-0 animate-pulse border border-emerald-500/30">
+                    অটো-সাবমিট {autoSubmitCountdown}s
+                  </span>
                 )}
               </div>
             </div>
 
-            {/* Fast 2-Step Verification Badges (Blink + Smile only) */}
+            {/* Real-Time Automated Liveness Step Gauges (Zero Manual Clicks) */}
             <div className="grid grid-cols-2 gap-3 text-center text-xs">
+              {/* Step 1: Automated Blink Check */}
               <div
-                className={`p-3 rounded-xl border flex items-center justify-between transition-all ${
+                className={`p-3 rounded-xl border transition-all space-y-1.5 ${
                   livenessBlinkPassed
                     ? "bg-emerald-500/10 border-emerald-500/40 text-emerald-300 font-semibold"
                     : activeChallengeStep === "BLINK"
-                    ? "bg-teal-500/10 border-teal-500/40 text-teal-300 animate-pulse font-semibold"
+                    ? "bg-teal-500/10 border-teal-500/40 text-teal-300 font-semibold ring-1 ring-teal-500/50"
                     : "bg-slate-800/40 border-slate-700/50 text-slate-400"
                 }`}
               >
-                <div className="flex items-center gap-2">
-                  <Eye className="w-4 h-4 text-teal-400" />
-                  <span>1. Blink Check (চোখের পলক)</span>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <Eye className="w-4 h-4 text-teal-400" />
+                    <span className="text-xs font-bold">১. চোখের পলক (Blink)</span>
+                  </div>
+                  {livenessBlinkPassed ? (
+                    <span className="flex items-center gap-1 text-[11px] text-emerald-400 font-bold">
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>সম্পন্ন ✓</span>
+                    </span>
+                  ) : activeChallengeStep === "BLINK" ? (
+                    <span className="text-[10px] text-teal-300 font-mono font-bold animate-pulse">
+                      ডিটেক্ট হচ্ছে...
+                    </span>
+                  ) : (
+                    <span className="text-[10px] text-slate-500 font-mono">অপেক্ষমান</span>
+                  )}
                 </div>
-                {livenessBlinkPassed ? (
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                ) : (
-                  <span className="text-[10px] text-slate-500 font-mono">Pending</span>
-                )}
+
+                {/* Live Eye Openness Monitor */}
+                <div className="w-full bg-slate-950 rounded-full h-1.5 overflow-hidden">
+                  <div
+                    className={`h-full transition-all duration-150 rounded-full ${
+                      livenessBlinkPassed
+                        ? "bg-emerald-500"
+                        : activeChallengeStep === "BLINK"
+                        ? "bg-teal-400"
+                        : "bg-slate-700"
+                    }`}
+                    style={{
+                      width: `${livenessBlinkPassed ? 100 : Math.max(10, liveEyeOpenness)}%`,
+                    }}
+                  ></div>
+                </div>
               </div>
 
+              {/* Step 2: Automated Smile Check */}
               <div
-                className={`p-3 rounded-xl border flex items-center justify-between transition-all ${
+                className={`p-3 rounded-xl border transition-all space-y-1.5 ${
                   livenessSmilePassed
                     ? "bg-emerald-500/10 border-emerald-500/40 text-emerald-300 font-semibold"
                     : activeChallengeStep === "SMILE"
-                    ? "bg-amber-500/10 border-amber-500/40 text-amber-300 animate-pulse font-semibold"
+                    ? "bg-amber-500/10 border-amber-500/40 text-amber-300 font-semibold ring-1 ring-amber-500/50"
                     : "bg-slate-800/40 border-slate-700/50 text-slate-400"
                 }`}
               >
-                <div className="flex items-center gap-2">
-                  <Smile className="w-4 h-4 text-amber-400" />
-                  <span>2. Smile Check (হাসি সনাক্তকরণ)</span>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <Smile className="w-4 h-4 text-amber-400" />
+                    <span className="text-xs font-bold">২. স্বাভাবিক হাসি (Smile)</span>
+                  </div>
+                  {livenessSmilePassed ? (
+                    <span className="flex items-center gap-1 text-[11px] text-emerald-400 font-bold">
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>সম্পন্ন ✓</span>
+                    </span>
+                  ) : activeChallengeStep === "SMILE" ? (
+                    <span className="text-[10px] text-amber-300 font-mono font-bold animate-pulse">
+                      {liveSmileGauge}%
+                    </span>
+                  ) : (
+                    <span className="text-[10px] text-slate-500 font-mono">অপেক্ষমান</span>
+                  )}
                 </div>
-                {livenessSmilePassed ? (
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                ) : (
-                  <span className="text-[10px] text-slate-500 font-mono">Pending</span>
-                )}
+
+                {/* Live Smile Intensity Bar */}
+                <div className="w-full bg-slate-950 rounded-full h-1.5 overflow-hidden">
+                  <div
+                    className={`h-full transition-all duration-150 rounded-full ${
+                      livenessSmilePassed
+                        ? "bg-emerald-500"
+                        : liveSmileGauge >= 55
+                        ? "bg-emerald-400"
+                        : "bg-amber-400"
+                    }`}
+                    style={{
+                      width: `${livenessSmilePassed ? 100 : Math.min(100, liveSmileGauge)}%`,
+                    }}
+                  ></div>
+                </div>
               </div>
             </div>
           </div>
@@ -799,17 +898,17 @@ export const SmartAttendanceModal: React.FC<SmartAttendanceModalProps> = ({
                   {/* Registered Reference Photo */}
                   <div className="p-2.5 rounded-xl bg-slate-900/80 border border-slate-700/60 text-center space-y-1.5">
                     <span className="text-[10px] font-semibold text-slate-400 block">
-                      Enrolled Reference Photo
+                      নিবন্ধিত ছবি (Reference)
                     </span>
-                    <div className="relative w-16 h-16 mx-auto rounded-xl overflow-hidden border-2 border-teal-500/60 shadow">
-                      {hasRegisteredPhoto ? (
+                    <div className="relative w-16 h-16 mx-auto rounded-xl overflow-hidden border-2 border-teal-500/60 shadow bg-slate-800">
+                      {hasRegisteredPhoto && registeredPhotoUrl ? (
                         <img
-                          src={activeEmployee.faceRegisteredPhoto}
+                          src={registeredPhotoUrl}
                           alt={activeEmployee.fullName}
                           className="w-full h-full object-cover"
                         />
                       ) : (
-                        <div className="w-full h-full bg-slate-800 flex flex-col items-center justify-center text-slate-500 p-1">
+                        <div className="w-full h-full flex flex-col items-center justify-center text-slate-500 p-1">
                           <UserX className="w-5 h-5 text-amber-400" />
                           <span className="text-[8px] text-amber-300">No Photo</span>
                         </div>
@@ -827,10 +926,10 @@ export const SmartAttendanceModal: React.FC<SmartAttendanceModalProps> = ({
                   {/* Live Camera Frame Snapshot */}
                   <div className="p-2.5 rounded-xl bg-slate-900/80 border border-slate-700/60 text-center space-y-1.5">
                     <span className="text-[10px] font-semibold text-slate-400 block">
-                      Live Camera Frame
+                      লাইভ ক্যামেরা (Live Feed)
                     </span>
                     <div
-                      className={`relative w-16 h-16 mx-auto rounded-xl overflow-hidden border-2 shadow ${
+                      className={`relative w-16 h-16 mx-auto rounded-xl overflow-hidden border-2 shadow bg-slate-800 ${
                         matchResult?.matched
                           ? "border-emerald-500 shadow-emerald-500/20"
                           : matchResult?.reason === "MISMATCH_LOW_CONFIDENCE"
@@ -845,7 +944,7 @@ export const SmartAttendanceModal: React.FC<SmartAttendanceModalProps> = ({
                           className="w-full h-full object-cover"
                         />
                       ) : (
-                        <div className="w-full h-full bg-slate-800 flex flex-col items-center justify-center text-slate-400 p-1">
+                        <div className="w-full h-full flex flex-col items-center justify-center text-slate-400 p-1">
                           <Camera className="w-5 h-5 text-teal-400 animate-pulse" />
                           <span className="text-[7px] text-slate-400 font-mono">Live Video</span>
                         </div>
@@ -878,7 +977,7 @@ export const SmartAttendanceModal: React.FC<SmartAttendanceModalProps> = ({
                 {/* Similarity Confidence Progress Bar */}
                 <div className="space-y-1 pt-1">
                   <div className="flex justify-between text-[11px]">
-                    <span className="text-slate-400">Biometric Similarity Confidence:</span>
+                    <span className="text-slate-400">বায়োমেট্রিক সিমিলারিটি স্কোর:</span>
                     <span
                       className={`font-mono font-bold ${
                         matchResult?.matched
@@ -928,40 +1027,6 @@ export const SmartAttendanceModal: React.FC<SmartAttendanceModalProps> = ({
                   </div>
                 )}
 
-                {/* Photo Uploaded but Live Face Verification Pending */}
-                {hasRegisteredPhoto && !activeEmployee.faceVerified && !activeEmployee.isAttendanceExempt && (
-                  <div className="p-3 rounded-xl bg-amber-500/15 border border-amber-500/30 text-xs text-amber-300 space-y-2 animate-in fade-in duration-200">
-                    <div className="flex items-center gap-1.5 font-bold">
-                      <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
-                      <span>আপনার ফেস ভেরিফিকেশন করা নাই (Verification Pending)</span>
-                    </div>
-                    <p className="text-[11px] text-amber-200 leading-relaxed">
-                      আপনার প্রোফাইলে ছবি সেভ করা আছে, তবে লাইভ ফেস ভেরিফিকেশন করা হয়নি। হাজিরা দেওয়ার পূর্বে দয়া করে ফেস ভেরিফিকেশন করে নিন।
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => setShowEnrollModal(true)}
-                      className="w-full py-1.5 px-3 bg-teal-600 hover:bg-teal-500 text-white font-bold rounded-lg text-xs flex items-center justify-center gap-1.5 transition-all shadow cursor-pointer"
-                    >
-                      <ScanFace className="w-3.5 h-3.5" />
-                      <span>আগে ফেস ভেরিফিকেশন করুন</span>
-                    </button>
-                  </div>
-                )}
-
-                {/* CEO / Executive Attendance Exemption Banner */}
-                {activeEmployee.isAttendanceExempt && (
-                  <div className="p-3 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-xs text-emerald-300 space-y-1">
-                    <div className="flex items-center gap-1.5 font-bold">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                      <span>উপস্থিতি প্রদান থেকে অব্যাহতিপ্রাপ্ত (Attendance Exempt)</span>
-                    </div>
-                    <p className="text-[11px] text-emerald-200 leading-relaxed">
-                      এই কর্মকর্তা (যেমন: CEO / চেয়ারম্যান / পরিচালনা পর্ষদ) নির্বাহী নীতি অনুযায়ী ফেস হাজিরা দেওয়া থেকে অব্যাহতিপ্রাপ্ত।
-                    </p>
-                  </div>
-                )}
-
                 {/* Explicit Mismatch Warning */}
                 {matchResult && !matchResult.matched && matchResult.reason === "MISMATCH_LOW_CONFIDENCE" && (
                   <div className="p-3 rounded-xl bg-red-500/15 border border-red-500/30 text-xs text-red-300 space-y-1">
@@ -969,9 +1034,7 @@ export const SmartAttendanceModal: React.FC<SmartAttendanceModalProps> = ({
                       <ShieldAlert className="w-4 h-4 text-red-400 shrink-0" />
                       <span>Face Mismatch (কারো সাথে চেহারা মেলেনি)</span>
                     </div>
-                    <p className="text-[11px] text-red-200">
-                      {matchResult.banglaStatusMessage}
-                    </p>
+                    <p className="text-[11px] text-red-200">{matchResult.banglaStatusMessage}</p>
                   </div>
                 )}
               </div>
@@ -981,10 +1044,10 @@ export const SmartAttendanceModal: React.FC<SmartAttendanceModalProps> = ({
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
                     <Building2 className="w-3.5 h-3.5 text-teal-400" />
-                    <span>Office Branch Location:</span>
+                    <span>অফিস শাখা লোকেশন:</span>
                   </label>
                   <span className="text-[10px] bg-slate-700 text-slate-300 px-2 py-0.5 rounded">
-                    Radius: {activeBranch?.geofenceRadiusMeters ?? 150}m
+                    রেডিয়াস: {activeBranch?.geofenceRadiusMeters ?? 150}m
                   </span>
                 </div>
 
@@ -1004,9 +1067,9 @@ export const SmartAttendanceModal: React.FC<SmartAttendanceModalProps> = ({
                 </select>
 
                 <div className="flex items-center justify-between text-xs text-slate-300">
-                  <span className="text-slate-400">GPS Perimeter Distance:</span>
+                  <span className="text-slate-400">GPS দূরত্ব:</span>
                   <span className="font-bold text-emerald-400">
-                    {distanceMeters}m (Verified Inside Zone)
+                    {distanceMeters}m (ভেরিফাইড অফিস জোন)
                   </span>
                 </div>
               </div>
@@ -1018,71 +1081,69 @@ export const SmartAttendanceModal: React.FC<SmartAttendanceModalProps> = ({
                 <button
                   type="button"
                   onClick={handleFinalSubmitAttendance}
-                  className="w-full py-3 px-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-sm rounded-xl shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2 transition-all transform active:scale-95"
+                  className="w-full py-3 px-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-sm rounded-xl shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2 transition-all transform active:scale-95 cursor-pointer"
                 >
                   <CheckCircle2 className="w-5 h-5" />
                   <span>
-                    Confirm {attendanceType === "CHECK_IN" ? "Clock In" : "Clock Out"} for {activeEmployee.fullName}
+                    হাজিরা নিশ্চিত করুন: {attendanceType === "CHECK_IN" ? "Clock In" : "Clock Out"} (
+                    {activeEmployee.fullName})
                   </span>
                 </button>
               ) : (
-                <button
-                  type="button"
-                  onClick={handleInstantFastVerify}
-                  disabled={isProcessingMatch || !hasRegisteredPhoto}
-                  className="w-full py-3 px-4 bg-gradient-to-r from-teal-600 to-blue-600 hover:from-teal-500 hover:to-blue-500 disabled:opacity-50 text-white font-bold text-sm rounded-xl shadow-lg shadow-teal-500/20 flex items-center justify-center gap-2 transition-all"
-                >
-                  {isProcessingMatch ? (
-                    <>
-                      <RefreshCw className="w-4 h-4 animate-spin" />
-                      <span>Processing Real-Time Face Match...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Zap className="w-5 h-5 text-amber-300" />
-                      <span>Instant Verify & Complete Checks</span>
-                    </>
-                  )}
-                </button>
+                <div className="p-3 rounded-xl bg-slate-800/80 border border-slate-700 text-center space-y-1">
+                  <div className="flex items-center justify-center gap-2 text-xs font-bold text-slate-300">
+                    {isProcessingMatch ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 text-teal-400 animate-spin" />
+                        <span>চেহারা শনাক্ত হচ্ছে...</span>
+                      </>
+                    ) : matchResult?.reason === "MISMATCH_LOW_CONFIDENCE" ? (
+                      <>
+                        <ShieldAlert className="w-4 h-4 text-red-400" />
+                        <span className="text-red-300">ভেরিফিকেশন সম্পন্ন হয়নি (চেহারা মেলেনি)</span>
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="w-4 h-4 text-teal-400 animate-pulse" />
+                        <span>ক্যামেরার দিকে তাকিয়ে পলক ও হাসি দিন...</span>
+                      </>
+                    )}
+                  </div>
+                  <p className="text-[10px] text-slate-400">
+                    ব্লিংক ও স্মাইল দুটিই স্বয়ংক্রিয়ভাবে শনাক্ত হলে স্বয়ংক্রিয়ভাবে হাজিরা সাবমিট হবে।
+                  </p>
+                </div>
               )}
 
               <p className="text-center text-[10px] text-slate-400">
-                Production Policy: Biometric facial vectors, selfie snapshot, and GPS timestamps are logged securely.
+                আইনসম্মত নিরাপত্তা নীতি: কোনো অ্যাকাউন্টে অন্য কেউ পাসওয়ার্ড ছাড়া ঢুকতে পারবে না।
               </p>
             </div>
           </div>
         </div>
-      </div>
 
-      {/* Face Enrollment Modal */}
-      {showEnrollModal && (
-        <FaceEnrollmentModal
-          isOpen={showEnrollModal}
-          onClose={() => setShowEnrollModal(false)}
-          employee={activeEmployee}
-          isSuperAdmin={true}
-          onSaveFacePhoto={(empId, photoUrl, verificationScore) => {
-            if (onUpdateFacePhoto) {
-              onUpdateFacePhoto(empId, photoUrl);
-            }
-            const isVerified = verificationScore !== undefined;
-            setActiveEmployee((prev) => ({
-              ...prev,
-              faceRegisteredPhoto: photoUrl,
-              avatarUrl: photoUrl,
-              faceTemplateRegistered: isVerified,
-              faceVerified: isVerified,
-              faceVerificationRequired: !isVerified,
-              faceVerificationScore: verificationScore,
-              faceVerifiedAt: isVerified ? new Date().toISOString() : undefined,
-            }));
-            setShowEnrollModal(false);
-          }}
-          onUpdateEmployee={(updatedEmp) => {
-            setActiveEmployee(updatedEmp);
-          }}
-        />
-      )}
+        {/* Enrollment / Photo Update Modal */}
+        {showEnrollModal && (
+          <FaceEnrollmentModal
+            isOpen={showEnrollModal}
+            onClose={() => setShowEnrollModal(false)}
+            employee={activeEmployee}
+            onSaveFacePhoto={(empId, photoUrl) => {
+              if (onUpdateFacePhoto) {
+                onUpdateFacePhoto(empId, photoUrl);
+              }
+              setActiveEmployee((prev) => ({
+                ...prev,
+                faceRegisteredPhoto: photoUrl,
+                avatarUrl: photoUrl,
+                faceVerified: true,
+                faceTemplateRegistered: true,
+              }));
+              handleResetScan();
+            }}
+          />
+        )}
+      </div>
     </div>
   );
 };
