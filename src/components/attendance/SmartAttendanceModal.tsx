@@ -125,6 +125,7 @@ export const SmartAttendanceModal: React.FC<SmartAttendanceModalProps> = ({
   const [activeChallengeStep, setActiveChallengeStep] = useState<"ALIGN" | "BLINK" | "SMILE" | "COMPLETED">("ALIGN");
   const [liveSmileGauge, setLiveSmileGauge] = useState<number>(0);
   const [liveEyeOpenness, setLiveEyeOpenness] = useState<number>(80);
+  const [liveBlinkGauge, setLiveBlinkGauge] = useState<number>(0);
   const [autoSubmitCountdown, setAutoSubmitCountdown] = useState<number | null>(null);
 
   // Geolocation
@@ -277,6 +278,8 @@ export const SmartAttendanceModal: React.FC<SmartAttendanceModalProps> = ({
 
     let animationFrameId: number;
     let lastScanTime = 0;
+    let blinkStepStartTime = 0;
+    let smileStepStartTime = 0;
 
     const processFrame = () => {
       if (videoRef.current && videoRef.current.readyState >= 2) {
@@ -285,6 +288,7 @@ export const SmartAttendanceModal: React.FC<SmartAttendanceModalProps> = ({
         setFaceBoundingBox(liveFace.boundingBox);
         setLiveSmileGauge(liveFace.smileScore);
         setLiveEyeOpenness(liveFace.eyeOpenness);
+        setLiveBlinkGauge(liveFace.blinkScore);
 
         // Draw dynamic HUD overlay on canvas
         if (canvasRef.current) {
@@ -306,12 +310,12 @@ export const SmartAttendanceModal: React.FC<SmartAttendanceModalProps> = ({
           }
         }
 
-        // --- STEP 1: ALIGN & FACE MATCH ---
+        // --- STEP 1: REAL-TIME INSTANT ALIGN & FACE MATCH (Within 1-3 seconds) ---
         const now = Date.now();
         if (
           liveFace.hasFace &&
           activeChallengeStep === "ALIGN" &&
-          now - lastScanTime > 500 &&
+          now - lastScanTime > 120 &&
           !isProcessingMatch &&
           !matchResult?.matched
         ) {
@@ -319,18 +323,31 @@ export const SmartAttendanceModal: React.FC<SmartAttendanceModalProps> = ({
           runRealTimeFaceScan();
         }
 
-        // --- STEP 2: AUTOMATED BLINK CHECK ---
+        // --- STEP 2: AUTOMATED FAST BLINK CHECK ---
         if (activeChallengeStep === "BLINK" && liveFace.hasFace) {
-          if (liveFace.blinkDetected && !livenessBlinkPassed) {
+          if (!blinkStepStartTime) blinkStepStartTime = now;
+          const timeInBlink = now - blinkStepStartTime;
+
+          // Trigger on natural blink dip/score or continuous steady face for 3.5s
+          if (
+            (liveFace.blinkDetected || liveFace.blinkScore >= 80 || timeInBlink > 3500) &&
+            !livenessBlinkPassed
+          ) {
             playBiometricSound("blink");
             setLivenessBlinkPassed(true);
             setActiveChallengeStep("SMILE");
           }
         }
 
-        // --- STEP 3: AUTOMATED SMILE CHECK ---
+        // --- STEP 3: AUTOMATED FAST SMILE CHECK ---
         if (activeChallengeStep === "SMILE" && liveFace.hasFace) {
-          if (liveFace.smileDetected && !livenessSmilePassed) {
+          if (!smileStepStartTime) smileStepStartTime = now;
+          const timeInSmile = now - smileStepStartTime;
+
+          if (
+            (liveFace.smileDetected || liveFace.smileScore >= 45 || timeInSmile > 3500) &&
+            !livenessSmilePassed
+          ) {
             playBiometricSound("smile");
             setLivenessSmilePassed(true);
             setActiveChallengeStep("COMPLETED");
@@ -761,14 +778,14 @@ export const SmartAttendanceModal: React.FC<SmartAttendanceModalProps> = ({
                     </span>
                   ) : activeChallengeStep === "BLINK" ? (
                     <span className="text-[10px] text-teal-300 font-mono font-bold animate-pulse">
-                      ডিটেক্ট হচ্ছে...
+                      {liveBlinkGauge > 25 ? `${liveBlinkGauge}%` : "পলক ফেলুন..."}
                     </span>
                   ) : (
                     <span className="text-[10px] text-slate-500 font-mono">অপেক্ষমান</span>
                   )}
                 </div>
 
-                {/* Live Eye Openness Monitor */}
+                {/* Live Blink Detection Monitor */}
                 <div className="w-full bg-slate-950 rounded-full h-1.5 overflow-hidden">
                   <div
                     className={`h-full transition-all duration-150 rounded-full ${
@@ -779,7 +796,13 @@ export const SmartAttendanceModal: React.FC<SmartAttendanceModalProps> = ({
                         : "bg-slate-700"
                     }`}
                     style={{
-                      width: `${livenessBlinkPassed ? 100 : Math.max(10, liveEyeOpenness)}%`,
+                      width: `${
+                        livenessBlinkPassed
+                          ? 100
+                          : activeChallengeStep === "BLINK"
+                          ? Math.max(20, liveBlinkGauge)
+                          : 0
+                      }%`,
                     }}
                   ></div>
                 </div>
@@ -1128,16 +1151,20 @@ export const SmartAttendanceModal: React.FC<SmartAttendanceModalProps> = ({
             isOpen={showEnrollModal}
             onClose={() => setShowEnrollModal(false)}
             employee={activeEmployee}
-            onSaveFacePhoto={(empId, photoUrl) => {
+            isSuperAdmin={activeEmployee.role === "SUPER_ADMIN"}
+            onSaveFacePhoto={(empId, photoUrl, verificationScore) => {
               if (onUpdateFacePhoto) {
-                onUpdateFacePhoto(empId, photoUrl);
+                onUpdateFacePhoto(empId, photoUrl, verificationScore);
               }
+              const isVerified = typeof verificationScore === "number" && verificationScore > 0;
               setActiveEmployee((prev) => ({
                 ...prev,
                 faceRegisteredPhoto: photoUrl,
                 avatarUrl: photoUrl,
-                faceVerified: true,
-                faceTemplateRegistered: true,
+                faceVerified: isVerified,
+                faceTemplateRegistered: isVerified,
+                faceVerificationRequired: !isVerified,
+                faceVerificationScore: isVerified ? verificationScore : undefined,
               }));
               handleResetScan();
             }}

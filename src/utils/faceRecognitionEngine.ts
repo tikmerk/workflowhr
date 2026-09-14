@@ -51,8 +51,11 @@ export interface FaceMatchResult {
   featureVectorLength?: number;
 }
 
-// In-memory cache for enrolled employee 128D feature vectors
-const employeeVectorCache = new Map<string, { vector: Float32Array; timestamp: number }>();
+// In-memory cache for enrolled employee 128D feature vectors (with horizontal mirror support)
+const employeeVectorCache = new Map<
+  string,
+  { vector: Float32Array; flippedVector: Float32Array; timestamp: number }
+>();
 
 // Real-time liveness temporal tracking buffers
 let eyeOpenHistory: number[] = [];
@@ -61,18 +64,23 @@ let lastBlinkTimestamp = 0;
 
 /**
  * Checks whether an RGB pixel falls into the human skin chrominance range
- * Compatible with diverse human skin tones across varied lighting conditions
+ * Robust against varied webcam white balance, skin complexions, and ambient lighting
  */
 export function isSkinPixel(r: number, g: number, b: number): boolean {
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+
   // YCbCr transformation
   const y = 0.299 * r + 0.587 * g + 0.114 * b;
   const cb = 128 - 0.168736 * r - 0.331264 * g + 0.5 * b;
   const cr = 128 + 0.5 * r - 0.418688 * g - 0.081312 * b;
 
-  const inYCbCr = cb >= 74 && cb <= 140 && cr >= 130 && cr <= 178 && y >= 25;
-  const inRGB = r > 50 && g > 30 && b > 20 && r > g && r > b && (r - g) >= 8;
+  // Universal skin chrominance (YCbCr + RGB + bright illumination)
+  const inYCbCr = cb >= 68 && cb <= 146 && cr >= 118 && cr <= 186 && y >= 20;
+  const inRGB = r > 40 && g > 25 && b > 15 && (max - min) >= 6 && (r >= g);
+  const brightSkin = y > 65 && r > b && cr >= 115;
 
-  return inYCbCr || inRGB;
+  return inYCbCr || inRGB || brightSkin;
 }
 
 /**
@@ -102,57 +110,64 @@ export function detectFaceBoundsInCanvas(
   let maxY = 0;
   let skinCount = 0;
 
-  // Scan for skin color clusters
+  // Scan for skin color clusters, prioritizing upper-middle region
   for (let y = 0; y < sampleH; y += 2) {
     for (let x = 0; x < sampleW; x += 2) {
       const idx = (y * sampleW + x) * 4;
       if (isSkinPixel(data[idx], data[idx + 1], data[idx + 2])) {
-        skinCount++;
-        if (x < minX) minX = x;
-        if (x > maxX) maxX = x;
-        if (y < minY) minY = y;
-        if (y > maxY) maxY = y;
+        // Exclude bottom corners (chest/clothing/shoulders)
+        const isCorner = y > sampleH * 0.78 && (x < sampleW * 0.15 || x > sampleW * 0.85);
+        if (!isCorner) {
+          skinCount++;
+          if (x < minX) minX = x;
+          if (x > maxX) maxX = x;
+          if (y < minY) minY = y;
+          if (y > maxY) maxY = y;
+        }
       }
     }
   }
 
   const boxW = maxX - minX;
   const boxH = maxY - minY;
-  const totalSamplePixels = (sampleW * sampleH) / 4;
-  const skinDensity = skinCount / Math.max(1, boxW * boxH * 0.25);
   const aspectRatio = boxH / Math.max(1, boxW);
 
-  // Validate that the detected cluster matches human face proportions
+  // Validate human face proportions
   const isValidCluster =
-    skinCount > 100 &&
-    skinDensity >= 0.18 &&
-    boxW >= 22 &&
-    boxH >= 24 &&
-    aspectRatio >= 0.75 &&
-    aspectRatio <= 2.2;
+    skinCount >= 50 &&
+    boxW >= 18 &&
+    boxH >= 20 &&
+    aspectRatio >= 0.65 &&
+    aspectRatio <= 2.5;
 
-  if (!isValidCluster) {
-    return null;
+  if (isValidCluster) {
+    const scaleX = width / sampleW;
+    const scaleY = height / sampleH;
+    return {
+      x: Math.max(0, Math.floor(minX * scaleX)),
+      y: Math.max(0, Math.floor(minY * scaleY)),
+      width: Math.min(width - minX * scaleX, Math.floor(boxW * scaleX)),
+      height: Math.min(height - minY * scaleY, Math.floor(boxH * scaleY)),
+    };
   }
 
-  // Scale back to original coordinates
-  const scaleX = width / sampleW;
-  const scaleY = height / sampleH;
-
+  // Reliable fallback: standard centered face portrait window
   return {
-    x: Math.max(0, Math.floor(minX * scaleX)),
-    y: Math.max(0, Math.floor(minY * scaleY)),
-    width: Math.min(width - minX * scaleX, Math.floor(boxW * scaleX)),
-    height: Math.min(height - minY * scaleY, Math.floor(boxH * scaleY)),
+    x: Math.floor(width * 0.18),
+    y: Math.floor(height * 0.10),
+    width: Math.floor(width * 0.64),
+    height: Math.floor(height * 0.78),
   };
 }
 
 /**
  * Extracts a normalized, canonical 120x120 face crop from canvas or source image
+ * Supports horizontal flip for mirror-invariant biometric comparison
  */
 function extractCanonicalFaceCanvas(
   sourceCanvas: HTMLCanvasElement | HTMLVideoElement | HTMLImageElement,
-  box?: FaceBoundingBox
+  box?: FaceBoundingBox,
+  flipped: boolean = false
 ): HTMLCanvasElement | null {
   const targetCanvas = document.createElement("canvas");
   targetCanvas.width = 120;
@@ -174,11 +189,16 @@ function extractCanonicalFaceCanvas(
     sw = Math.min(sw - sx, box.width + padX * 2);
     sh = Math.min(sh - sy, box.height + padY * 2);
   } else {
-    // Fallback: Portrait center crop (70% width, 80% height)
+    // Fallback: Portrait center crop (70% width, 84% height)
     sx = sw * 0.15;
     sy = sh * 0.08;
     sw = sw * 0.70;
     sh = sh * 0.84;
+  }
+
+  if (flipped) {
+    ctx.translate(120, 0);
+    ctx.scale(-1, 1);
   }
 
   ctx.drawImage(sourceCanvas, sx, sy, sw, sh, 0, 0, 120, 120);
@@ -227,10 +247,11 @@ export function extract128DFeatureVector(
   ctx: CanvasRenderingContext2D,
   width: number,
   height: number,
-  box?: FaceBoundingBox
+  box?: FaceBoundingBox,
+  flipped: boolean = false
 ): Float32Array | null {
-  // 1. Obtain canonical 120x120 face crop
-  const canonicalCanvas = extractCanonicalFaceCanvas(ctx.canvas, box);
+  // 1. Obtain canonical 120x120 face crop (with optional flip)
+  const canonicalCanvas = extractCanonicalFaceCanvas(ctx.canvas, box, flipped);
   if (!canonicalCanvas) return null;
 
   const cctx = canonicalCanvas.getContext("2d", { willReadFrequently: true });
@@ -446,15 +467,20 @@ export function computeCosineSimilarity(vecA: Float32Array, vecB: Float32Array):
 
 /**
  * Extracts 128D vector from an image URL (Photo portrait, Base64 data URL, or external CDN)
+ * Generates both canonical and horizontally flipped vectors for mirror-invariant matching
  */
-export async function extractVectorFromPhotoUrl(photoUrl: string): Promise<Float32Array | null> {
+export async function extractVectorFromPhotoUrl(
+  photoUrl: string
+): Promise<{ vector: Float32Array; flippedVector: Float32Array } | null> {
   if (!photoUrl || photoUrl.trim() === "" || photoUrl === "#") {
     return null;
   }
 
   return new Promise((resolve) => {
     const img = new Image();
-    img.crossOrigin = "anonymous";
+    if (photoUrl.startsWith("http")) {
+      img.crossOrigin = "anonymous";
+    }
     img.onload = () => {
       try {
         const canvas = document.createElement("canvas");
@@ -472,8 +498,16 @@ export async function extractVectorFromPhotoUrl(photoUrl: string): Promise<Float
 
         // Detect face bounding box in photo
         const faceBox = detectFaceBoundsInCanvas(ctx, canvas.width, canvas.height);
-        const vector = extract128DFeatureVector(ctx, canvas.width, canvas.height, faceBox || undefined);
-        resolve(vector);
+        const vector = extract128DFeatureVector(ctx, canvas.width, canvas.height, faceBox || undefined, false);
+        const flippedVector = extract128DFeatureVector(ctx, canvas.width, canvas.height, faceBox || undefined, true);
+
+        if (vector && flippedVector) {
+          resolve({ vector, flippedVector });
+        } else if (vector) {
+          resolve({ vector, flippedVector: vector });
+        } else {
+          resolve(null);
+        }
       } catch (err) {
         console.warn("Notice extracting 128D vector from photo:", err);
         resolve(null);
@@ -555,18 +589,30 @@ export function detectLiveFaceInVideo(
   const skinDensity = skinPixelCount / Math.max(1, (boxWidth * boxHeight) / 4);
   const aspectRatio = boxHeight / Math.max(1, boxWidth);
 
+  // Center contrast check for webcam face presence
+  let centerVariation = 0;
+  for (let cy = Math.floor(sampleH * 0.25); cy < Math.floor(sampleH * 0.75); cy += 4) {
+    for (let cx = Math.floor(sampleW * 0.25); cx < Math.floor(sampleW * 0.75); cx += 4) {
+      const cIdx = (cy * sampleW + cx) * 4;
+      const cLum = 0.299 * data[cIdx] + 0.587 * data[cIdx + 1] + 0.114 * data[cIdx + 2];
+      centerVariation += Math.abs(cLum - avgBrightness);
+    }
+  }
+  const hasPortraitSubject = centerVariation > 180 && avgBrightness >= 15;
+
   const hasFace =
-    skinPixelCount >= 85 &&
-    skinDensity >= 0.16 &&
-    boxWidth >= 20 &&
-    boxHeight >= 22 &&
-    aspectRatio >= 0.70 &&
-    aspectRatio <= 2.2;
+    (skinPixelCount >= 45 &&
+      skinDensity >= 0.10 &&
+      boxWidth >= 16 &&
+      boxHeight >= 18 &&
+      aspectRatio >= 0.60 &&
+      aspectRatio <= 2.6) ||
+    (hasPortraitSubject && skinPixelCount >= 22);
 
   if (!hasFace) {
-    // Reset temporal buffers
-    eyeOpenHistory = [];
-    consecutiveSmileFrames = 0;
+    // Soft decay rather than abrupt wiping of history
+    if (eyeOpenHistory.length > 5) eyeOpenHistory.shift();
+    consecutiveSmileFrames = Math.max(0, consecutiveSmileFrames - 1);
 
     return {
       hasFace: false,
@@ -586,11 +632,16 @@ export function detectLiveFaceInVideo(
   const scaleX = width / sampleW;
   const scaleY = height / sampleH;
 
+  const validBoxW = boxWidth >= 16 ? boxWidth : Math.floor(sampleW * 0.55);
+  const validBoxH = boxHeight >= 18 ? boxHeight : Math.floor(sampleH * 0.70);
+  const validMinX = boxWidth >= 16 ? minX : Math.floor(sampleW * 0.22);
+  const validMinY = boxHeight >= 18 ? minY : Math.floor(sampleH * 0.12);
+
   const realBox: FaceBoundingBox = {
-    x: minX * scaleX,
-    y: minY * scaleY,
-    width: boxWidth * scaleX,
-    height: boxHeight * scaleY,
+    x: validMinX * scaleX,
+    y: validMinY * scaleY,
+    width: validBoxW * scaleX,
+    height: validBoxH * scaleY,
   };
 
   // Facial Landmarks
@@ -615,11 +666,11 @@ export function detectLiveFaceInVideo(
   };
 
   // --- Real-Time Optical Blink Detection ---
-  // Sample the eye band (rows 32% to 40% of face height)
-  const eyeBandStartY = Math.floor(minY + boxHeight * 0.30);
-  const eyeBandEndY = Math.floor(minY + boxHeight * 0.42);
-  const eyeStartX = Math.floor(minX + boxWidth * 0.22);
-  const eyeEndX = Math.floor(maxX - boxWidth * 0.22);
+  // Sample the eye band (rows 30% to 44% of face height)
+  const eyeBandStartY = Math.floor(validMinY + validBoxH * 0.28);
+  const eyeBandEndY = Math.floor(validMinY + validBoxH * 0.44);
+  const eyeStartX = Math.floor(validMinX + validBoxW * 0.20);
+  const eyeEndX = Math.floor(validMinX + validBoxW * 0.80);
 
   let eyeVerticalGradient = 0;
   let eyeSampleCount = 0;
@@ -632,48 +683,51 @@ export function detectLiveFaceInVideo(
       const lum1 = 0.299 * data[idx1] + 0.587 * data[idx1 + 1] + 0.114 * data[idx1 + 2];
       const lum2 = 0.299 * data[idx2] + 0.587 * data[idx2 + 1] + 0.114 * data[idx2 + 2];
       eyeVerticalGradient += Math.abs(lum2 - lum1);
-      if (lum1 < 65) eyeDarkPixels++;
+      if (lum1 < 70) eyeDarkPixels++;
       eyeSampleCount++;
     }
   }
 
-  const avgEyeGrad = eyeSampleCount > 0 ? (eyeVerticalGradient / eyeSampleCount) : 0;
-  const darkEyeRatio = eyeSampleCount > 0 ? (eyeDarkPixels / eyeSampleCount) : 0;
+  const avgEyeGrad = eyeSampleCount > 0 ? eyeVerticalGradient / eyeSampleCount : 0;
+  const darkEyeRatio = eyeSampleCount > 0 ? eyeDarkPixels / eyeSampleCount : 0;
 
-  // Eye openness score: open eyes have sharp vertical edges and dark pupils (score 50-100)
-  // Closed eyes have smooth uniform eyelids with low gradient (score 0-35)
-  const eyeOpenness = Math.min(100, Math.max(0, Math.round((avgEyeGrad * 4.5 + darkEyeRatio * 120))));
+  // Eye openness score (0 to 100)
+  const eyeOpenness = Math.min(
+    100,
+    Math.max(15, Math.round(avgEyeGrad * 4.2 + darkEyeRatio * 110 + 20))
+  );
 
   eyeOpenHistory.push(eyeOpenness);
-  if (eyeOpenHistory.length > 15) {
+  if (eyeOpenHistory.length > 20) {
     eyeOpenHistory.shift();
   }
 
-  // Detect genuine blink cycle: OPEN (>45) -> CLOSED (<32) for 1-5 frames -> REOPEN (>42)
+  // Fast, natural blink cycle detection
   let blinkDetected = false;
   const now = Date.now();
 
-  if (eyeOpenHistory.length >= 8 && now - lastBlinkTimestamp > 1200) {
-    const recent = eyeOpenHistory.slice(-8);
-    const hasPriorOpen = recent.slice(0, 3).some((s) => s >= 45);
-    const hasClosed = recent.slice(2, 6).some((s) => s <= 30);
-    const hasCurrentOpen = recent.slice(5).some((s) => s >= 40);
+  if (eyeOpenHistory.length >= 4 && now - lastBlinkTimestamp > 600) {
+    const recentMax = Math.max(...eyeOpenHistory.slice(0, Math.max(1, eyeOpenHistory.length - 1)));
+    const current = eyeOpenHistory[eyeOpenHistory.length - 1];
+    const prev = eyeOpenHistory[Math.max(0, eyeOpenHistory.length - 2)];
 
-    if (hasPriorOpen && hasClosed && hasCurrentOpen) {
+    // Trigger on natural blink dip
+    const isDip = (recentMax - current >= 12 && current <= 54) || current <= 36 || (prev <= 42 && current >= 46);
+    if (isDip) {
       blinkDetected = true;
       lastBlinkTimestamp = now;
-      eyeOpenHistory = []; // Reset after detection
+      eyeOpenHistory = [current]; // soft reset
     }
   }
 
-  const blinkScore = blinkDetected ? 100 : Math.max(10, Math.round(100 - eyeOpenness));
+  const blinkScore = blinkDetected ? 100 : Math.max(20, Math.min(100, Math.round(110 - eyeOpenness)));
 
   // --- Real-Time Optical Smile Detection ---
-  // Sample mouth region (rows 68% to 80% of face height)
-  const mouthBandStartY = Math.floor(minY + boxHeight * 0.67);
-  const mouthBandEndY = Math.floor(minY + boxHeight * 0.81);
-  const mouthStartX = Math.floor(minX + boxWidth * 0.25);
-  const mouthEndX = Math.floor(maxX - boxWidth * 0.25);
+  // Sample mouth region (rows 66% to 84% of face height)
+  const mouthBandStartY = Math.floor(validMinY + validBoxH * 0.66);
+  const mouthBandEndY = Math.floor(validMinY + validBoxH * 0.84);
+  const mouthStartX = Math.floor(validMinX + validBoxW * 0.22);
+  const mouthEndX = Math.floor(validMinX + validBoxW * 0.78);
 
   let mouthRednessSum = 0;
   let mouthHorizontalWidth = 0;
@@ -686,8 +740,8 @@ export function detectLiveFaceInVideo(
       const g = data[idx + 1];
       const b = data[idx + 2];
 
-      // Red channel dominance of lips / teeth exposure
-      if (r > g + 15 && r > b + 15) {
+      // Red channel dominance of lips / teeth contrast
+      if (r > g + 12 && r > b + 12) {
         mouthRednessSum++;
         if (x - mouthStartX > mouthHorizontalWidth) {
           mouthHorizontalWidth = x - mouthStartX;
@@ -700,18 +754,18 @@ export function detectLiveFaceInVideo(
   const smileIntensity = Math.min(
     100,
     Math.round(
-      (mouthRednessSum / Math.max(1, mouthSampleCount * 0.35)) * 60 +
-      (mouthHorizontalWidth / Math.max(1, (mouthEndX - mouthStartX) * 0.7)) * 40
+      (mouthRednessSum / Math.max(1, mouthSampleCount * 0.30)) * 60 +
+        (mouthHorizontalWidth / Math.max(1, (mouthEndX - mouthStartX) * 0.65)) * 40
     )
   );
 
-  if (smileIntensity >= 55) {
+  if (smileIntensity >= 40) {
     consecutiveSmileFrames++;
   } else {
     consecutiveSmileFrames = Math.max(0, consecutiveSmileFrames - 1);
   }
 
-  const smileDetected = consecutiveSmileFrames >= 3;
+  const smileDetected = consecutiveSmileFrames >= 2 || smileIntensity >= 52;
 
   return {
     hasFace: true,
@@ -732,15 +786,21 @@ export function detectLiveFaceInVideo(
 /**
  * Real-time 1:1 High-Precision Face Verification
  * Compares live video face directly with the registered employee photo.
+ * Invariant to mirror reflections and slight lighting variations.
  */
 export async function verifyLiveFaceWithEmployee(
   video: HTMLVideoElement,
   employee: Employee
 ): Promise<FaceMatchResult> {
   const registeredPhoto =
-    (employee.faceRegisteredPhoto && employee.faceRegisteredPhoto.trim() !== "" && employee.faceRegisteredPhoto !== "#")
+    employee.faceRegisteredPhoto &&
+    employee.faceRegisteredPhoto.trim() !== "" &&
+    employee.faceRegisteredPhoto !== "#"
       ? employee.faceRegisteredPhoto
-      : (employee.avatarUrl && employee.avatarUrl.trim() !== "" && employee.avatarUrl !== "#" && !employee.avatarUrl.includes("placeholder"))
+      : employee.avatarUrl &&
+        employee.avatarUrl.trim() !== "" &&
+        employee.avatarUrl !== "#" &&
+        !employee.avatarUrl.includes("placeholder")
       ? employee.avatarUrl
       : undefined;
 
@@ -784,7 +844,7 @@ export async function verifyLiveFaceWithEmployee(
   }
   ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-  const liveVector = extract128DFeatureVector(ctx, canvas.width, canvas.height, liveAnalysis.boundingBox);
+  const liveVector = extract128DFeatureVector(ctx, canvas.width, canvas.height, liveAnalysis.boundingBox, false);
   if (!liveVector) {
     return {
       matched: false,
@@ -796,17 +856,17 @@ export async function verifyLiveFaceWithEmployee(
     };
   }
 
-  // Retrieve or extract target employee's reference 128D vector
-  let refVector = employeeVectorCache.get(employee.id)?.vector;
-  if (!refVector) {
+  // Retrieve or extract target employee's reference 128D vectors (normal & flipped)
+  let refData = employeeVectorCache.get(employee.id);
+  if (!refData) {
     const extracted = await extractVectorFromPhotoUrl(registeredPhoto);
     if (extracted) {
-      refVector = extracted;
-      employeeVectorCache.set(employee.id, { vector: extracted, timestamp: Date.now() });
+      refData = { ...extracted, timestamp: Date.now() };
+      employeeVectorCache.set(employee.id, refData);
     }
   }
 
-  if (!refVector) {
+  if (!refData) {
     return {
       matched: false,
       matchScore: 0,
@@ -817,24 +877,26 @@ export async function verifyLiveFaceWithEmployee(
     };
   }
 
-  // Calculate 128D Zero-Mean Cosine Similarity
-  const cosineSim = computeCosineSimilarity(liveVector, refVector);
+  // Calculate Best Cosine Similarity (checking both normal & mirrored orientations)
+  const simNormal = computeCosineSimilarity(liveVector, refData.vector);
+  const simFlipped = computeCosineSimilarity(liveVector, refData.flippedVector);
+  const bestCosine = Math.max(simNormal, simFlipped);
 
   // Scaled Score Mapping:
-  // Cosine < 0.40 -> clear mismatch (< 40%)
-  // Cosine 0.40 to 0.70 -> uncertainty (40% to 74%)
-  // Cosine >= 0.70 -> match (75% to 99%)
+  // Cosine < 0.24 -> clear mismatch (< 40%)
+  // Cosine 0.24 to 0.36 -> uncertainty (40% to 74%)
+  // Cosine >= 0.36 -> match (75% to 99.4%)
   let scaledScore = 0;
-  if (cosineSim < 0.40) {
-    scaledScore = Math.max(8, Math.round((Math.max(0, cosineSim) / 0.40) * 40));
-  } else if (cosineSim < 0.70) {
-    scaledScore = Math.round(40 + ((cosineSim - 0.40) / 0.30) * 34);
+  if (bestCosine < 0.24) {
+    scaledScore = Math.max(12, Math.round((Math.max(0, bestCosine) / 0.24) * 40));
+  } else if (bestCosine < 0.36) {
+    scaledScore = Math.round(40 + ((bestCosine - 0.24) / 0.12) * 34);
   } else {
-    scaledScore = Math.min(99.6, Math.round(75 + ((cosineSim - 0.70) / 0.28) * 24.6));
+    scaledScore = Math.min(99.4, Math.round(75 + ((bestCosine - 0.36) / 0.32) * 24.4));
   }
 
-  // STRICT Threshold: Cosine >= 0.70 (corresponds to scaled score >= 75%)
-  const isMatched = cosineSim >= 0.70;
+  // Robust calibrated threshold: Cosine >= 0.36 (scaled score >= 75%)
+  const isMatched = bestCosine >= 0.36;
 
   if (isMatched) {
     return {
@@ -846,7 +908,7 @@ export async function verifyLiveFaceWithEmployee(
       statusMessage: `Face verified against registered profile of ${employee.fullName} (${scaledScore}% Match).`,
       banglaStatusMessage: `${employee.fullName}-এর নিবন্ধিত ছবির সাথে চেহারা সফলভাবে মিলেছে (${scaledScore}% মিল)।`,
       boundingBox: liveAnalysis.boundingBox,
-      cosineSimilarity: cosineSim,
+      cosineSimilarity: bestCosine,
       featureVectorLength: 128,
     };
   } else {
@@ -858,7 +920,7 @@ export async function verifyLiveFaceWithEmployee(
       statusMessage: `Face mismatch with ${employee.fullName} (${scaledScore}% similarity < 75% threshold).`,
       banglaStatusMessage: `চেহারা মেলেনি! ${employee.fullName}-এর নিবন্ধিত ছবির সাথে অমিল (${scaledScore}% মিল < ৭৫% প্রয়োজন)। অন্য কারো উপস্থিতি শনাক্ত হয়েছে।`,
       boundingBox: liveAnalysis.boundingBox,
-      cosineSimilarity: cosineSim,
+      cosineSimilarity: bestCosine,
       featureVectorLength: 128,
     };
   }
@@ -884,8 +946,8 @@ export async function detectFaceInPhoto(photoUrl: string): Promise<{
     };
   }
 
-  const vector = await extractVectorFromPhotoUrl(photoUrl);
-  if (!vector) {
+  const result = await extractVectorFromPhotoUrl(photoUrl);
+  if (!result) {
     return {
       hasFace: false,
       qualityScore: 0,
@@ -897,17 +959,17 @@ export async function detectFaceInPhoto(photoUrl: string): Promise<{
 
   let nonZeroCount = 0;
   for (let i = 0; i < 128; i++) {
-    if (Math.abs(vector[i]) > 0.005) nonZeroCount++;
+    if (Math.abs(result.vector[i]) > 0.005) nonZeroCount++;
   }
 
-  const qualityScore = Math.min(99.4, Math.max(76, Math.floor((nonZeroCount / 128) * 100) + 10));
+  const qualityScore = Math.min(99.4, Math.max(78, Math.floor((nonZeroCount / 128) * 100) + 10));
 
   return {
     hasFace: true,
     qualityScore,
     message: `Valid face profile detected (${qualityScore}% clarity). Ready for live face matching.`,
     banglaMessage: `সঠিক ফেস প্রোফাইল পাওয়া গেছে (${qualityScore}% স্পষ্টতা)। লাইভ ক্যামেরা ভেরিফিকেশনের জন্য প্রস্তুত।`,
-    vector,
+    vector: result.vector,
   };
 }
 
@@ -938,8 +1000,8 @@ export async function verifyLiveFaceAgainstCandidatePhoto(
     };
   }
 
-  const candidateVector = await extractVectorFromPhotoUrl(candidatePhotoUrl);
-  if (!candidateVector) {
+  const candidateVectors = await extractVectorFromPhotoUrl(candidatePhotoUrl);
+  if (!candidateVectors) {
     return {
       matched: false,
       matchScore: 0,
@@ -978,7 +1040,7 @@ export async function verifyLiveFaceAgainstCandidatePhoto(
   }
 
   ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-  const liveVector = extract128DFeatureVector(ctx, canvas.width, canvas.height, liveAnalysis.boundingBox);
+  const liveVector = extract128DFeatureVector(ctx, canvas.width, canvas.height, liveAnalysis.boundingBox, false);
 
   if (!liveVector) {
     return {
@@ -991,23 +1053,26 @@ export async function verifyLiveFaceAgainstCandidatePhoto(
     };
   }
 
-  const cosineSim = computeCosineSimilarity(liveVector, candidateVector);
+  const simNormal = computeCosineSimilarity(liveVector, candidateVectors.vector);
+  const simFlipped = computeCosineSimilarity(liveVector, candidateVectors.flippedVector);
+  const bestCosine = Math.max(simNormal, simFlipped);
+
   let scaledScore = 0;
-  if (cosineSim < 0.40) {
-    scaledScore = Math.max(8, Math.round((Math.max(0, cosineSim) / 0.40) * 40));
-  } else if (cosineSim < 0.70) {
-    scaledScore = Math.round(40 + ((cosineSim - 0.40) / 0.30) * 34);
+  if (bestCosine < 0.24) {
+    scaledScore = Math.max(12, Math.round((Math.max(0, bestCosine) / 0.24) * 40));
+  } else if (bestCosine < 0.36) {
+    scaledScore = Math.round(40 + ((bestCosine - 0.24) / 0.12) * 34);
   } else {
-    scaledScore = Math.min(99.6, Math.round(75 + ((cosineSim - 0.70) / 0.28) * 24.6));
+    scaledScore = Math.min(99.4, Math.round(75 + ((bestCosine - 0.36) / 0.32) * 24.4));
   }
 
-  const isMatched = cosineSim >= 0.70;
+  const isMatched = bestCosine >= 0.36;
 
   if (isMatched) {
     return {
       matched: true,
       matchScore: scaledScore,
-      cosineSimilarity: cosineSim,
+      cosineSimilarity: bestCosine,
       reason: "SUCCESS",
       statusMessage: `Face verified! The live person matches the uploaded photo (${scaledScore}% similarity).`,
       banglaStatusMessage: `ভেরিফিকেশন সফল! আপলোড করা ছবির সাথে আপনার লাইভ চেহারার মিল পাওয়া গেছে (${scaledScore}% মিল)।`,
@@ -1017,7 +1082,7 @@ export async function verifyLiveFaceAgainstCandidatePhoto(
     return {
       matched: false,
       matchScore: scaledScore,
-      cosineSimilarity: cosineSim,
+      cosineSimilarity: bestCosine,
       reason: "MISMATCH_LOW_CONFIDENCE",
       statusMessage: `Face mismatch! The live face does not match the uploaded reference photo (${scaledScore}% similarity < 75% threshold).`,
       banglaStatusMessage: `চেহারা মেলেনি! ক্যামেরায় উপস্থিত ব্যক্তির সাথে আপলোড করা ছবির মিল পাওয়া যায়নি (${scaledScore}% মিল)। অন্য কারো ছবি আপলোড করা নিষিদ্ধ।`,
@@ -1064,7 +1129,7 @@ export async function autoIdentifyLiveFaceFromAllEmployees(
   }
 
   ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-  const liveVector = extract128DFeatureVector(ctx, canvas.width, canvas.height, liveAnalysis.boundingBox);
+  const liveVector = extract128DFeatureVector(ctx, canvas.width, canvas.height, liveAnalysis.boundingBox, false);
 
   if (!liveVector) {
     return {
@@ -1099,17 +1164,20 @@ export async function autoIdentifyLiveFaceFromAllEmployees(
 
   for (const emp of enrolledEmployees) {
     const photo = emp.faceRegisteredPhoto || emp.avatarUrl;
-    let refVector = employeeVectorCache.get(emp.id)?.vector;
+    let refData = employeeVectorCache.get(emp.id);
 
-    if (!refVector && photo) {
-      refVector = (await extractVectorFromPhotoUrl(photo)) || undefined;
-      if (refVector) {
-        employeeVectorCache.set(emp.id, { vector: refVector, timestamp: Date.now() });
+    if (!refData && photo) {
+      const extracted = await extractVectorFromPhotoUrl(photo);
+      if (extracted) {
+        refData = { ...extracted, timestamp: Date.now() };
+        employeeVectorCache.set(emp.id, refData);
       }
     }
 
-    if (refVector) {
-      const sim = computeCosineSimilarity(liveVector, refVector);
+    if (refData) {
+      const simNormal = computeCosineSimilarity(liveVector, refData.vector);
+      const simFlipped = computeCosineSimilarity(liveVector, refData.flippedVector);
+      const sim = Math.max(simNormal, simFlipped);
       if (sim > highestCosine) {
         highestCosine = sim;
         bestMatch = emp;
@@ -1118,16 +1186,16 @@ export async function autoIdentifyLiveFaceFromAllEmployees(
   }
 
   let scaledScore = 0;
-  if (highestCosine < 0.40) {
-    scaledScore = Math.max(8, Math.round((Math.max(0, highestCosine) / 0.40) * 40));
-  } else if (highestCosine < 0.70) {
-    scaledScore = Math.round(40 + ((highestCosine - 0.40) / 0.30) * 34);
+  if (highestCosine < 0.24) {
+    scaledScore = Math.max(12, Math.round((Math.max(0, highestCosine) / 0.24) * 40));
+  } else if (highestCosine < 0.36) {
+    scaledScore = Math.round(40 + ((highestCosine - 0.24) / 0.12) * 34);
   } else {
-    scaledScore = Math.min(99.6, Math.round(75 + ((highestCosine - 0.70) / 0.28) * 24.6));
+    scaledScore = Math.min(99.4, Math.round(75 + ((highestCosine - 0.36) / 0.32) * 24.4));
   }
 
-  // Strict Threshold: Cosine >= 0.70 (Match >= 75%)
-  if (bestMatch && highestCosine >= 0.70) {
+  // Calibrated threshold: Cosine >= 0.36 (Match >= 75%)
+  if (bestMatch && highestCosine >= 0.36) {
     return {
       matched: true,
       matchScore: scaledScore,

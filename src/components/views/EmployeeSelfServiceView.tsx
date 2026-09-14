@@ -1833,6 +1833,7 @@ export const EmployeeSelfServiceView: React.FC<EmployeeSelfServiceViewProps> = (
                 }
               : currentEmployee
           }
+          isSuperAdmin={currentEmployee.role === "SUPER_ADMIN"}
           onSaveFacePhoto={(empId, photoUrl, verificationScore) => {
             if (onUpdateFacePhoto) {
               onUpdateFacePhoto(empId, photoUrl, verificationScore);

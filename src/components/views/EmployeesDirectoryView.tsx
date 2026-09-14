@@ -360,7 +360,10 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
       isFixedContractSalary: editFixedContractSalary,
       isAttendancePenaltyExempt: editSalaryProtected || editFlexibleHours,
       // Credentials & Super Admin Flags
-      username: editUsername.trim() || editingEmployee.username || editingEmployee.email.split("@")[0],
+      username:
+        currentUser?.role === "SUPER_ADMIN"
+          ? editUsername.trim() || editingEmployee.username || editingEmployee.email.split("@")[0]
+          : editingEmployee.username || editingEmployee.employeeCode,
       password: editPassword.trim() || editingEmployee.password || "123456",
       isSuperAdmin: editIsSuperAdmin || editRole === "SUPER_ADMIN",
       isCeoOrOwner: editIsCeoOrOwner,
@@ -407,7 +410,10 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
 
     const updated: Employee = {
       ...quickResetEmployee,
-      username: quickResetUsername.trim() || quickResetEmployee.email.split("@")[0],
+      username:
+        currentUser?.role === "SUPER_ADMIN"
+          ? quickResetUsername.trim() || quickResetEmployee.username || quickResetEmployee.email.split("@")[0]
+          : quickResetEmployee.username || quickResetEmployee.employeeCode,
       password: quickResetPassword.trim() || "123456",
       isSuperAdmin: quickResetIsSuperAdmin,
       isCeoOrOwner: quickResetIsCeoOrOwner,
@@ -749,7 +755,7 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
       },
       bankName: "City Bank Ltd.",
       bankAccountNumber: `11029837${Math.floor(Math.random() * 9000 + 1000)}`,
-      faceTemplateRegistered: true,
+      faceTemplateRegistered: Boolean(newFaceVerified),
       deviceBindingEnabled: true,
       boundDeviceId: `DEV-${newEmpCode}`,
       documents: [],
@@ -1655,17 +1661,19 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
           isOpen={Boolean(enrollingEmployee)}
           onClose={() => setEnrollingEmployee(null)}
           employee={enrollingEmployee}
+          isSuperAdmin={currentUser?.role === "SUPER_ADMIN"}
           onSaveFacePhoto={(empId, photoUrl, verificationScore) => {
+            const isVerified = typeof verificationScore === "number" && verificationScore > 0;
             const updated = {
               ...enrollingEmployee,
               faceRegisteredPhoto: photoUrl,
               avatarUrl: photoUrl,
-              faceTemplateRegistered: true,
-              faceVerified: true,
-              faceVerificationRequired: false,
+              faceTemplateRegistered: isVerified,
+              faceVerified: isVerified,
+              faceVerificationRequired: !isVerified,
               faceRegisteredAt: new Date().toISOString().split("T")[0],
-              faceVerifiedAt: new Date().toISOString(),
-              faceVerificationScore: verificationScore || 95,
+              faceVerifiedAt: isVerified ? new Date().toISOString() : undefined,
+              faceVerificationScore: isVerified ? verificationScore : undefined,
             };
             onUpdateEmployee(updated);
             setEnrollingEmployee(null);
@@ -2778,17 +2786,31 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-slate-600 dark:text-slate-400 mb-1 font-semibold">
-                      ইউজার আইডি / ইউজারনেম (Login User ID / Username)
+                    <label className="block text-slate-600 dark:text-slate-400 mb-1 font-semibold flex items-center justify-between">
+                      <span>ইউজার আইডি / ইউজারনেম (Login User ID / Username)</span>
+                      {currentUser?.role !== "SUPER_ADMIN" && (
+                        <span className="text-[10px] text-rose-500 font-bold flex items-center gap-1">
+                          <Lock className="w-3 h-3" /> শুধুমাত্র সুপার অ্যাডমিন
+                        </span>
+                      )}
                     </label>
                     <input
                       type="text"
                       value={editUsername}
                       onChange={(e) => setEditUsername(e.target.value)}
+                      disabled={currentUser?.role !== "SUPER_ADMIN"}
                       placeholder="username"
-                      className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2 text-slate-900 dark:text-white font-mono"
+                      className={`w-full border rounded-xl p-2 text-slate-900 dark:text-white font-mono ${
+                        currentUser?.role !== "SUPER_ADMIN"
+                          ? "bg-slate-100 dark:bg-slate-900 border-slate-300 dark:border-slate-800 cursor-not-allowed opacity-75"
+                          : "bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-700"
+                      }`}
                     />
-                    <span className="text-[10px] text-slate-400">লগইনে এই ইউজার আইডি অথবা ইমেইল ব্যবহার করা যাবে</span>
+                    <span className="text-[10px] text-slate-400">
+                      {currentUser?.role === "SUPER_ADMIN"
+                        ? "সুপার অ্যাডমিন হিসেবে আপনি কর্মীর ইউজার আইডি পরিবর্তন করতে পারবেন।"
+                        : "🔒 ইউজার আইডি পরিবর্তন করার ক্ষমতা শুধুমাত্র সুপার অ্যাডমিনের রয়েছে।"}
+                    </span>
                   </div>
                   <div>
                     <div className="flex items-center justify-between mb-1">
@@ -3096,16 +3118,31 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
               </div>
 
               <div>
-                <label className="block text-slate-600 dark:text-slate-400 mb-1 font-semibold">
-                  ইউজার আইডি / ইউজারনেম (Login User ID)
+                <label className="block text-slate-600 dark:text-slate-400 mb-1 font-semibold flex items-center justify-between">
+                  <span>ইউজার আইডি / ইউজারনেম (Login User ID)</span>
+                  {currentUser?.role !== "SUPER_ADMIN" && (
+                    <span className="text-[10px] text-rose-500 font-bold flex items-center gap-1">
+                      <Lock className="w-3 h-3" /> শুধুমাত্র সুপার অ্যাডমিন
+                    </span>
+                  )}
                 </label>
                 <input
                   type="text"
                   value={quickResetUsername}
                   onChange={(e) => setQuickResetUsername(e.target.value)}
+                  disabled={currentUser?.role !== "SUPER_ADMIN"}
                   placeholder="username"
-                  className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white font-mono"
+                  className={`w-full border rounded-xl p-2.5 text-slate-900 dark:text-white font-mono ${
+                    currentUser?.role !== "SUPER_ADMIN"
+                      ? "bg-slate-100 dark:bg-slate-900 border-slate-300 dark:border-slate-800 cursor-not-allowed opacity-75"
+                      : "bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-700"
+                  }`}
                 />
+                {currentUser?.role !== "SUPER_ADMIN" && (
+                  <span className="text-[10px] text-slate-400 mt-1 block">
+                    🔒 ইউজার আইডি পরিবর্তনের ক্ষমতা শুধুমাত্র সুপার অ্যাডমিনের রয়েছে।
+                  </span>
+                )}
               </div>
 
               <div>

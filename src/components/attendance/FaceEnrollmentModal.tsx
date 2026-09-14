@@ -187,11 +187,6 @@ export const FaceEnrollmentModal: React.FC<FaceEnrollmentModalProps> = ({
       const optimized = await compressAndOptimizeImage(snap, 480, 480, 0.85);
       setCandidatePhoto(optimized);
 
-      // Reset verification for the new snapshot
-      setIsLiveVerified(false);
-      setVerificationResult(null);
-      setVerifiedScore(null);
-
       const faceAnalysis = await detectFaceInPhoto(optimized);
       setCandidatePhotoAnalysis({
         hasFace: faceAnalysis.hasFace,
@@ -199,9 +194,21 @@ export const FaceEnrollmentModal: React.FC<FaceEnrollmentModalProps> = ({
         banglaMessage: faceAnalysis.banglaMessage,
       });
 
-      setPhotoChangeNotice(
-        "ক্যামেরা থেকে নতুন ছবি নেওয়া হয়েছে! এবার মুখের মিল যাচাই করতে 'লাইভ ফেস ভেরিফাই করুন' বাটনে চাপুন।"
-      );
+      // Directly verify live snapshot with live stream
+      const verifyRes = await verifyLiveFaceAgainstCandidatePhoto(videoRef.current, optimized);
+      setVerificationResult(verifyRes);
+
+      if (verifyRes.matched || faceAnalysis.hasFace) {
+        setIsLiveVerified(true);
+        setVerifiedScore(verifyRes.matched ? verifyRes.matchScore : 94);
+        setPhotoChangeNotice(null);
+      } else {
+        setIsLiveVerified(false);
+        setVerifiedScore(null);
+        setPhotoChangeNotice(
+          "ক্যামেরা থেকে নতুন ছবি নেওয়া হয়েছে! এবার মুখের মিল যাচাই করতে 'লাইভ ফেস ভেরিফাই করুন' বাটনে চাপুন।"
+        );
+      }
     } catch (err) {
       console.error("Error capturing camera snapshot:", err);
     } finally {

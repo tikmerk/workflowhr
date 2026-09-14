@@ -678,7 +678,11 @@ export const Header: React.FC<HeaderProps> = ({
                     className="w-full flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-teal-600 hover:bg-teal-500 text-white text-xs font-bold shadow-xs cursor-pointer transition-all"
                   >
                     <Lock className="w-3.5 h-3.5" />
-                    <span>{t("ইউজারনেম বা পাসওয়ার্ড পরিবর্তন করুন", "Change Username / Password")}</span>
+                    <span>
+                      {currentEmployee.role === "SUPER_ADMIN"
+                        ? t("ইউজারনেম, নাম ও পাসওয়ার্ড পরিবর্তন", "Change Username, Name & Password")
+                        : t("নাম ও পাসওয়ার্ড পরিবর্তন করুন", "Change Name & Password")}
+                    </span>
                   </button>
                 </div>
 
@@ -807,34 +811,36 @@ export const Header: React.FC<HeaderProps> = ({
                     </button>
                   )}
 
-                  {/* Firebase Database Live Health & Sync Diagnostics (Personal Settings) */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowRoleMenu(false);
-                      setShowDbStatusModal(true);
-                    }}
-                    className="w-full flex items-center justify-between p-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/25 transition-all text-left cursor-pointer mt-1 group"
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <div className="relative flex h-3 w-3 shrink-0 ml-0.5 items-center justify-center">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                        <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                      </div>
-                      <div>
-                        <div className="text-[11px] font-bold flex items-center gap-1.5">
-                          <Database className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                          <span>{t("ফায়ারবেস ডাটাবেজ লাইভ স্ট্যাটাস", "Firebase Database Live Status")}</span>
+                  {/* Firebase Database Live Health & Sync Diagnostics (Super Admin Only) */}
+                  {currentEmployee.role === "SUPER_ADMIN" && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowRoleMenu(false);
+                        setShowDbStatusModal(true);
+                      }}
+                      className="w-full flex items-center justify-between p-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/25 transition-all text-left cursor-pointer mt-1 group"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <div className="relative flex h-3 w-3 shrink-0 ml-0.5 items-center justify-center">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
                         </div>
-                        <div className="text-[9px] text-emerald-600/80 dark:text-emerald-300/80">
-                          {t("ক্লাউড সিঙ্ক স্থিতি, লেটেন্সি ও পিং টেস্ট", "Cloud sync health, latency & verify status")}
+                        <div>
+                          <div className="text-[11px] font-bold flex items-center gap-1.5">
+                            <Database className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                            <span>{t("ফায়ারবেস ডাটাবেজ লাইভ স্ট্যাটাস", "Firebase Database Live Status")}</span>
+                          </div>
+                          <div className="text-[9px] text-emerald-600/80 dark:text-emerald-300/80">
+                            {t("ক্লাউড সিঙ্ক স্থিতি, লেটেন্সি ও পিং টেস্ট", "Cloud sync health, latency & verify status")}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                    <span className="px-1.5 py-0.5 rounded text-[9.5px] font-bold bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 shrink-0">
-                      {t("সিঙ্কড", "Synced")}
-                    </span>
-                  </button>
+                      <span className="px-1.5 py-0.5 rounded text-[9.5px] font-bold bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 shrink-0">
+                        {t("সিঙ্কড", "Synced")}
+                      </span>
+                    </button>
+                  )}
                 </div>
 
                 {/* Account Security Notice */}
@@ -870,8 +876,8 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
       </div>
 
-      {/* Firebase Database Verification & Diagnostics Modal */}
-      {showDbStatusModal && (
+      {/* Firebase Database Verification & Diagnostics Modal (Super Admin Only) */}
+      {showDbStatusModal && currentEmployee.role === "SUPER_ADMIN" && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in duration-200">
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 w-full max-w-lg shadow-2xl space-y-5 text-slate-900 dark:text-slate-100">
             {/* Modal Header */}
