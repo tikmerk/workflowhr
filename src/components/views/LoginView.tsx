@@ -291,51 +291,6 @@ export const LoginView: React.FC<LoginViewProps> = ({
             </button>
           </form>
 
-          {/* Quick Credential Reference Card for User Peace of Mind */}
-          <div className="p-3.5 rounded-2xl bg-teal-950/40 border border-teal-500/30 text-xs space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="font-bold text-teal-300 flex items-center gap-1.5 text-[11.5px]">
-                <KeyRound className="w-3.5 h-3.5 text-teal-400" />
-                {t("লগইন নির্দেশিকা (Login Credentials)", "Login Credentials Reference")}
-              </span>
-              <span className="text-[10px] text-teal-400 font-mono bg-teal-500/10 px-1.5 py-0.5 rounded border border-teal-500/20">
-                পাসওয়ার্ড: 123456
-              </span>
-            </div>
-            <div className="grid grid-cols-2 gap-2 text-[10.5px]">
-              <button
-                type="button"
-                onClick={() => {
-                  setEmailOrCode("admin");
-                  setPassword("123456");
-                }}
-                className="p-2 rounded-xl bg-slate-900/90 border border-slate-800 hover:border-teal-500/50 text-left transition-all cursor-pointer group"
-              >
-                <div className="text-slate-400 text-[9.5px] font-semibold">{t("সুপার অ্যাডমিন:", "Super Admin:")}</div>
-                <div className="font-mono font-bold text-teal-300 group-hover:text-teal-200">
-                  admin <span className="text-slate-500 font-normal">/ 123456</span>
-                </div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setEmailOrCode("ceo");
-                  setPassword("123456");
-                }}
-                className="p-2 rounded-xl bg-slate-900/90 border border-slate-800 hover:border-teal-500/50 text-left transition-all cursor-pointer group"
-              >
-                <div className="text-slate-400 text-[9.5px] font-semibold">{t("প্রতিষ্ঠান প্রধান / CEO:", "CEO / Owner:")}</div>
-                <div className="font-mono font-bold text-amber-300 group-hover:text-amber-200">
-                  ceo <span className="text-slate-500 font-normal">/ 123456</span>
-                </div>
-              </button>
-            </div>
-            <div className="text-[10px] text-slate-400 flex items-center justify-between pt-1">
-              <span>{t("ক্লিক করে সরাসরি ফর্মে বসিয়ে নিন", "Click either card to autofill login form")}</span>
-              <span className="text-teal-400/90 font-medium">{t("প্রবেশের পর প্রোফাইল থেকে পরিবর্তনযোগ্য", "Editable after sign-in")}</span>
-            </div>
-          </div>
 
           {/* Quick Attendance info */}
           <div className="p-3 rounded-2xl bg-slate-950/60 border border-slate-800/80 flex items-center justify-between text-xs">

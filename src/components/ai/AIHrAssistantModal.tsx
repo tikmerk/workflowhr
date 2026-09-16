@@ -40,11 +40,11 @@ const DEFAULT_FALLBACK_BRANCH: Branch = {
   state: "Dhaka Division",
   country: "Bangladesh",
   phone: "+880 1700-112233",
-  email: "dhaka.hq@apexglobal.tech",
+  email: "dhaka.hq@muslimwelfare.org",
   latitude: 23.7925,
   longitude: 90.4078,
   geofenceRadiusMeters: 150,
-  wifiSSIDWhitelist: ["APEX_CORP_5G", "APEX_GUEST_SECURE"],
+  wifiSSIDWhitelist: ["MWO_CORP_5G", "MWO_GUEST_SECURE"],
   totalEmployees: 48,
   activeStatus: "ACTIVE",
 };

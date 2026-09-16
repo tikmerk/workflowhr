@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   KeyRound,
   ShieldCheck,
@@ -25,7 +25,9 @@ import {
   Calendar,
   Percent,
   X,
-  Check
+  Check,
+  Zap,
+  Ban
 } from "lucide-react";
 import {
   RolePermissionConfig,
@@ -60,7 +62,44 @@ export const RolesPermissionsView: React.FC<RolesPermissionsViewProps> = ({
 
   // Local state for role permissions
   const [permissionsState, setPermissionsState] = useState<RolePermissionConfig[]>(rolePermissions);
-  const [selectedRole, setSelectedRole] = useState<UserRole>("DEPARTMENT_HEAD");
+  const [selectedRole, setSelectedRole] = useState<UserRole>(() => {
+    const valid = rolePermissions.find((r) => r.role !== "DEPARTMENT_HEAD" && (r.role as string) !== "DEPT_HEAD");
+    return valid?.role || rolePermissions[0]?.role || ("SUPER_ADMIN" as UserRole);
+  });
+
+  // Sync when prop changes
+  useEffect(() => {
+    setPermissionsState(rolePermissions);
+    if (!rolePermissions.some((r) => r.role === selectedRole) && rolePermissions[0]) {
+      setSelectedRole(rolePermissions[0].role);
+    }
+  }, [rolePermissions]);
+
+  // Role CRUD Modals & Form States
+  const [showCreateRoleModal, setShowCreateRoleModal] = useState(false);
+  const [showEditRoleModal, setShowEditRoleModal] = useState(false);
+  const [roleToEdit, setRoleToEdit] = useState<RolePermissionConfig | null>(null);
+  const [roleToDelete, setRoleToDelete] = useState<RolePermissionConfig | null>(null);
+
+  // New Role Form
+  const [newRoleCode, setNewRoleCode] = useState("");
+  const [newRoleTitleBn, setNewRoleTitleBn] = useState("");
+  const [newRoleTitleEn, setNewRoleTitleEn] = useState("");
+  const [newRoleDescBn, setNewRoleDescBn] = useState("");
+  const [newRoleCanAccessAllBranches, setNewRoleCanAccessAllBranches] = useState(false);
+  const [newRoleAllowedNavTabs, setNewRoleAllowedNavTabs] = useState<NavigationTab[]>([
+    "dashboard",
+    "self-service",
+    "attendance-logs",
+    "leaves",
+    "payroll",
+    "notices-chat",
+  ]);
+
+  // Edit Role Form
+  const [editRoleTitleBn, setEditRoleTitleBn] = useState("");
+  const [editRoleTitleEn, setEditRoleTitleEn] = useState("");
+  const [editRoleDescBn, setEditRoleDescBn] = useState("");
 
   // Local state for payroll and attendance policy
   const [policyState, setPolicyState] = useState<PayrollPolicyConfig>(payrollPolicy);
@@ -110,6 +149,119 @@ export const RolesPermissionsView: React.FC<RolesPermissionsViewProps> = ({
     onUpdateRolePermissions(permissionsState);
     setSavedSuccess(isBangla ? "সিস্টেম রোল ও পারমিশন সফলভাবে সংরক্ষিত হয়েছে!" : "Role permissions saved successfully!");
     setTimeout(() => setSavedSuccess(null), 3000);
+  };
+
+  // Create Role Handler
+  const handleCreateRoleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const formattedCode = newRoleCode.trim().toUpperCase().replace(/[\s-]+/g, "_");
+    if (!formattedCode) {
+      alert(isBangla ? "দয়া করে রোলের একটি ইউনিক কোড দিন (যেমন: FIELD_OFFICER)" : "Please enter a unique role code (e.g. FIELD_OFFICER)");
+      return;
+    }
+    if (!newRoleTitleBn.trim()) {
+      alert(isBangla ? "দয়া করে রোলের নাম (বাংলায়) লিখুন" : "Please enter the role title");
+      return;
+    }
+
+    if (permissionsState.some((r) => r.role === formattedCode)) {
+      alert(isBangla ? "এই রোলের কোডটি ইতিমধ্যে ব্যবহৃত হচ্ছে! ভিন্ন কোড লিখুন।" : "This role code is already taken. Please choose another.");
+      return;
+    }
+
+    const newRoleObj: RolePermissionConfig = {
+      role: formattedCode as UserRole,
+      roleTitleBn: newRoleTitleBn.trim(),
+      roleTitleEn: newRoleTitleEn.trim() || newRoleTitleBn.trim(),
+      descriptionBn: newRoleDescBn.trim() || `${newRoleTitleBn.trim()} এর জন্য নির্ধারিত ক্ষমতা ও দায়িত্ব।`,
+      canAccessAllBranches: newRoleCanAccessAllBranches,
+      allowedNavTabs: newRoleAllowedNavTabs,
+      canEditEmployees: false,
+      canDeleteEmployees: false,
+      canManageDepartments: false,
+      canManageBranches: false,
+      canApproveLeaves: false,
+      canManagePayroll: false,
+      canConfigurePolicies: false,
+      canViewAuditLogs: false,
+      isSystemCore: false,
+    };
+
+    const updated = [...permissionsState, newRoleObj];
+    setPermissionsState(updated);
+    onUpdateRolePermissions(updated);
+    setSelectedRole(newRoleObj.role);
+    setShowCreateRoleModal(false);
+
+    // Reset Form
+    setNewRoleCode("");
+    setNewRoleTitleBn("");
+    setNewRoleTitleEn("");
+    setNewRoleDescBn("");
+    setNewRoleCanAccessAllBranches(false);
+    setSavedSuccess(isBangla ? `নতুন রোল "${newRoleObj.roleTitleBn}" সফলভাবে যুক্ত হয়েছে!` : `Role "${newRoleObj.roleTitleEn}" created successfully!`);
+    setTimeout(() => setSavedSuccess(null), 3500);
+  };
+
+  // Open Edit Role
+  const handleOpenEditRole = (roleConfig: RolePermissionConfig, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    setRoleToEdit(roleConfig);
+    setEditRoleTitleBn(roleConfig.roleTitleBn);
+    setEditRoleTitleEn(roleConfig.roleTitleEn);
+    setEditRoleDescBn(roleConfig.descriptionBn);
+    setShowEditRoleModal(true);
+  };
+
+  // Edit Role Submit
+  const handleEditRoleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!roleToEdit || !editRoleTitleBn.trim()) return;
+
+    const updated = permissionsState.map((r) => {
+      if (r.role === roleToEdit.role) {
+        return {
+          ...r,
+          roleTitleBn: editRoleTitleBn.trim(),
+          roleTitleEn: editRoleTitleEn.trim() || editRoleTitleBn.trim(),
+          descriptionBn: editRoleDescBn.trim(),
+        };
+      }
+      return r;
+    });
+
+    setPermissionsState(updated);
+    onUpdateRolePermissions(updated);
+    setShowEditRoleModal(false);
+    setRoleToEdit(null);
+    setSavedSuccess(isBangla ? "রোলের তথ্য সফলভাবে আপডেট হয়েছে!" : "Role updated successfully!");
+    setTimeout(() => setSavedSuccess(null), 3000);
+  };
+
+  // Delete Role Handler
+  const handleOpenDeleteRole = (roleConfig: RolePermissionConfig, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    if (roleConfig.isSystemCore) {
+      alert(isBangla ? "এটি সিস্টেমের অপরিহার্য মূল (Core) রোল, এটি ডিলিট করা যাবে না।" : "This is a core system role and cannot be deleted.");
+      return;
+    }
+    setRoleToDelete(roleConfig);
+  };
+
+  const handleConfirmDeleteRole = () => {
+    if (!roleToDelete) return;
+    const roleCode = roleToDelete.role;
+    const updated = permissionsState.filter((r) => r.role !== roleCode);
+    setPermissionsState(updated);
+    onUpdateRolePermissions(updated);
+
+    if (selectedRole === roleCode) {
+      setSelectedRole(updated[0]?.role || ("SUPER_ADMIN" as UserRole));
+    }
+
+    setRoleToDelete(null);
+    setSavedSuccess(isBangla ? `রোল "${roleToDelete.roleTitleBn}" সফলভাবে ডিলিট করা হয়েছে!` : `Role "${roleToDelete.roleTitleEn}" deleted successfully!`);
+    setTimeout(() => setSavedSuccess(null), 3500);
   };
 
   // Save Policy
@@ -410,11 +562,36 @@ export const RolesPermissionsView: React.FC<RolesPermissionsViewProps> = ({
       {/* TAB 1: ROLES & PERMISSIONS MATRIX */}
       {activeTab === "ROLES_MATRIX" && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          {/* Left: Role Selection (4 cols) */}
+          {/* Left: Role Selection & Management (4 cols) */}
           <div className="lg:col-span-4 space-y-3">
-            <h3 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-              {isBangla ? "সিস্টেমের রোলসমূহ নির্বাচন করুন" : "Select System Role"}
-            </h3>
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                {isBangla ? "সিস্টেমের রোলসমূহ" : "System Roles"}
+              </h3>
+              <button
+                type="button"
+                onClick={() => {
+                  setNewRoleCode("");
+                  setNewRoleTitleBn("");
+                  setNewRoleTitleEn("");
+                  setNewRoleDescBn("");
+                  setNewRoleCanAccessAllBranches(false);
+                  setNewRoleAllowedNavTabs([
+                    "dashboard",
+                    "self-service",
+                    "attendance-logs",
+                    "leaves",
+                    "payroll",
+                    "notices-chat",
+                  ]);
+                  setShowCreateRoleModal(true);
+                }}
+                className="px-2.5 py-1.5 rounded-xl bg-teal-600 hover:bg-teal-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm transition-colors cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>{isBangla ? "নতুন রোল তৈরি" : "Create Role"}</span>
+              </button>
+            </div>
 
             <div className="space-y-2">
               {permissionsState.map((r) => {
@@ -423,19 +600,51 @@ export const RolesPermissionsView: React.FC<RolesPermissionsViewProps> = ({
                   <div
                     key={r.role}
                     onClick={() => setSelectedRole(r.role)}
-                    className={`p-3.5 rounded-2xl border cursor-pointer transition-all space-y-1 ${
+                    className={`p-3.5 rounded-2xl border cursor-pointer transition-all space-y-2 ${
                       isSelected
                         ? "bg-teal-500/10 border-teal-500 shadow-md shadow-teal-500/10 ring-1 ring-teal-500/30"
                         : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 shadow-xs"
                     }`}
                   >
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-slate-900 dark:text-white text-sm">
-                        {isBangla ? r.roleTitleBn : r.roleTitleEn}
-                      </span>
-                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
-                        {r.role}
-                      </span>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="font-bold text-slate-900 dark:text-white text-sm">
+                            {isBangla ? r.roleTitleBn : r.roleTitleEn}
+                          </span>
+                          {r.isSystemCore && (
+                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30 flex items-center gap-0.5">
+                              <Lock className="w-2.5 h-2.5" />
+                              {isBangla ? "কোর রোল" : "Core"}
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 mt-1 inline-block">
+                          {r.role}
+                        </span>
+                      </div>
+
+                      {/* Action buttons on card: Edit & Delete */}
+                      <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          type="button"
+                          onClick={(e) => handleOpenEditRole(r, e)}
+                          title={isBangla ? "রোল এডিট করুন" : "Edit Role"}
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-teal-600 hover:bg-teal-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                        >
+                          <Edit3 className="w-3.5 h-3.5" />
+                        </button>
+                        {!r.isSystemCore ? (
+                          <button
+                            type="button"
+                            onClick={(e) => handleOpenDeleteRole(r, e)}
+                            title={isBangla ? "রোল ডিলিট করুন" : "Delete Role"}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        ) : null}
+                      </div>
                     </div>
 
                     <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2">
@@ -452,10 +661,16 @@ export const RolesPermissionsView: React.FC<RolesPermissionsViewProps> = ({
             <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-6">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-200 dark:border-slate-800">
                 <div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <span className="px-2.5 py-0.5 rounded text-xs font-bold bg-teal-500/15 text-teal-700 dark:text-teal-300 border border-teal-500/30">
                       {activeRoleConfig?.role}
                     </span>
+                    {activeRoleConfig?.isSystemCore && (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30 flex items-center gap-1">
+                        <Lock className="w-3 h-3" />
+                        {isBangla ? "অপরিহার্য সিস্টেম কোর" : "Core Protected"}
+                      </span>
+                    )}
                     <span className="text-xs text-slate-500">
                       {isBangla ? "অনুমতি ও দায়িত্ব বিন্যাস" : "Access Governance"}
                     </span>
@@ -468,14 +683,25 @@ export const RolesPermissionsView: React.FC<RolesPermissionsViewProps> = ({
                   </p>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={handleSaveRolePermissions}
-                  className="px-4 py-2 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white font-bold text-xs rounded-xl flex items-center gap-2 shadow-sm cursor-pointer shrink-0"
-                >
-                  <Save className="w-4 h-4" />
-                  <span>{isBangla ? "পরিবর্তন সংরক্ষণ করুন" : "Save Role Permissions"}</span>
-                </button>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={(e) => activeRoleConfig && handleOpenEditRole(activeRoleConfig, e)}
+                    className="px-3 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer"
+                  >
+                    <Edit3 className="w-3.5 h-3.5" />
+                    <span>{isBangla ? "রোল এডিট" : "Edit Role"}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleSaveRolePermissions}
+                    className="px-4 py-2 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white font-bold text-xs rounded-xl flex items-center gap-2 shadow-sm cursor-pointer"
+                  >
+                    <Save className="w-4 h-4" />
+                    <span>{isBangla ? "পরিবর্তন সংরক্ষণ করুন" : "Save Role Permissions"}</span>
+                  </button>
+                </div>
               </div>
 
               {/* Functional Authority Toggles */}
@@ -837,6 +1063,104 @@ export const RolesPermissionsView: React.FC<RolesPermissionsViewProps> = ({
             </div>
           </div>
 
+          {/* Section 3: Overtime & Absenteeism Deduction Controls */}
+          <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
+            <div className="flex items-center gap-2">
+              <Zap className="w-5 h-5 text-amber-500" />
+              <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                {isBangla ? "ওভারটাইম ও অনুপস্থিতির কর্তন নীতি সুইচ (Overtime & Absenteeism Policy Controls)" : "Overtime & Absenteeism Policy Controls"}
+              </h3>
+            </div>
+            <p className="text-xs text-slate-600 dark:text-slate-400">
+              {isBangla
+                ? "ওভারটাইম হিসাব চালু বা বন্ধ রাখতে এবং অননুমোদিত অনুপস্থিতির জন্য বেতন কর্তন কার্যকর বা মওকুফ করতে নিচের অপশনগুলো ব্যবহার করুন।"
+                : "Easily toggle overtime compensation and absenteeism salary deduction on or off for your organization."}
+            </p>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Overtime Toggle */}
+              <div
+                onClick={() =>
+                  setPolicyState({
+                    ...policyState,
+                    overtimeEnabled: policyState.overtimeEnabled === false ? true : false,
+                  })
+                }
+                className={`p-4 rounded-xl border cursor-pointer transition-all ${
+                  policyState.overtimeEnabled !== false
+                    ? "border-amber-500/30 bg-amber-500/10"
+                    : "border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 opacity-75"
+                }`}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="space-y-1">
+                    <h4 className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                      <Zap className="w-4 h-4 text-amber-500" />
+                      <span>{isBangla ? "ওভারটাইম গণনা সুবিধা" : "Overtime Compensation"}</span>
+                    </h4>
+                    <p className="text-[11px] text-slate-600 dark:text-slate-400">
+                      {policyState.overtimeEnabled !== false
+                        ? (isBangla ? "সক্রিয় (ON) - অতিরিক্ত কাজের জন্য ওভারটাইম পারিশ্রমিক গণনা করা হবে।" : "Enabled - Overtime pay will be computed.")
+                        : (isBangla ? "বন্ধ (OFF) - অতিরিক্ত কাজের কোনো ওভারটাইম গণনা হবে না (৳০)।" : "Disabled - No overtime pay will be computed.")}
+                    </p>
+                  </div>
+                  <div
+                    className={`w-11 h-6 rounded-full p-0.5 transition-colors shrink-0 ${
+                      policyState.overtimeEnabled !== false ? "bg-amber-500" : "bg-slate-300 dark:bg-slate-700"
+                    }`}
+                  >
+                    <div
+                      className={`w-5 h-5 rounded-full bg-white transition-transform ${
+                        policyState.overtimeEnabled !== false ? "translate-x-5" : "translate-x-0"
+                      }`}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Absenteeism Deduction Toggle */}
+              <div
+                onClick={() =>
+                  setPolicyState({
+                    ...policyState,
+                    absenteeismPenaltyEnabled: policyState.absenteeismPenaltyEnabled === false ? true : false,
+                    absentPenaltyEnabled: policyState.absenteeismPenaltyEnabled === false ? true : false,
+                  })
+                }
+                className={`p-4 rounded-xl border cursor-pointer transition-all ${
+                  policyState.absenteeismPenaltyEnabled !== false
+                    ? "border-rose-500/30 bg-rose-500/10"
+                    : "border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 opacity-75"
+                }`}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="space-y-1">
+                    <h4 className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                      <Ban className="w-4 h-4 text-rose-500" />
+                      <span>{isBangla ? "অননুমোদিত অনুপস্থিতির বেতন কর্তন" : "Absenteeism Salary Deduction"}</span>
+                    </h4>
+                    <p className="text-[11px] text-slate-600 dark:text-slate-400">
+                      {policyState.absenteeismPenaltyEnabled !== false
+                        ? (isBangla ? "সক্রিয় (ON) - কর্মীর অনুপস্থিতির জন্য নির্ধারিত বেতন কর্তন কার্যকর হবে।" : "Enabled - Absent days will incur salary deduction.")
+                        : (isBangla ? "বন্ধ (OFF) - অনুপস্থিতির জন্য বেতন থেকে কোনো কর্তন হবে না (ফুল স্যালারি অক্ষুণ্ণ থাকবে)।" : "Disabled - No deduction for absences.")}
+                    </p>
+                  </div>
+                  <div
+                    className={`w-11 h-6 rounded-full p-0.5 transition-colors shrink-0 ${
+                      policyState.absenteeismPenaltyEnabled !== false ? "bg-rose-500" : "bg-slate-300 dark:bg-slate-700"
+                    }`}
+                  >
+                    <div
+                      className={`w-5 h-5 rounded-full bg-white transition-transform ${
+                        policyState.absenteeismPenaltyEnabled !== false ? "translate-x-5" : "translate-x-0"
+                      }`}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div className="flex justify-end">
             <button
               type="submit"
@@ -1157,6 +1481,358 @@ export const RolesPermissionsView: React.FC<RolesPermissionsViewProps> = ({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: CREATE NEW ROLE */}
+      {showCreateRoleModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 w-full max-w-xl text-slate-900 dark:text-slate-100 shadow-2xl space-y-5 my-auto animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-teal-500/10 text-teal-600 dark:text-teal-400 flex items-center justify-center">
+                  <KeyRound className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-black text-slate-900 dark:text-white text-base">
+                    {isBangla ? "নতুন সিস্টেম রোল তৈরি করুন" : "Create New System Role"}
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    {isBangla ? "কাস্টম পদমর্যাদা ও সিস্টেম অনুমতি সংজ্ঞায়িত করুন" : "Define custom role access & authorities"}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowCreateRoleModal(false)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateRoleSubmit} className="space-y-4 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
+                    {isBangla ? "রোলের কোড (Role Code) *" : "Role Code (Unique Identifier) *"}
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={newRoleCode}
+                    onChange={(e) => setNewRoleCode(e.target.value.toUpperCase().replace(/\s+/g, "_"))}
+                    placeholder="e.g. FIELD_OFFICER"
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white font-mono uppercase font-bold"
+                  />
+                  <span className="text-[10px] text-slate-400 mt-0.5 block">
+                    {isBangla ? "ইংরেজি বড় হাতের অক্ষর ও আন্ডারস্কোর (যেমন: HR_EXECUTIVE)" : "Uppercase letters & underscores"}
+                  </span>
+                </div>
+
+                <div>
+                  <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
+                    {isBangla ? "রোলের নাম (বাংলায়) *" : "Role Title (Bengali) *"}
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={newRoleTitleBn}
+                    onChange={(e) => setNewRoleTitleBn(e.target.value)}
+                    placeholder="যেমন: ফিল্ড অফিসার"
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
+                    {isBangla ? "রোলের নাম (ইংরেজিতে)" : "Role Title (English)"}
+                  </label>
+                  <input
+                    type="text"
+                    value={newRoleTitleEn}
+                    onChange={(e) => setNewRoleTitleEn(e.target.value)}
+                    placeholder="e.g. Field Officer"
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
+                    {isBangla ? "শাখা এক্সেস অধিকার" : "Branch Access"}
+                  </label>
+                  <div
+                    onClick={() => setNewRoleCanAccessAllBranches(!newRoleCanAccessAllBranches)}
+                    className={`p-2.5 rounded-xl border flex items-center justify-between cursor-pointer transition-colors ${
+                      newRoleCanAccessAllBranches
+                        ? "bg-teal-500/10 border-teal-500/40 text-teal-900 dark:text-teal-200"
+                        : "bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400"
+                    }`}
+                  >
+                    <span className="font-semibold text-xs">
+                      {isBangla ? "সকল শাখার তথ্য দেখার ক্ষমতা" : "Access All Branches"}
+                    </span>
+                    <div
+                      className={`w-8 h-4.5 rounded-full p-0.5 transition-colors ${
+                        newRoleCanAccessAllBranches ? "bg-teal-600" : "bg-slate-300 dark:bg-slate-700"
+                      }`}
+                    >
+                      <div
+                        className={`w-3.5 h-3.5 rounded-full bg-white transition-transform ${
+                          newRoleCanAccessAllBranches ? "translate-x-3.5" : "translate-x-0"
+                        }`}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
+                  {isBangla ? "রোলের কাজের বিবরণ (দায়িত্ব)" : "Role Description"}
+                </label>
+                <textarea
+                  rows={2}
+                  value={newRoleDescBn}
+                  onChange={(e) => setNewRoleDescBn(e.target.value)}
+                  placeholder={isBangla ? "এই রোলের আওতাধীন প্রধান দায়িত্বসমূহ..." : "Primary responsibilities for this role..."}
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white resize-none"
+                />
+              </div>
+
+              {/* Allowed Navigation Tabs */}
+              <div className="space-y-2 pt-1 border-t border-slate-200 dark:border-slate-800">
+                <div className="flex items-center justify-between">
+                  <label className="block text-slate-700 dark:text-slate-300 font-bold">
+                    {isBangla ? "সাইডবার মেনু এক্সেস (Allowed Tabs)" : "Allowed Navigation Tabs"}
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setNewRoleAllowedNavTabs(allNavTabsList.map((t) => t.id))}
+                      className="text-[10px] text-teal-600 dark:text-teal-400 hover:underline cursor-pointer font-bold"
+                    >
+                      {isBangla ? "সব সিলেক্ট" : "Select All"}
+                    </button>
+                    <span className="text-slate-300">|</span>
+                    <button
+                      type="button"
+                      onClick={() => setNewRoleAllowedNavTabs(["dashboard", "self-service"])}
+                      className="text-[10px] text-slate-500 hover:underline cursor-pointer"
+                    >
+                      {isBangla ? "বেসিক" : "Basic Only"}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-48 overflow-y-auto p-2 bg-slate-50 dark:bg-slate-950/60 rounded-xl border border-slate-200 dark:border-slate-800">
+                  {allNavTabsList.map((tab) => {
+                    const isChecked = newRoleAllowedNavTabs.includes(tab.id);
+                    return (
+                      <div
+                        key={tab.id}
+                        onClick={() => {
+                          setNewRoleAllowedNavTabs(
+                            isChecked
+                              ? newRoleAllowedNavTabs.filter((t) => t !== tab.id)
+                              : [...newRoleAllowedNavTabs, tab.id]
+                          );
+                        }}
+                        className={`p-2 rounded-lg border text-left cursor-pointer transition-all flex items-center gap-1.5 ${
+                          isChecked
+                            ? "bg-teal-500/10 border-teal-500/30 text-teal-900 dark:text-teal-200 font-semibold"
+                            : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-500"
+                        }`}
+                      >
+                        <div
+                          className={`w-3.5 h-3.5 rounded flex items-center justify-center text-white shrink-0 ${
+                            isChecked ? "bg-teal-600" : "border border-slate-400"
+                          }`}
+                        >
+                          {isChecked && <Check className="w-2.5 h-2.5" />}
+                        </div>
+                        <span className="text-[11px] truncate">
+                          {isBangla ? tab.labelBn : tab.labelEn}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-200 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setShowCreateRoleModal(false)}
+                  className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold cursor-pointer"
+                >
+                  {isBangla ? "বাতিল" : "Cancel"}
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 rounded-xl bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white font-bold shadow-md shadow-teal-500/20 flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>{isBangla ? "রোল তৈরি করুন" : "Create Role"}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: EDIT ROLE */}
+      {showEditRoleModal && roleToEdit && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 w-full max-w-lg text-slate-900 dark:text-slate-100 shadow-2xl space-y-5 my-auto animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-teal-500/10 text-teal-600 dark:text-teal-400 flex items-center justify-center">
+                  <Edit3 className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-black text-slate-900 dark:text-white text-base">
+                    {isBangla ? "রোলের বিবরণ ও নাম এডিট করুন" : "Edit Role Information"}
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    {roleToEdit.role} {roleToEdit.isSystemCore ? `(${isBangla ? "সিস্টেম কোর রোল" : "System Core"})` : ""}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowEditRoleModal(false);
+                  setRoleToEdit(null);
+                }}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleEditRoleSubmit} className="space-y-4 text-xs">
+              <div>
+                <label className="block text-slate-500 mb-1 font-semibold">
+                  {isBangla ? "সিস্টেম রোল কোড (অপরিবর্তনীয়)" : "System Role Identifier"}
+                </label>
+                <div className="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800/80 font-mono font-bold text-slate-700 dark:text-slate-300">
+                  {roleToEdit.role}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
+                    {isBangla ? "রোলের নাম (বাংলায়) *" : "Role Title (Bengali) *"}
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editRoleTitleBn}
+                    onChange={(e) => setEditRoleTitleBn(e.target.value)}
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
+                    {isBangla ? "রোলের নাম (ইংরেজিতে)" : "Role Title (English)"}
+                  </label>
+                  <input
+                    type="text"
+                    value={editRoleTitleEn}
+                    onChange={(e) => setEditRoleTitleEn(e.target.value)}
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
+                  {isBangla ? "রোলের কাজের বিবরণ" : "Role Description"}
+                </label>
+                <textarea
+                  rows={3}
+                  value={editRoleDescBn}
+                  onChange={(e) => setEditRoleDescBn(e.target.value)}
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white resize-none"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-200 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowEditRoleModal(false);
+                    setRoleToEdit(null);
+                  }}
+                  className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold cursor-pointer"
+                >
+                  {isBangla ? "বাতিল" : "Cancel"}
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 rounded-xl bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white font-bold shadow-md shadow-teal-500/20 flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Save className="w-4 h-4" />
+                  <span>{isBangla ? "আপডেট সংরক্ষণ করুন" : "Save Changes"}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: DELETE ROLE CONFIRMATION */}
+      {roleToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs">
+          <div className="bg-white dark:bg-slate-900 border border-rose-200 dark:border-rose-900/50 rounded-3xl p-6 w-full max-w-md text-slate-900 dark:text-slate-100 shadow-2xl space-y-4 my-auto animate-in zoom-in-95 duration-200">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-rose-500/15 text-rose-600 flex items-center justify-center shrink-0">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-bold text-slate-900 dark:text-white text-base">
+                  {isBangla ? "রোল ডিলিট নিশ্চিতকরণ" : "Confirm Role Deletion"}
+                </h3>
+                <p className="text-xs text-slate-500">
+                  {isBangla ? "আপনি কি নিশ্চিতভাবে এই রোলটি মুছে ফেলতে চান?" : "Are you sure you want to delete this role?"}
+                </p>
+              </div>
+            </div>
+
+            <div className="p-3.5 rounded-2xl bg-rose-50 dark:bg-rose-950/30 border border-rose-100 dark:border-rose-900/40 text-xs text-rose-800 dark:text-rose-300 space-y-1">
+              <div className="font-bold">
+                {isBangla ? roleToDelete.roleTitleBn : roleToDelete.roleTitleEn} ({roleToDelete.role})
+              </div>
+              <p className="text-[11px] text-rose-600 dark:text-rose-400">
+                {isBangla
+                  ? "এই রোলটি মুছে ফেললে সিস্টেম রোল তালিকা থেকে এটি স্থায়ীভাবে অপসারিত হবে।"
+                  : "This role will be permanently removed from the system role list."}
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setRoleToDelete(null)}
+                className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold cursor-pointer text-xs"
+              >
+                {isBangla ? "বাতিল" : "Cancel"}
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDeleteRole}
+                className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold shadow-md shadow-rose-600/20 flex items-center gap-1.5 cursor-pointer text-xs"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>{isBangla ? "হ্যাঁ, মুছে ফেলুন" : "Yes, Delete Role"}</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

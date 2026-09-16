@@ -53,7 +53,10 @@ export const ExitManagementView: React.FC<ExitManagementViewProps> = ({
     const emp = employees.find((e) => e.id === selectedEmpId) || employees[0];
     if (!emp) return;
 
-    const basic = emp.salary?.basic || 50000;
+    const basic =
+      emp.salary?.basic !== undefined && emp.salary?.basic !== null
+        ? emp.salary.basic
+        : (emp.salary?.grossSalary ?? 0);
     const gratuity = Math.round(basic * 1.5);
     const leaveEncashment = Math.round((basic / 30) * 12);
     const pfRefund = Math.round(basic * 0.5);

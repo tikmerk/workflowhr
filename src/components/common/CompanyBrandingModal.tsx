@@ -282,7 +282,7 @@ export const CompanyBrandingModal: React.FC<CompanyBrandingModalProps> = ({ curr
                 required
                 value={companyName}
                 onChange={(e) => setCompanyName(e.target.value)}
-                placeholder="e.g. Apex Global Technologies Ltd."
+                placeholder="e.g. Muslim Welfare Organization"
                 className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white font-bold focus:outline-none focus:border-teal-500"
               />
             </div>
@@ -296,7 +296,7 @@ export const CompanyBrandingModal: React.FC<CompanyBrandingModalProps> = ({ curr
                 required
                 value={companyNameBn}
                 onChange={(e) => setCompanyNameBn(e.target.value)}
-                placeholder="যেমন: এপেক্স গ্লোবাল টেকনোলজিস লিমিটেড"
+                placeholder="যেমন: মুসলিম ওয়েলফেয়ার অর্গানাইজেশন"
                 className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white font-bold focus:outline-none focus:border-teal-500"
               />
             </div>
@@ -309,7 +309,7 @@ export const CompanyBrandingModal: React.FC<CompanyBrandingModalProps> = ({ curr
                 type="text"
                 value={tagline}
                 onChange={(e) => setTagline(e.target.value)}
-                placeholder="e.g. Enterprise Workforce & Multi-Branch Operations"
+                placeholder="e.g. Social Welfare, Humanitarian Relief & Community Development"
                 className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white focus:outline-none focus:border-teal-500"
               />
             </div>
@@ -322,7 +322,7 @@ export const CompanyBrandingModal: React.FC<CompanyBrandingModalProps> = ({ curr
                 type="text"
                 value={taglineBn}
                 onChange={(e) => setTaglineBn(e.target.value)}
-                placeholder="যেমন: মাল্টি-ব্রাঞ্চ কর্মীবাহিনী ও স্মার্ট এইচআরএম সমাধান"
+                placeholder="যেমন: সমাজকল্যাণ, মানবিক সহায়তা ও সমাজসেবামূলক সংস্থা"
                 className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white focus:outline-none focus:border-teal-500"
               />
             </div>
@@ -339,7 +339,7 @@ export const CompanyBrandingModal: React.FC<CompanyBrandingModalProps> = ({ curr
                 type="text"
                 value={address}
                 onChange={(e) => setAddress(e.target.value)}
-                placeholder="Tower 71, Road 11, Gulshan-1, Dhaka-1212"
+                placeholder="Gulshan Corporate Avenue, Dhaka-1212, Bangladesh"
                 className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white focus:outline-none focus:border-teal-500"
               />
             </div>
@@ -353,7 +353,7 @@ export const CompanyBrandingModal: React.FC<CompanyBrandingModalProps> = ({ curr
                 type="text"
                 value={addressBn}
                 onChange={(e) => setAddressBn(e.target.value)}
-                placeholder="টাওয়ার ৭১, রোড ১১, গুলশান-১, ঢাকা-১২১২"
+                placeholder="গুলশান করপোরেট এভিনিউ, ঢাকা-১২১২, বাংলাদেশ"
                 className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white focus:outline-none focus:border-teal-500"
               />
             </div>
@@ -381,7 +381,7 @@ export const CompanyBrandingModal: React.FC<CompanyBrandingModalProps> = ({ curr
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="contact@apexglobal.tech"
+                placeholder="info@muslimwelfare.org"
                 className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white focus:outline-none focus:border-teal-500"
               />
             </div>
@@ -395,7 +395,7 @@ export const CompanyBrandingModal: React.FC<CompanyBrandingModalProps> = ({ curr
                 type="text"
                 value={website}
                 onChange={(e) => setWebsite(e.target.value)}
-                placeholder="https://apexglobal.tech"
+                placeholder="https://muslimwelfare.org"
                 className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white focus:outline-none focus:border-teal-500"
               />
             </div>

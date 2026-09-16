@@ -47,10 +47,12 @@ import {
   Shift,
   UserRole,
   ExitRecord,
+  RolePermissionConfig,
 } from "../../types";
 import { exportToCSV } from "../../utils/exportUtils";
 import { FaceEnrollmentModal } from "../attendance/FaceEnrollmentModal";
 import { useCompanyBranding } from "../../context/CompanyBrandingContext";
+import { useThemeLanguage } from "../../context/ThemeLanguageContext";
 import {
   getNextAvailableEmployeeCredentials,
   validateEmployeeIdAvailability,
@@ -93,6 +95,110 @@ export const DEFAULT_EMPLOYEE_ALLOWED_TABS = [
   "certificates",
 ];
 
+// Helper to normalize and map navigation tab IDs between schemas
+export const normalizeTabList = (tabs: string[] = []): string[] => {
+  const set = new Set<string>();
+  tabs.forEach((tab) => {
+    if (!tab) return;
+    set.add(tab);
+    if (tab === "self-service") set.add("my-portal");
+    if (tab === "my-portal") set.add("self-service");
+    if (tab === "branches-geofence") set.add("branches");
+    if (tab === "branches") set.add("branches-geofence");
+  });
+  return Array.from(set);
+};
+
+export const isTabAllowedInList = (tabId: string, allowedTabs: string[] = []): boolean => {
+  if (allowedTabs.includes(tabId)) return true;
+  if (tabId === "my-portal" && allowedTabs.includes("self-service")) return true;
+  if (tabId === "self-service" && allowedTabs.includes("my-portal")) return true;
+  if (tabId === "branches" && allowedTabs.includes("branches-geofence")) return true;
+  if (tabId === "branches-geofence" && allowedTabs.includes("branches")) return true;
+  return false;
+};
+
+export const getDefaultTabsForRole = (
+  roleKey: string,
+  rolePermissionsList?: RolePermissionConfig[]
+): string[] => {
+  const matchedRole = rolePermissionsList?.find((r) => r.role === roleKey);
+  if (matchedRole?.allowedNavTabs && matchedRole.allowedNavTabs.length > 0) {
+    return normalizeTabList(matchedRole.allowedNavTabs);
+  }
+
+  // Built-in intelligent defaults by role if not customized in role permissions
+  if (roleKey === "SUPER_ADMIN" || roleKey === "CEO" || roleKey === "COMPANY_ADMIN") {
+    return APP_TAB_OPTIONS.map((t) => t.id);
+  }
+  if (roleKey === "HR_MANAGER") {
+    return normalizeTabList([
+      "dashboard",
+      "self-service",
+      "my-portal",
+      "employees",
+      "departments-designations",
+      "branches",
+      "branches-geofence",
+      "ngo-programs-training",
+      "attendance-logs",
+      "shifts-holidays",
+      "leaves",
+      "recruitment",
+      "notices-chat",
+      "projects-tasks",
+      "certificates",
+      "meetings-conferences",
+      "exit-management",
+    ]);
+  }
+  if (roleKey === "ACCOUNT_PAYROLL" || roleKey === "ACCOUNTS_MANAGER") {
+    return normalizeTabList([
+      "dashboard",
+      "self-service",
+      "my-portal",
+      "payroll",
+      "loans",
+      "employees",
+      "attendance-logs",
+      "leaves",
+      "notices-chat",
+      "assets",
+    ]);
+  }
+  if (roleKey === "BRANCH_MANAGER") {
+    return normalizeTabList([
+      "dashboard",
+      "self-service",
+      "my-portal",
+      "employees",
+      "branches",
+      "branches-geofence",
+      "ngo-programs-training",
+      "attendance-logs",
+      "leaves",
+      "shifts-holidays",
+      "notices-chat",
+      "projects-tasks",
+      "meetings-conferences",
+    ]);
+  }
+  if (roleKey === "PROJECT_MANAGER") {
+    return normalizeTabList([
+      "dashboard",
+      "self-service",
+      "my-portal",
+      "projects-tasks",
+      "attendance-logs",
+      "leaves",
+      "notices-chat",
+      "meetings-conferences",
+      "certificates",
+    ]);
+  }
+  return normalizeTabList(DEFAULT_EMPLOYEE_ALLOWED_TABS);
+};
+
 interface EmployeesDirectoryViewProps {
   employees: Employee[];
   branches: Branch[];
@@ -114,6 +220,7 @@ interface EmployeesDirectoryViewProps {
   onRestoreEmployee?: (empId: string) => void;
   onPermanentDeleteEmployee?: (empId: string) => void;
   exitRecords?: ExitRecord[];
+  rolePermissions?: RolePermissionConfig[];
 }
 
 export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
@@ -137,8 +244,10 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
   onRestoreEmployee,
   onPermanentDeleteEmployee,
   exitRecords = [],
+  rolePermissions = [],
 }) => {
   const { getEmployeeIdPrefix } = useCompanyBranding();
+  const { isBangla } = useThemeLanguage();
 
   // Generate next unique serial ID based on existing employees, recycle bin, exit records, and prefix
   const generateNextEmployeeCode = (prefix: string, list: Employee[]): string => {
@@ -187,6 +296,7 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
   // User Credential, Super Admin & Privacy Edit States
   const [editUsername, setEditUsername] = useState("");
   const [editPassword, setEditPassword] = useState("");
+  const [isEditingPassword, setIsEditingPassword] = useState(false);
   const [showEditPassword, setShowEditPassword] = useState(false);
   const [editIsSuperAdmin, setEditIsSuperAdmin] = useState(false);
   const [editIsCeoOrOwner, setEditIsCeoOrOwner] = useState(false);
@@ -283,7 +393,14 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
     setEditShiftId(emp.shiftId || shifts[0]?.id || "");
     setEditStatus(emp.status || "ACTIVE");
     setEditJoiningDate(emp.joiningDate || "2026-09-01");
-    setEditBasicSalary(emp.salary?.basic || 60000);
+    const rawBasic = emp.salary?.basic;
+    setEditBasicSalary(
+      typeof rawBasic === "number" && !isNaN(rawBasic)
+        ? rawBasic
+        : rawBasic !== undefined && rawBasic !== null
+        ? Number(rawBasic)
+        : (emp.salary?.grossSalary ?? 0)
+    );
     setEditNid(emp.nidNumber || "");
     setEditBloodGroup((emp.bloodGroup as any) || "O+");
     setEditAddress(emp.presentAddress || "");
@@ -291,14 +408,19 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
 
     // Credentials & Administrative Roles
     setEditUsername(emp.username || emp.email.split("@")[0] || emp.employeeCode.toLowerCase());
-    setEditPassword(emp.password || "123456");
+    setEditPassword(""); // Blank by default so browser does not trigger password save prompt on normal edits
+    setIsEditingPassword(false);
     setShowEditPassword(false);
     setEditIsSuperAdmin(Boolean(emp.isSuperAdmin || emp.role === "SUPER_ADMIN"));
     setEditIsCeoOrOwner(Boolean(emp.isCeoOrOwner));
     setEditHideSalaryFromSelf(Boolean(emp.hideSalaryFromSelf));
     setEditIsAttendanceExempt(Boolean(emp.isAttendanceExempt));
     setEditFaceVerified(Boolean(emp.faceVerified));
-    setEditAllowedTabs(emp.allowedTabs || DEFAULT_EMPLOYEE_ALLOWED_TABS);
+    setEditAllowedTabs(
+      emp.allowedTabs && emp.allowedTabs.length > 0
+        ? normalizeTabList(emp.allowedTabs)
+        : getDefaultTabsForRole(emp.role || "EMPLOYEE", rolePermissions)
+    );
     setEditFlexibleHours(Boolean(emp.flexibleHours));
     setEditSalaryProtected(Boolean(emp.salaryProtected));
     setEditFixedContractSalary(Boolean(emp.isFixedSalary || emp.isFixedContractSalary));
@@ -325,10 +447,13 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
     const desig = designations.find((d) => d.id === editDesigId) || designations[0];
     const shift = shifts.find((s) => s.id === editShiftId) || shifts[0];
 
-    const basic = Number(editBasicSalary);
-    const gross = Math.round(basic * 1.77);
+    const basic = Number(editBasicSalary ?? 0);
+    const isFixed = Boolean(editFixedContractSalary);
+    const gross = isFixed ? basic : Math.round(basic * 1.77);
 
-    const isPasswordChanged = editPassword.trim() !== (editingEmployee.password || "123456");
+    const newPwd = editPassword.trim();
+    const isPasswordChanged = newPwd.length > 0 && newPwd !== (editingEmployee.password || "123456");
+    const finalPassword = isPasswordChanged ? newPwd : (editingEmployee.password || "123456");
 
     const updatedEmp: Employee = {
       ...editingEmployee,
@@ -336,35 +461,35 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
       fullName: editFullName,
       email: editEmail,
       phone: editPhone,
-      emergencyPhone: editEmergencyPhone,
       branchId: branch?.id || editingEmployee.branchId,
       branchName: branch?.name || editingEmployee.branchName,
       departmentId: dept?.id || editingEmployee.departmentId,
       departmentName: dept?.name || editingEmployee.departmentName,
       designationId: desig?.id || editingEmployee.designationId,
       designationTitle: customDesignationTitle.trim() || desig?.title || editingEmployee.designationTitle,
-      additionalDesignations: editAdditionalDesignations,
-      additionalDepartments: editAdditionalDepartments,
+      additionalDesignations: [],
+      additionalDepartments: [],
       role: editRole,
       shiftId: shift?.id || editingEmployee.shiftId,
       shiftName: shift?.name || editingEmployee.shiftName,
       status: editStatus,
       joiningDate: editJoiningDate,
-      nidNumber: editNid,
+      nidNumber: editNid.trim(),
       bloodGroup: editBloodGroup,
-      presentAddress: editAddress,
+      presentAddress: editAddress.trim(),
+      emergencyPhone: editEmergencyPhone.trim(),
       // Field Staff, Flexible Hours & Salary Protection Flags
       flexibleHours: editFlexibleHours,
       salaryProtected: editSalaryProtected,
       isFixedSalary: editFixedContractSalary,
       isFixedContractSalary: editFixedContractSalary,
-      isAttendancePenaltyExempt: editSalaryProtected || editFlexibleHours,
+      isAttendancePenaltyExempt: editSalaryProtected || editFlexibleHours || isFixed,
       // Credentials & Super Admin Flags
       username:
         currentUser?.role === "SUPER_ADMIN"
           ? editUsername.trim() || editingEmployee.username || editingEmployee.email.split("@")[0]
           : editingEmployee.username || editingEmployee.employeeCode,
-      password: editPassword.trim() || editingEmployee.password || "123456",
+      password: finalPassword,
       isSuperAdmin: editIsSuperAdmin || editRole === "SUPER_ADMIN",
       isCeoOrOwner: editIsCeoOrOwner,
       hideSalaryFromSelf: editHideSalaryFromSelf,
@@ -375,12 +500,12 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
       salary: {
         ...editingEmployee.salary,
         basic: basic,
-        houseRent: Math.round(basic * 0.4),
-        medicalAllowance: Math.round(basic * 0.12),
-        transportAllowance: Math.round(basic * 0.12),
-        specialAllowance: Math.round(basic * 0.13),
-        providentFundPercentage: editingEmployee.salary?.providentFundPercentage || 8,
-        taxDeductionPercentage: editingEmployee.salary?.taxDeductionPercentage || 6,
+        houseRent: isFixed ? 0 : Math.round(basic * 0.4),
+        medicalAllowance: isFixed ? 0 : Math.round(basic * 0.12),
+        transportAllowance: isFixed ? 0 : Math.round(basic * 0.12),
+        specialAllowance: isFixed ? 0 : Math.round(basic * 0.13),
+        providentFundPercentage: isFixed ? 0 : (editingEmployee.salary?.providentFundPercentage || 8),
+        taxDeductionPercentage: isFixed ? 0 : (editingEmployee.salary?.taxDeductionPercentage || 6),
         grossSalary: gross,
       },
     };
@@ -592,6 +717,7 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
   const [newNid, setNewNid] = useState("");
   const [newBloodGroup, setNewBloodGroup] = useState<any>("O+");
   const [newAddress, setNewAddress] = useState("");
+  const [newEmergencyPhone, setNewEmergencyPhone] = useState("");
 
   // New Employee Account & Permissions
   const [newUsername, setNewUsername] = useState(initialNewCreds.username);
@@ -619,6 +745,9 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
     setNewFullName("");
     setNewEmail("");
     setNewPhone("+880 1");
+    setNewNid("");
+    setNewAddress("");
+    setNewEmergencyPhone("");
     setNewPassword("123456");
     setShowAddModal(true);
   };
@@ -695,7 +824,9 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
     const desig = designations.find((d) => d.id === newDesigId) || designations[0];
     const shift = shifts.find((s) => s.id === newShiftId) || shifts[0];
 
-    const gross = Math.round(newBasicSalary * 1.77);
+    const basic = Number(newBasicSalary ?? 0);
+    const isFixed = Boolean(newFixedContractSalary);
+    const gross = isFixed ? basic : Math.round(basic * 1.77);
 
     const cleanNum = extractEmployeeNumber(newEmpCode);
     const defaultGeneratedUsername = cleanNum ? formatUserId(cleanNum, getEmployeeIdPrefix()) : newEmpCode.trim().toLowerCase();
@@ -720,9 +851,12 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
       gender: "MALE",
       bloodGroup: newBloodGroup,
       maritalStatus: "SINGLE",
-      nidNumber: newNid || "19942699988776655",
-      presentAddress: newAddress || "Dhaka, Bangladesh",
-      permanentAddress: "Bangladesh",
+      nidNumber: newNid.trim(),
+      presentAddress: newAddress.trim(),
+      permanentAddress: "",
+      emergencyPhone: newEmergencyPhone.trim(),
+      additionalDesignations: [],
+      additionalDepartments: [],
       joiningDate: newJoiningDate,
       employmentType: "FULL_TIME",
       status: "ACTIVE",
@@ -733,7 +867,7 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
       salaryProtected: newSalaryProtected,
       isFixedSalary: newFixedContractSalary,
       isFixedContractSalary: newFixedContractSalary,
-      isAttendancePenaltyExempt: newSalaryProtected || newFlexibleHours,
+      isAttendancePenaltyExempt: newSalaryProtected || newFlexibleHours || isFixed,
       // Account credentials & role flags
       username: finalUsername,
       password: newPassword.trim() || "123456",
@@ -744,13 +878,13 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
       faceVerified: newFaceVerified,
       allowedTabs: newAllowedTabs,
       salary: {
-        basic: newBasicSalary,
-        houseRent: Math.round(newBasicSalary * 0.4),
-        medicalAllowance: Math.round(newBasicSalary * 0.12),
-        transportAllowance: Math.round(newBasicSalary * 0.12),
-        specialAllowance: Math.round(newBasicSalary * 0.13),
-        providentFundPercentage: 8,
-        taxDeductionPercentage: 6,
+        basic: basic,
+        houseRent: isFixed ? 0 : Math.round(basic * 0.4),
+        medicalAllowance: isFixed ? 0 : Math.round(basic * 0.12),
+        transportAllowance: isFixed ? 0 : Math.round(basic * 0.12),
+        specialAllowance: isFixed ? 0 : Math.round(basic * 0.13),
+        providentFundPercentage: isFixed ? 0 : 8,
+        taxDeductionPercentage: isFixed ? 0 : 6,
         grossSalary: gross,
       },
       bankName: "City Bank Ltd.",
@@ -772,6 +906,7 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
     setNewPhone("+880 1");
     setNewNid("");
     setNewAddress("");
+    setNewEmergencyPhone("");
     setNewBasicSalary(60000);
     setNewUsername("");
     setNewPassword("123456");
@@ -1055,11 +1190,18 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
                   )}
                 </div>
                 <div className="flex justify-between items-center">
-                  <span>Gross Salary:</span>
+                  <span>{emp.isFixedSalary || emp.isFixedContractSalary ? (isBangla ? "ফিক্সড বেতন:" : "Fixed Salary:") : "Gross Salary:"}</span>
                   <div className="text-right">
-                    <span className="text-slate-900 dark:text-white font-mono font-bold">
-                      ৳{(emp.salary?.grossSalary ?? 0).toLocaleString()}
-                    </span>
+                    <div className="flex items-center justify-end gap-1">
+                      <span className="text-slate-900 dark:text-white font-mono font-bold">
+                        ৳{(emp.salary?.grossSalary ?? 0).toLocaleString()}
+                      </span>
+                      {(emp.isFixedSalary || emp.isFixedContractSalary) && (
+                        <span className="text-[9px] font-bold px-1 py-0.2 rounded bg-blue-500/15 text-blue-700 dark:text-blue-300 border border-blue-500/30">
+                          ফিক্সড
+                        </span>
+                      )}
+                    </div>
                     {emp.hideSalaryFromSelf && (
                       <span className="block text-[8px] font-bold text-amber-600 dark:text-amber-400">
                         (কর্মী থেকে গোপন)
@@ -1248,8 +1390,13 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
                   </td>
 
                   <td className="p-3 font-mono">
-                    <div className="font-semibold text-slate-900 dark:text-white">
-                      ৳{(emp.salary?.grossSalary ?? 0).toLocaleString()}
+                    <div className="flex items-center gap-1.5 font-semibold text-slate-900 dark:text-white">
+                      <span>৳{(emp.salary?.grossSalary ?? 0).toLocaleString()}</span>
+                      {(emp.isFixedSalary || emp.isFixedContractSalary) && (
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-700 dark:text-blue-300 border border-blue-500/30">
+                          ফিক্সড
+                        </span>
+                      )}
                     </div>
                     {emp.hideSalaryFromSelf && (
                       <span
@@ -1527,12 +1674,36 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
               </div>
               <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800">
                 <span className="text-slate-500 dark:text-slate-400 block text-[10px]">National ID (NID)</span>
-                <span className="font-bold text-slate-900 dark:text-white">{selectedEmployee.nidNumber}</span>
+                <span className="font-bold text-slate-900 dark:text-white">
+                  {selectedEmployee.nidNumber && selectedEmployee.nidNumber.trim() !== ""
+                    ? selectedEmployee.nidNumber
+                    : (isBangla ? "তথ্য দেওয়া হয়নি" : "Not provided")}
+                </span>
               </div>
               <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800">
                 <span className="text-slate-500 dark:text-slate-400 block text-[10px]">Gross Salary</span>
                 <span className="font-bold text-emerald-700 dark:text-emerald-400">
                   ৳{(selectedEmployee.salary?.grossSalary ?? 0).toLocaleString()}
+                </span>
+              </div>
+              <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800">
+                <span className="text-slate-500 dark:text-slate-400 block text-[10px]">
+                  {isBangla ? "জরুরী যোগাযোগ" : "Emergency Contact"}
+                </span>
+                <span className="font-bold text-slate-900 dark:text-white font-mono">
+                  {selectedEmployee.emergencyPhone && selectedEmployee.emergencyPhone.trim() !== ""
+                    ? selectedEmployee.emergencyPhone
+                    : (isBangla ? "তথ্য দেওয়া হয়নি" : "Not provided")}
+                </span>
+              </div>
+              <div className="sm:col-span-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800">
+                <span className="text-slate-500 dark:text-slate-400 block text-[10px]">
+                  {isBangla ? "বর্তমান ঠিকানা (Present Address)" : "Present Residential Address"}
+                </span>
+                <span className="font-medium text-slate-900 dark:text-white">
+                  {selectedEmployee.presentAddress && selectedEmployee.presentAddress.trim() !== ""
+                    ? selectedEmployee.presentAddress
+                    : (isBangla ? "তথ্য দেওয়া হয়নি" : "Not provided")}
                 </span>
               </div>
             </div>
@@ -1877,7 +2048,14 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
                   </div>
                   <select
                     value={newDesigId}
-                    onChange={(e) => setNewDesigId(e.target.value)}
+                    onChange={(e) => {
+                      const selVal = e.target.value;
+                      setNewDesigId(selVal);
+                      const found = designations.find((d) => d.id === selVal);
+                      if (found && found.departmentId) {
+                        setNewDeptId(found.departmentId);
+                      }
+                    }}
                     className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white"
                   >
                     {designations.map((d) => (
@@ -1888,26 +2066,53 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
                   </select>
                 </div>
                 <div>
-                  <label className="block text-slate-600 dark:text-slate-400 mb-1">System Role (RBAC)</label>
+                  <label className="block text-slate-600 dark:text-slate-400 mb-1">
+                    {isBangla ? "সিস্টেমের রোল (System Role)" : "System Role (RBAC)"}
+                  </label>
                   <select
                     value={newRole}
-                    onChange={(e) => setNewRole(e.target.value as any)}
+                    onChange={(e) => {
+                      const selRole = e.target.value;
+                      setNewRole(selRole as any);
+                      const autoTabs = getDefaultTabsForRole(selRole, rolePermissions);
+                      setNewAllowedTabs(autoTabs);
+                      if (selRole === "SUPER_ADMIN") {
+                        setNewIsSuperAdmin(true);
+                      }
+                    }}
                     className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white"
                   >
-                    <option value="EMPLOYEE">Employee (General Staff)</option>
-                    <option value="PROJECT_MANAGER">Project Manager / Team Lead</option>
-                    <option value="BRANCH_MANAGER">Branch Manager</option>
-                    <option value="HR_MANAGER">HR Manager</option>
-                    <option value="ACCOUNTS_MANAGER">Accounts Manager</option>
-                    <option value="COMPANY_ADMIN">Company Admin</option>
-                    <option value="SUPER_ADMIN">Super Admin (Full Access)</option>
+                    {rolePermissions && rolePermissions.length > 0 ? (
+                      rolePermissions.map((rp) => (
+                        <option key={rp.role} value={rp.role}>
+                          {isBangla ? rp.roleTitleBn : rp.roleTitleEn} ({rp.role})
+                        </option>
+                      ))
+                    ) : (
+                      <>
+                        <option value="EMPLOYEE">Employee (General Staff)</option>
+                        <option value="PROJECT_MANAGER">Project Manager / Team Lead</option>
+                        <option value="BRANCH_MANAGER">Branch Manager</option>
+                        <option value="HR_MANAGER">HR Manager</option>
+                        <option value="ACCOUNTS_MANAGER">Accounts Manager</option>
+                        <option value="COMPANY_ADMIN">Company Admin</option>
+                        <option value="SUPER_ADMIN">Super Admin (Full Access)</option>
+                      </>
+                    )}
                   </select>
                 </div>
                 <div>
                   <label className="block text-slate-600 dark:text-slate-400 mb-1">Assigned Shift</label>
                   <select
                     value={newShiftId}
-                    onChange={(e) => setNewShiftId(e.target.value)}
+                    onChange={(e) => {
+                      const selId = e.target.value;
+                      setNewShiftId(selId);
+                      const selShift = shifts.find((s) => s.id === selId);
+                      if (selShift?.isFlexible || selShift?.name.toLowerCase().includes("flexible") || selShift?.name.includes("ফ্লেক্সিবল")) {
+                        setNewFlexibleHours(true);
+                      }
+                    }}
                     className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white"
                   >
                     {shifts.map((s) => (
@@ -1921,24 +2126,43 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-slate-600 dark:text-slate-400 mb-1">Basic Monthly Salary (৳ BDT)</label>
+                  <label className="block text-slate-600 dark:text-slate-400 mb-1">
+                    {newFixedContractSalary ? (isBangla ? "ফিক্সড মাসিক বেতন (Fixed Salary ৳)" : "Fixed Monthly Salary (BDT ৳)") : "Basic Monthly Salary (৳ BDT)"}
+                  </label>
                   <input
                     type="number"
                     value={newBasicSalary}
-                    onChange={(e) => setNewBasicSalary(Number(e.target.value))}
+                    onChange={(e) => setNewBasicSalary(e.target.value === "" ? 0 : Number(e.target.value))}
                     step={2000}
                     className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white font-mono"
                     required
                   />
+                  <span className="text-[10px] text-slate-400 mt-0.5 block">
+                    {newFixedContractSalary ? (
+                      <span className="text-blue-600 dark:text-blue-400 font-semibold">
+                        গ্রস স্যালারি: ৳{(Number(newBasicSalary) || 0).toLocaleString()} (ফিক্সড - কোনো মাসিক অতিরিক্ত সুবিধা যোগ হবে না)
+                      </span>
+                    ) : (
+                      <span>
+                        গ্রস স্যালারি: ৳{Math.round((Number(newBasicSalary) || 0) * 1.77).toLocaleString()} (বেসিক + ৭৭% বাড়িভাড়া ও সুবিধা)
+                      </span>
+                    )}
+                  </span>
                 </div>
                 <div>
-                  <label className="block text-slate-600 dark:text-slate-400 mb-1">National ID (NID)</label>
+                  <label className="block text-slate-600 dark:text-slate-400 mb-1">
+                    {isBangla ? "জাতীয় পরিচয়পত্র নম্বর (NID)" : "National ID (NID)"}
+                  </label>
                   <input
                     type="text"
+                    name="emp_new_nid"
+                    id="emp_new_nid_field"
+                    autoComplete="off"
+                    data-lpignore="true"
                     value={newNid}
                     onChange={(e) => setNewNid(e.target.value)}
-                    placeholder="199XXXXXXXXXXXXXX"
-                    className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white"
+                    placeholder={isBangla ? "তথ্য না থাকলে সম্পূর্ণ খালি রাখুন" : "Leave completely blank if not available"}
+                    className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white font-mono"
                   />
                 </div>
                 <div>
@@ -1960,15 +2184,39 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
                 </div>
               </div>
 
-              <div>
-                <label className="block text-slate-600 dark:text-slate-400 mb-1">Present Residential Address</label>
-                <input
-                  type="text"
-                  value={newAddress}
-                  onChange={(e) => setNewAddress(e.target.value)}
-                  placeholder="e.g. House 14, Road 5, Dhanmondi, Dhaka"
-                  className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white"
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-600 dark:text-slate-400 mb-1 font-semibold">
+                    {isBangla ? "বর্তমান ঠিকানা (Present Address)" : "Present Residential Address"}
+                  </label>
+                  <input
+                    type="text"
+                    name="emp_new_address"
+                    id="emp_new_address_field"
+                    autoComplete="off"
+                    data-lpignore="true"
+                    value={newAddress}
+                    onChange={(e) => setNewAddress(e.target.value)}
+                    placeholder={isBangla ? "তথ্য না থাকলে সম্পূর্ণ খালি রাখুন" : "Leave completely blank if not available"}
+                    className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-600 dark:text-slate-400 mb-1 font-semibold">
+                    {isBangla ? "জরুরি যোগাযোগের ফোন নম্বর" : "Emergency Contact Phone"}
+                  </label>
+                  <input
+                    type="tel"
+                    name="emp_new_emergency_phone"
+                    id="emp_new_emergency_phone_field"
+                    autoComplete="off"
+                    data-lpignore="true"
+                    value={newEmergencyPhone}
+                    onChange={(e) => setNewEmergencyPhone(e.target.value)}
+                    placeholder={isBangla ? "তথ্য না থাকলে সম্পূর্ণ খালি রাখুন" : "Leave completely blank if not available"}
+                    className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white font-mono"
+                  />
+                </div>
               </div>
 
               {/* Login Account & Privacy Configuration (Super Admin Control) */}
@@ -2118,7 +2366,22 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
                       <input
                         type="checkbox"
                         checked={newFlexibleHours}
-                        onChange={(e) => setNewFlexibleHours(e.target.checked)}
+                        onChange={(e) => {
+                          const isFlex = e.target.checked;
+                          setNewFlexibleHours(isFlex);
+                          if (isFlex) {
+                            const flexShift = shifts.find(
+                              (s) => s.isFlexible || s.name.toLowerCase().includes("flexible") || s.name.includes("ফ্লেক্সিবল")
+                            );
+                            if (flexShift) setNewShiftId(flexShift.id);
+                          } else {
+                            const currentShift = shifts.find((s) => s.id === newShiftId);
+                            if (currentShift?.isFlexible || currentShift?.name.toLowerCase().includes("flexible") || currentShift?.name.includes("ফ্লেক্সিবল")) {
+                              const regShift = shifts.find((s) => !s.isFlexible && !s.name.toLowerCase().includes("flexible")) || shifts[0];
+                              if (regShift) setNewShiftId(regShift.id);
+                            }
+                          }
+                        }}
                         className="mt-0.5 rounded text-amber-600 focus:ring-amber-500"
                       />
                       <div>
@@ -2166,42 +2429,48 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
 
                 {/* Allowed Tabs & Navigation Permissions */}
                 <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 space-y-2.5">
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                     <div>
                       <span className="font-bold text-slate-900 dark:text-white text-xs flex items-center gap-1.5">
                         <LayoutDashboard className="w-3.5 h-3.5 text-teal-600" />
-                        দৃশ্যমান মেনু ও অ্যাক্সেস কন্ট্রোল (Allowed Navigation Tabs)
+                        {isBangla ? "দৃশ্যমান মেনু ও অ্যাক্সেস কন্ট্রোল (Allowed Navigation Tabs)" : "Allowed Navigation Tabs"}
                       </span>
-                      <p className="text-[10px] text-slate-500">কর্মী সিস্টেমে লগইন করার পর কোন কোন মেনু দেখতে ও ব্যবহার করতে পারবেন</p>
+                      <p className="text-[10px] text-slate-500">
+                        {isBangla 
+                          ? "রোল পরিবর্তন করলে সেই রোলের মেনু স্বয়ংক্রিয়ভাবে সিলেক্ট হয়। প্রয়োজনে নিচে ম্যানুয়ালি কাস্টমাইজ করুন।" 
+                          : "Role changes auto-sync menu tabs. Check/uncheck below for manual overrides."}
+                      </p>
                     </div>
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={() => setNewAllowedTabs(getDefaultTabsForRole(newRole, rolePermissions))}
+                        className="text-[10px] font-bold px-2 py-0.5 rounded bg-teal-500/10 text-teal-700 dark:text-teal-300 hover:bg-teal-500/20 flex items-center gap-1 cursor-pointer"
+                        title="নির্বাচিত রোলের ডিফল্ট মেনু রিস্টোর করুন"
+                      >
+                        <RotateCcw className="w-2.5 h-2.5" />
+                        {isBangla ? "রোলের ডিফল্ট রিসেট" : "Reset to Role"}
+                      </button>
                       <button
                         type="button"
                         onClick={() => setNewAllowedTabs(APP_TAB_OPTIONS.map((t) => t.id))}
-                        className="text-[10px] font-bold px-2 py-0.5 rounded bg-teal-500/10 text-teal-700 dark:text-teal-300 hover:bg-teal-500/20 cursor-pointer"
-                      >
-                        সব মেনু
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setNewAllowedTabs(DEFAULT_EMPLOYEE_ALLOWED_TABS)}
                         className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-700 cursor-pointer"
                       >
-                        সাধারণ কর্মী
+                        {isBangla ? "সব মেনু" : "All Tabs"}
                       </button>
                       <button
                         type="button"
-                        onClick={() => setNewAllowedTabs(["SELF_SERVICE"])}
-                        className="text-[10px] font-bold px-2 py-0.5 rounded bg-purple-500/10 text-purple-700 dark:text-purple-300 hover:bg-purple-500/20 cursor-pointer"
+                        onClick={() => setNewAllowedTabs(normalizeTabList(DEFAULT_EMPLOYEE_ALLOWED_TABS))}
+                        className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-700 cursor-pointer"
                       >
-                        সেলফ সার্ভিস অনলি
+                        {isBangla ? "সাধারণ কর্মী" : "Standard"}
                       </button>
                     </div>
                   </div>
 
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-1.5 max-h-44 overflow-y-auto p-1 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800">
                     {APP_TAB_OPTIONS.map((tab) => {
-                      const isChecked = newAllowedTabs.includes(tab.id);
+                      const isChecked = isTabAllowedInList(tab.id, newAllowedTabs);
                       return (
                         <label
                           key={tab.id}
@@ -2216,14 +2485,23 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
                             checked={isChecked}
                             onChange={(e) => {
                               if (e.target.checked) {
-                                setNewAllowedTabs([...newAllowedTabs, tab.id]);
+                                setNewAllowedTabs(normalizeTabList([...newAllowedTabs, tab.id]));
                               } else {
-                                setNewAllowedTabs(newAllowedTabs.filter((id) => id !== tab.id));
+                                setNewAllowedTabs(
+                                  newAllowedTabs.filter((id) => {
+                                    if (id === tab.id) return false;
+                                    if (tab.id === "my-portal" && id === "self-service") return false;
+                                    if (tab.id === "self-service" && id === "my-portal") return false;
+                                    if (tab.id === "branches" && id === "branches-geofence") return false;
+                                    if (tab.id === "branches-geofence" && id === "branches") return false;
+                                    return true;
+                                  })
+                                );
                               }
                             }}
-                            className="rounded text-teal-600 focus:ring-teal-500 w-3.5 h-3.5"
+                            className="rounded text-teal-600 focus:ring-teal-500 w-3.5 h-3.5 cursor-pointer"
                           />
-                          <span className="truncate">{tab.labelBn}</span>
+                          <span className="truncate">{isBangla ? tab.labelBn : tab.labelEn}</span>
                         </label>
                       );
                     })}
@@ -2463,7 +2741,12 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
                         const val = e.target.value;
                         setEditDesigId(val);
                         const found = designations.find((d) => d.id === val);
-                        if (found) setCustomDesignationTitle(found.title);
+                        if (found) {
+                          setCustomDesignationTitle(found.title);
+                          if (found.departmentId) {
+                            setEditDeptId(found.departmentId);
+                          }
+                        }
                       }}
                       className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white"
                     >
@@ -2484,186 +2767,38 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
                 </div>
               </div>
 
-              {/* Multi-Designation & Department Portfolio Section */}
-              <div className="p-4 rounded-2xl bg-teal-50/60 dark:bg-teal-950/20 border border-teal-200/80 dark:border-teal-800/60 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Layers className="w-4 h-4 text-teal-600 dark:text-teal-400" />
-                    <h4 className="text-xs font-bold text-slate-900 dark:text-white">
-                      একাধিক পদবী ও বিভাগ পোর্টফোলিও (Multi-Designations & Portfolios)
-                    </h4>
-                  </div>
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-teal-500/20 text-teal-800 dark:text-teal-300">
-                    ফিক্সড একক বেতন নীতি
-                  </span>
-                </div>
-
-                {/* Additional Designations */}
-                <div className="space-y-1.5">
-                  <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-300">
-                    অতিরিক্ত পদবীসমূহ (Additional Designations):
-                  </label>
-                  <div className="flex flex-wrap gap-1.5 min-h-[32px] p-2 rounded-xl bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800">
-                    {editAdditionalDesignations.length === 0 ? (
-                      <span className="text-[11px] text-slate-400 italic">কোনো অতিরিক্ত পদবী যুক্ত নেই</span>
-                    ) : (
-                      editAdditionalDesignations.map((desig, idx) => (
-                        <span
-                          key={idx}
-                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-teal-500/15 text-teal-800 dark:text-teal-200 border border-teal-500/30"
-                        >
-                          <span>{desig}</span>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setEditAdditionalDesignations(editAdditionalDesignations.filter((_, i) => i !== idx))
-                            }
-                            className="hover:text-rose-500 cursor-pointer"
-                          >
-                            <X className="w-3 h-3" />
-                          </button>
-                        </span>
-                      ))
-                    )}
-                  </div>
-
-                  {/* Quick-add recommendations + Custom Input */}
-                  <div className="space-y-1.5 pt-1">
-                    <div className="flex flex-wrap gap-1">
-                      {[
-                        "Head of HR",
-                        "IT Manager",
-                        "Project Manager",
-                        "Accounts Coordinator",
-                        "International Relations Officer",
-                        "Training Center Director",
-                        "Field Operations Lead",
-                      ].map((tag) => (
-                        <button
-                          key={tag}
-                          type="button"
-                          disabled={editAdditionalDesignations.includes(tag)}
-                          onClick={() => {
-                            if (!editAdditionalDesignations.includes(tag)) {
-                              setEditAdditionalDesignations([...editAdditionalDesignations, tag]);
-                            }
-                          }}
-                          className={`px-2 py-0.5 rounded-md text-[10px] font-bold transition-all cursor-pointer ${
-                            editAdditionalDesignations.includes(tag)
-                              ? "bg-slate-100 dark:bg-slate-800 text-slate-400 opacity-50 cursor-not-allowed"
-                              : "bg-teal-50 hover:bg-teal-100 dark:bg-teal-900/30 dark:hover:bg-teal-900/60 text-teal-700 dark:text-teal-300 border border-teal-300/40"
-                          }`}
-                        >
-                          + {tag}
-                        </button>
-                      ))}
-                    </div>
-
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        placeholder="কাস্টম পদবী লিখুন (যেমন: ভোকেশনাল ট্রেইনার)..."
-                        value={newDesigInput}
-                        onChange={(e) => setNewDesigInput(e.target.value)}
-                        className="flex-1 px-3 py-1.5 text-xs rounded-xl bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (newDesigInput.trim() && !editAdditionalDesignations.includes(newDesigInput.trim())) {
-                            setEditAdditionalDesignations([...editAdditionalDesignations, newDesigInput.trim()]);
-                            setNewDesigInput("");
-                          }
-                        }}
-                        className="px-3 py-1.5 rounded-xl bg-teal-600 hover:bg-teal-500 text-white font-bold text-xs cursor-pointer shrink-0"
-                      >
-                        যোগ করুন (+)
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Additional Departments / Portfolios */}
-                <div className="space-y-1.5 pt-2 border-t border-teal-200/50 dark:border-teal-800/40">
-                  <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-300">
-                    অতিরিক্ত বিভাগ ও প্রকল্প পোর্টফোলিও (Additional Departments):
-                  </label>
-                  <div className="flex flex-wrap gap-1.5 min-h-[32px] p-2 rounded-xl bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800">
-                    {editAdditionalDepartments.length === 0 ? (
-                      <span className="text-[11px] text-slate-400 italic">কোনো অতিরিক্ত বিভাগ যুক্ত নেই</span>
-                    ) : (
-                      editAdditionalDepartments.map((dept, idx) => (
-                        <span
-                          key={idx}
-                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-blue-500/15 text-blue-800 dark:text-blue-200 border border-blue-500/30"
-                        >
-                          <span>{dept}</span>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setEditAdditionalDepartments(editAdditionalDepartments.filter((_, i) => i !== idx))
-                            }
-                            className="hover:text-rose-500 cursor-pointer"
-                          >
-                            <X className="w-3 h-3" />
-                          </button>
-                        </span>
-                      ))
-                    )}
-                  </div>
-
-                  <div className="flex flex-wrap gap-1 pt-1">
-                    {[
-                      "Human Resources",
-                      "IT & Systems",
-                      "Finance, Accounts & Audit",
-                      "Relief & Humanitarian Aid",
-                      "Vocational Training Hub",
-                      "Microfinance & Credit",
-                    ].map((deptTag) => (
-                      <button
-                        key={deptTag}
-                        type="button"
-                        disabled={editAdditionalDepartments.includes(deptTag)}
-                        onClick={() => {
-                          if (!editAdditionalDepartments.includes(deptTag)) {
-                            setEditAdditionalDepartments([...editAdditionalDepartments, deptTag]);
-                          }
-                        }}
-                        className={`px-2 py-0.5 rounded-md text-[10px] font-bold transition-all cursor-pointer ${
-                          editAdditionalDepartments.includes(deptTag)
-                            ? "bg-slate-100 dark:bg-slate-800 text-slate-400 opacity-50 cursor-not-allowed"
-                            : "bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/30 dark:hover:bg-blue-900/60 text-blue-700 dark:text-blue-300 border border-blue-300/40"
-                        }`}
-                      >
-                        + {deptTag}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <p className="text-[11px] text-teal-800 dark:text-teal-300 bg-teal-500/10 p-2 rounded-lg leading-relaxed">
-                  <strong>বেতন নীতি:</strong> এক কর্মকর্তার একাধিক পদবী বা দায়িত্ব থাকলেও মাসিক বেতন ফিক্সড একক অ্যামাউন্ট অনুযায়ী গণনা হবে।
-                </p>
-              </div>
-
               {/* Role & Work Shift */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="block text-slate-600 dark:text-slate-400 mb-1 font-semibold">
-                    System Security Role
+                    {isBangla ? "সিস্টেমের রোল (System Role)" : "System Security Role"}
                   </label>
                   <select
                     value={editRole}
-                    onChange={(e) => setEditRole(e.target.value as any)}
+                    onChange={(e) => {
+                      const selectedRoleKey = e.target.value;
+                      setEditRole(selectedRoleKey as any);
+                      const autoTabs = getDefaultTabsForRole(selectedRoleKey, rolePermissions);
+                      setEditAllowedTabs(autoTabs);
+                      if (selectedRoleKey === "SUPER_ADMIN") {
+                        setEditIsSuperAdmin(true);
+                      }
+                    }}
                     className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white"
                   >
-                    <option value="EMPLOYEE">Standard Employee</option>
-                    <option value="HR_MANAGER">HR Manager</option>
-                    <option value="DEPT_HEAD">Department Head</option>
-                    <option value="PAYROLL_OFFICER">Payroll Officer</option>
-                    <option value="AUDITOR">Auditor</option>
-                    <option value="SUPER_ADMIN">Super Administrator</option>
+                    {rolePermissions && rolePermissions.length > 0 ? (
+                      rolePermissions.map((rp) => (
+                        <option key={rp.role} value={rp.role}>
+                          {isBangla ? rp.roleTitleBn : rp.roleTitleEn} ({rp.role})
+                        </option>
+                      ))
+                    ) : (
+                      <>
+                        <option value="EMPLOYEE">Standard Employee</option>
+                        <option value="HR_MANAGER">HR Manager</option>
+                        <option value="SUPER_ADMIN">Super Administrator</option>
+                      </>
+                    )}
                   </select>
                 </div>
                 <div>
@@ -2672,7 +2807,14 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
                   </label>
                   <select
                     value={editShiftId}
-                    onChange={(e) => setEditShiftId(e.target.value)}
+                    onChange={(e) => {
+                      const selId = e.target.value;
+                      setEditShiftId(selId);
+                      const selShift = shifts.find((s) => s.id === selId);
+                      if (selShift?.isFlexible || selShift?.name.toLowerCase().includes("flexible") || selShift?.name.includes("ফ্লেক্সিবল")) {
+                        setEditFlexibleHours(true);
+                      }
+                    }}
                     className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white"
                   >
                     {shifts.map((s) => (
@@ -2699,33 +2841,41 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="block text-slate-600 dark:text-slate-400 mb-1 font-semibold">
-                    Basic Salary (BDT ৳)
+                    {editFixedContractSalary ? (isBangla ? "ফিক্সড মাসিক বেতন (Fixed Salary BDT ৳)" : "Fixed Monthly Salary (BDT ৳)") : "Basic Salary (BDT ৳)"}
                   </label>
                   <input
                     type="number"
                     value={editBasicSalary}
-                    onChange={(e) => setEditBasicSalary(Number(e.target.value))}
+                    onChange={(e) => setEditBasicSalary(e.target.value === "" ? 0 : Number(e.target.value))}
                     className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white font-mono"
                   />
                   <span className="text-[10px] text-slate-400 mt-0.5 block">
-                    Gross: ৳{Math.round(editBasicSalary * 1.77).toLocaleString()}
+                    {editFixedContractSalary ? (
+                      <span className="text-blue-600 dark:text-blue-400 font-semibold">
+                        গ্রস স্যালারি: ৳{(Number(editBasicSalary) || 0).toLocaleString()} (ফিক্সড - কোনো মাসিক অতিরিক্ত সুবিধা যোগ হবে না)
+                      </span>
+                    ) : (
+                      <span>
+                        গ্রস স্যালারি: ৳{Math.round((Number(editBasicSalary) || 0) * 1.77).toLocaleString()} (বেসিক + ৭৭% বাড়িভাড়া, চিকিৎসা, যাতায়াত ভাতা)
+                      </span>
+                    )}
                   </span>
                 </div>
                 <div>
                   <label className="block text-slate-600 dark:text-slate-400 mb-1 font-semibold">
-                    National ID (NID)
+                    {isBangla ? "জাতীয় পরিচয়পত্র নম্বর (NID)" : "National ID (NID)"}
                   </label>
                   <input
                     type="text"
                     value={editNid}
                     onChange={(e) => setEditNid(e.target.value)}
-                    placeholder="10 or 17 digit NID"
+                    placeholder={isBangla ? "এনআইডি কার্ড নম্বর (ঐচ্ছিক)" : "NID number (optional)"}
                     className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white font-mono"
                   />
                 </div>
                 <div>
                   <label className="block text-slate-600 dark:text-slate-400 mb-1 font-semibold">
-                    Blood Group
+                    {isBangla ? "রক্তের গ্রুপ (Blood Group)" : "Blood Group"}
                   </label>
                   <select
                     value={editBloodGroup}
@@ -2748,25 +2898,25 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-slate-600 dark:text-slate-400 mb-1 font-semibold">
-                    Present Residential Address
+                    {isBangla ? "বর্তমান ঠিকানা (Present Address)" : "Present Residential Address"}
                   </label>
                   <input
                     type="text"
                     value={editAddress}
                     onChange={(e) => setEditAddress(e.target.value)}
-                    placeholder="e.g. House 14, Road 5, Dhanmondi, Dhaka"
+                    placeholder={isBangla ? "বর্তমান ঠিকানা লিখুন (ঐচ্ছিক)" : "Enter present address (optional)"}
                     className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white"
                   />
                 </div>
                 <div>
                   <label className="block text-slate-600 dark:text-slate-400 mb-1 font-semibold">
-                    Emergency Contact Phone
+                    {isBangla ? "জরুরি যোগাযোগের ফোন নম্বর" : "Emergency Contact Phone"}
                   </label>
                   <input
                     type="tel"
                     value={editEmergencyPhone}
                     onChange={(e) => setEditEmergencyPhone(e.target.value)}
-                    placeholder="+880 1..."
+                    placeholder={isBangla ? "জরুরি যোগাযোগের নম্বর (ঐচ্ছিক)" : "Emergency phone (optional)"}
                     className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white font-mono"
                   />
                 </div>
@@ -2814,34 +2964,61 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
                   </div>
                   <div>
                     <div className="flex items-center justify-between mb-1">
-                      <label className="text-slate-600 dark:text-slate-400 font-semibold">
-                        অ্যাকাউন্ট পাসওয়ার্ড (Account Password)
+                      <label className="text-slate-600 dark:text-slate-400 font-semibold flex items-center gap-1.5">
+                        <KeyRound className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
+                        {isBangla ? "অ্যাকাউন্ট পাসওয়ার্ড ব্যবস্থাপনা" : "Account Password Management"}
                       </label>
-                      <button
-                        type="button"
-                        onClick={() => setEditPassword("123456")}
-                        className="text-[10px] text-amber-600 dark:text-amber-400 hover:underline flex items-center gap-0.5 font-bold cursor-pointer"
-                      >
-                        <RotateCcw className="w-3 h-3" /> ডিফল্ট (123456)
-                      </button>
+                      {isEditingPassword && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsEditingPassword(false);
+                            setEditPassword("");
+                          }}
+                          className="text-[10px] text-rose-600 hover:underline flex items-center gap-0.5 font-bold cursor-pointer"
+                        >
+                          <RotateCcw className="w-3 h-3" /> {isBangla ? "বাতিল (অপরিবর্তিত রাখুন)" : "Cancel (Keep Unchanged)"}
+                        </button>
+                      )}
                     </div>
-                    <div className="relative">
-                      <input
-                        type={showEditPassword ? "text" : "password"}
-                        value={editPassword}
-                        onChange={(e) => setEditPassword(e.target.value)}
-                        placeholder="পাসওয়ার্ড লিখুন..."
-                        className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2 pr-10 text-slate-900 dark:text-white font-mono"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowEditPassword(!showEditPassword)}
-                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
-                      >
-                        {showEditPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                      </button>
-                    </div>
-                    <span className="text-[10px] text-slate-400">কর্মী তার একাউন্টে ঢুকে এই পাসওয়ার্ড পরিবর্তন করতে পারবেন</span>
+                    {!isEditingPassword ? (
+                      <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                        <div className="flex items-center gap-2 text-slate-600 dark:text-slate-300">
+                          <span className="text-xs">🔒 {isBangla ? "বর্তমান পাসওয়ার্ড সক্রিয় ও অপরিবর্তিত রয়েছে" : "Current password is unchanged"}</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setIsEditingPassword(true)}
+                          className="px-2.5 py-1 text-[11px] font-semibold rounded-lg bg-teal-600 hover:bg-teal-700 text-white cursor-pointer transition-colors shadow-sm"
+                        >
+                          {isBangla ? "নতুন পাসওয়ার্ড সেট করুন" : "Change Password"}
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="space-y-1">
+                        <div className="relative">
+                          <input
+                            type={showEditPassword ? "text" : "password"}
+                            value={editPassword}
+                            onChange={(e) => setEditPassword(e.target.value)}
+                            autoComplete="new-password"
+                            placeholder={isBangla ? "নতুন পাসওয়ার্ড লিখুন..." : "Enter new password..."}
+                            className="w-full bg-white dark:bg-slate-950 border border-teal-500 rounded-xl p-2 pr-10 text-slate-900 dark:text-white font-mono text-xs focus:ring-1 focus:ring-teal-500"
+                            autoFocus
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowEditPassword(!showEditPassword)}
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                          >
+                            {showEditPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                          </button>
+                        </div>
+                        <span className="text-[10px] text-amber-600 dark:text-amber-400 block font-medium">
+                          {isBangla ? "⚠️ নতুন পাসওয়ার্ড দেওয়া হলে সেভ করার সাথে সাথে কর্মীর নতুন পাসওয়ার্ড সক্রিয় হবে।" : "⚠️ A new password will be applied upon saving."}
+                        </span>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -2948,7 +3125,22 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
                       <input
                         type="checkbox"
                         checked={editFlexibleHours}
-                        onChange={(e) => setEditFlexibleHours(e.target.checked)}
+                        onChange={(e) => {
+                          const isFlex = e.target.checked;
+                          setEditFlexibleHours(isFlex);
+                          if (isFlex) {
+                            const flexShift = shifts.find(
+                              (s) => s.isFlexible || s.name.toLowerCase().includes("flexible") || s.name.includes("ফ্লেক্সিবল")
+                            );
+                            if (flexShift) setEditShiftId(flexShift.id);
+                          } else {
+                            const currentShift = shifts.find((s) => s.id === editShiftId);
+                            if (currentShift?.isFlexible || currentShift?.name.toLowerCase().includes("flexible") || currentShift?.name.includes("ফ্লেক্সিবল")) {
+                              const regShift = shifts.find((s) => !s.isFlexible && !s.name.toLowerCase().includes("flexible")) || shifts[0];
+                              if (regShift) setEditShiftId(regShift.id);
+                            }
+                          }
+                        }}
                         className="mt-0.5 rounded text-amber-600 focus:ring-amber-500"
                       />
                       <div>
@@ -2996,42 +3188,48 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
 
                 {/* Allowed Tabs & Navigation Permissions */}
                 <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 space-y-2.5">
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                     <div>
                       <span className="font-bold text-slate-900 dark:text-white text-xs flex items-center gap-1.5">
                         <LayoutDashboard className="w-3.5 h-3.5 text-teal-600" />
-                        দৃশ্যমান মেনু ও অ্যাক্সেস কন্ট্রোল (Allowed Navigation Tabs)
+                        {isBangla ? "দৃশ্যমান মেনু ও অ্যাক্সেস কন্ট্রোল (Allowed Navigation Tabs)" : "Allowed Navigation Tabs"}
                       </span>
-                      <p className="text-[10px] text-slate-500">কর্মী সিস্টেমে লগইন করার পর কোন কোন মেনু দেখতে ও ব্যবহার করতে পারবেন</p>
+                      <p className="text-[10px] text-slate-500">
+                        {isBangla
+                          ? "রোল পরিবর্তন করলে স্বয়ংক্রিয়ভাবে সেই রোলের মেনু সিলেক্ট হয়। নিচে ম্যানুয়ালি টিক দিয়ে এই কর্মীর জন্য এক্সেস কাস্টমাইজ করতে পারবেন।"
+                          : "Role changes automatically update allowed tabs. Customize per-employee access with checkboxes below."}
+                      </p>
                     </div>
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={() => setEditAllowedTabs(getDefaultTabsForRole(editRole, rolePermissions))}
+                        className="text-[10px] font-bold px-2 py-0.5 rounded bg-teal-500/10 text-teal-700 dark:text-teal-300 hover:bg-teal-500/20 flex items-center gap-1 cursor-pointer"
+                        title="নির্বাচিত রোলের ডিফল্ট মেনু রিস্টোর করুন"
+                      >
+                        <RotateCcw className="w-2.5 h-2.5" />
+                        {isBangla ? "রোলের ডিফল্ট রিসেট" : "Reset to Role"}
+                      </button>
                       <button
                         type="button"
                         onClick={() => setEditAllowedTabs(APP_TAB_OPTIONS.map((t) => t.id))}
-                        className="text-[10px] font-bold px-2 py-0.5 rounded bg-teal-500/10 text-teal-700 dark:text-teal-300 hover:bg-teal-500/20 cursor-pointer"
-                      >
-                        সব মেনু
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setEditAllowedTabs(DEFAULT_EMPLOYEE_ALLOWED_TABS)}
                         className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-700 cursor-pointer"
                       >
-                        সাধারণ কর্মী
+                        {isBangla ? "সব মেনু" : "All Tabs"}
                       </button>
                       <button
                         type="button"
-                        onClick={() => setEditAllowedTabs(["SELF_SERVICE"])}
-                        className="text-[10px] font-bold px-2 py-0.5 rounded bg-purple-500/10 text-purple-700 dark:text-purple-300 hover:bg-purple-500/20 cursor-pointer"
+                        onClick={() => setEditAllowedTabs(normalizeTabList(DEFAULT_EMPLOYEE_ALLOWED_TABS))}
+                        className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-700 cursor-pointer"
                       >
-                        সেলফ সার্ভিস অনলি
+                        {isBangla ? "সাধারণ কর্মী" : "Standard"}
                       </button>
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-1.5 max-h-44 overflow-y-auto p-1 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-1.5 max-h-48 overflow-y-auto p-1 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800">
                     {APP_TAB_OPTIONS.map((tab) => {
-                      const isChecked = editAllowedTabs.includes(tab.id);
+                      const isChecked = isTabAllowedInList(tab.id, editAllowedTabs);
                       return (
                         <label
                           key={tab.id}
@@ -3046,14 +3244,23 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
                             checked={isChecked}
                             onChange={(e) => {
                               if (e.target.checked) {
-                                setEditAllowedTabs([...editAllowedTabs, tab.id]);
+                                setEditAllowedTabs(normalizeTabList([...editAllowedTabs, tab.id]));
                               } else {
-                                setEditAllowedTabs(editAllowedTabs.filter((id) => id !== tab.id));
+                                setEditAllowedTabs(
+                                  editAllowedTabs.filter((id) => {
+                                    if (id === tab.id) return false;
+                                    if (tab.id === "my-portal" && id === "self-service") return false;
+                                    if (tab.id === "self-service" && id === "my-portal") return false;
+                                    if (tab.id === "branches" && id === "branches-geofence") return false;
+                                    if (tab.id === "branches-geofence" && id === "branches") return false;
+                                    return true;
+                                  })
+                                );
                               }
                             }}
-                            className="rounded text-teal-600 focus:ring-teal-500 w-3.5 h-3.5"
+                            className="rounded text-teal-600 focus:ring-teal-500 w-3.5 h-3.5 cursor-pointer"
                           />
-                          <span className="truncate">{tab.labelBn}</span>
+                          <span className="truncate">{isBangla ? tab.labelBn : tab.labelEn}</span>
                         </label>
                       );
                     })}

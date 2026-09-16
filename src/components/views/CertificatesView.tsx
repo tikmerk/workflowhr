@@ -15,6 +15,7 @@ import {
 import { CertificateRecord, Employee, Branch } from "../../types";
 import { generateCertificateHtml } from "../../utils/certificateTemplates";
 import { printDocumentHtml } from "../../utils/exportUtils";
+import { useCompanyBranding } from "../../context/CompanyBrandingContext";
 
 interface CertificatesViewProps {
   certificates: CertificateRecord[];
@@ -29,6 +30,7 @@ export const CertificatesView: React.FC<CertificatesViewProps> = ({
   branches,
   onGenerateCertificate,
 }) => {
+  const { branding } = useCompanyBranding();
   const [selectedEmpId, setSelectedEmpId] = useState(employees[0]?.id || "");
   const [selectedType, setSelectedType] = useState<CertificateRecord["type"]>("EXPERIENCE_CERTIFICATE");
   const [remarks, setRemarks] = useState("");
@@ -51,16 +53,17 @@ export const CertificatesView: React.FC<CertificatesViewProps> = ({
     const emp = employees.find((e) => e.id === selectedEmpId) || employees[0];
     const typeObj = certTypes.find((t) => t.type === selectedType);
 
+    const prefix = branding.employeeIdPrefix || "MWO";
     const newCert: CertificateRecord = {
       id: `cert-${Date.now()}`,
-      certificateNumber: `APEX-CERT-2026-${Math.floor(Math.random() * 9000 + 1000)}`,
+      certificateNumber: `${prefix}-CERT-2026-${Math.floor(Math.random() * 9000 + 1000)}`,
       type: selectedType,
       title: typeObj?.label || "Official Certificate",
       employeeId: emp.id,
       employeeName: emp.fullName,
       issueDate: new Date().toISOString().split("T")[0],
-      verifiedQrCode: `https://workflowhr.tikmerk.com/verify?cert=APEX-2026-${emp.employeeCode}`,
-      contentHtml: generateCertificateHtml(selectedType, emp),
+      verifiedQrCode: `https://workflowhr.tikmerk.com/verify?cert=${prefix}-2026-${emp.employeeCode}`,
+      contentHtml: generateCertificateHtml(selectedType, emp, branding),
     };
 
     onGenerateCertificate(newCert);
@@ -199,7 +202,7 @@ export const CertificatesView: React.FC<CertificatesViewProps> = ({
                     Certificate No: <strong>{previewCert.certificateNumber}</strong>
                   </p>
                   <p className="text-[10px]">
-                    Digitally signed & encrypted by Apex Global Technologies Ltd.
+                    Digitally signed & encrypted by {branding.companyName || "Muslim Welfare Organization"}
                   </p>
                 </div>
 

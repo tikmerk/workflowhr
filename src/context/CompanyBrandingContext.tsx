@@ -19,16 +19,16 @@ export interface SoftwareBrandingInfo {
 }
 
 const DEFAULT_BRANDING: CompanyBranding = {
-  companyName: "Apex Global Technologies Ltd.",
-  companyNameBn: "এপেক্স গ্লোবাল টেকনোলজিস লিমিটেড",
-  tagline: "Enterprise Multi-Branch Operations & Workforce System",
-  taglineBn: "মাল্টি-ব্রাঞ্চ কর্মীবাহিনী ও স্মার্ট এইচআরএম সমাধান",
+  companyName: "Muslim Welfare Organization",
+  companyNameBn: "মুসলিম ওয়েলফেয়ার অর্গানাইজেশন",
+  tagline: "Social Welfare, Humanitarian Relief & Community Development",
+  taglineBn: "সমাজকল্যাণ, মানবিক সহায়তা ও সমাজসেবামূলক সংস্থা",
   logoUrl: "", // When empty, renders the executive corporate monogram
-  address: "Tower 71, Road 11, Block D, Gulshan-1, Dhaka-1212",
-  addressBn: "টাওয়ার ৭১, রোড ১১, ব্লক ডি, গুলশান-১, ঢাকা-১২১২",
+  address: "Gulshan Corporate Avenue, Dhaka-1212, Bangladesh",
+  addressBn: "গুলশান করপোরেট এভিনিউ, ঢাকা-১২১২, বাংলাদেশ",
   phone: "+880 2-9887766, +880 1700-112233",
-  email: "contact@apexglobal.tech",
-  website: "https://apexglobal.tech",
+  email: "info@muslimwelfare.org",
+  website: "https://muslimwelfare.org",
   registrationNumber: "REG-BD-2026-90812",
   employeeIdPrefix: "MWO",
 };

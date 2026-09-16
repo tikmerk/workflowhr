@@ -491,6 +491,14 @@ export async function updateLeaveStatusInFirestore(
   }
 }
 
+export async function deleteLeaveFromFirestore(leaveId: string) {
+  try {
+    await deleteDoc(doc(db, COL_LEAVES, leaveId));
+  } catch (err) {
+    console.error("Failed to delete leave from Firestore:", err);
+  }
+}
+
 /* ============================================================
    BRANDING & SETTINGS FIRESTORE APIS
    ============================================================ */
@@ -703,11 +711,19 @@ export async function saveLoanToFirestore(loan: EmployeeLoan) {
   }
 }
 
-export async function updateLoanStatusInFirestore(loanId: string, status: "ACTIVE" | "REJECTED" | "PAID") {
+export async function updateLoanStatusInFirestore(loanId: string, status: "ACTIVE" | "REJECTED" | "PAID" | "CLOSED") {
   try {
     await updateDoc(doc(db, COL_LOANS, loanId), { status });
   } catch (err) {
     console.error("Failed to update loan in Firestore:", err);
+  }
+}
+
+export async function deleteLoanFromFirestore(loanId: string) {
+  try {
+    await deleteDoc(doc(db, COL_LOANS, loanId));
+  } catch (err) {
+    console.error("Failed to delete loan in Firestore:", err);
   }
 }
 

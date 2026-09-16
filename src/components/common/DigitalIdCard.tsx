@@ -192,7 +192,13 @@ export const DigitalIdCard = forwardRef<HTMLDivElement, DigitalIdCardProps>(
               </div>
               <div className="flex justify-between items-center py-0.5 border-b border-slate-800/40">
                 <span className="text-slate-400 font-medium">{isBangla ? "জরুরী মোবাইল:" : "Emergency Contact:"}</span>
-                <span className="font-mono text-slate-200 font-semibold">{employee.emergencyPhone || employee.phone}</span>
+                <span className="font-mono text-slate-200 font-semibold">
+                  {employee.emergencyPhone && employee.emergencyPhone.trim() !== ""
+                    ? employee.emergencyPhone
+                    : isBangla
+                    ? "তথ্য দেওয়া হয়নি"
+                    : "Not provided"}
+                </span>
               </div>
               <div className="flex justify-between items-center py-0.5">
                 <span className="text-slate-400 font-medium">{isBangla ? "মেয়াদ উত্তীর্ণ:" : "Valid Thru:"}</span>

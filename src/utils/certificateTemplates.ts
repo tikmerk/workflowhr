@@ -293,13 +293,18 @@ export function generateCertificateHTML(type: CertificateType, details: Certific
   }
 }
 
-export function generateCertificateHtml(type: any, employee: Employee): string {
+export function generateCertificateHtml(
+  type: any,
+  employee: Employee,
+  branding?: { companyName?: string; employeeIdPrefix?: string }
+): string {
+  const prefix = branding?.employeeIdPrefix || "MWO";
   return generateCertificateHTML(type, {
-    refNo: `APEX-2026-${employee.employeeCode}-${Math.floor(Math.random() * 900 + 100)}`,
+    refNo: `${prefix}-2026-${employee.employeeCode}-${Math.floor(Math.random() * 900 + 100)}`,
     issueDate: new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }),
     employee,
     authorizedSignatory: "Md. Ibrahim Hossain",
-    signatoryTitle: "Chief Executive Officer & Head of People",
-    companyName: "Apex Global Technologies Ltd.",
+    signatoryTitle: "Executive Director & Head of Administration",
+    companyName: branding?.companyName || "Muslim Welfare Organization",
   });
 }

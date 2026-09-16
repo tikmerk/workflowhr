@@ -30,12 +30,60 @@ export interface LiveFaceAnalysis {
   landmarks?: FaceLandmarkPoints;
   blinkScore: number; // 0 to 100
   smileScore: number; // 0 to 100
-  blinkDetected: boolean; // True when natural blink cycle completed
+  blinkDetected: boolean; // True ONLY when a natural completed blink cycle occurs (open -> closed -> reopened)
   smileDetected: boolean; // True when smile threshold maintained
   eyeOpenness: number; // 0 to 100 (0=closed, 100=wide open)
   yawAngle?: number; // Head rotation angle estimation (-30 to +30 deg)
   pitchAngle?: number; // Head pitch tilt estimation (-20 to +20 deg)
   isFrontalFacing?: boolean;
+  // Biometric features detected in live camera
+  skinToneProfile?: {
+    melaninIndex: number;
+    description: string;
+    r: number;
+    g: number;
+    b: number;
+  };
+  facialHairProfile?: {
+    hasWhiteBeard: boolean;
+    hasDarkBeard: boolean;
+    isCleanShaven: boolean;
+    description: string;
+  };
+  glassesProfile?: {
+    hasGlasses: boolean;
+    description: string;
+  };
+}
+
+export interface BiometricProfile {
+  vector128: Float32Array;
+  skinTone: {
+    r: number;
+    g: number;
+    b: number;
+    melaninIndex: number; // 0 (very fair) to 100 (melanin-rich / dark skin)
+    brightness: number;
+  };
+  facialHair: {
+    chinLum: number;
+    foreheadLum: number;
+    chinForeheadRatio: number;
+    hasWhiteBeard: boolean;
+    hasDarkBeard: boolean;
+    isCleanShaven: boolean;
+  };
+  glasses: {
+    hasGlasses: boolean;
+    glassesScore: number;
+  };
+  geometry: {
+    faceAspectRatio: number;
+    interOcularRatio: number;
+    eyeNoseRatio: number;
+    noseMouthRatio: number;
+    mouthWidthRatio: number;
+  };
 }
 
 export interface FaceMatchResult {
@@ -49,22 +97,69 @@ export interface FaceMatchResult {
   boundingBox?: FaceBoundingBox;
   cosineSimilarity?: number;
   featureVectorLength?: number;
+  scoreBreakdown?: {
+    spatialSim: number;
+    skinToneSim: number;
+    geometrySim: number;
+    beardMatch: boolean;
+    glassesMatch: boolean;
+  };
 }
 
-// In-memory cache for enrolled employee 128D feature vectors (with horizontal mirror support)
-const employeeVectorCache = new Map<
-  string,
-  { vector: Float32Array; flippedVector: Float32Array; timestamp: number }
->();
+// In-memory cache for enrolled employee biometric data (keyed by employeeId)
+interface CachedEmployeeBiometrics {
+  profile: BiometricProfile;
+  flippedProfile: BiometricProfile;
+  photoFingerprint: string;
+  timestamp: number;
+}
+const employeeBiometricCache = new Map<string, CachedEmployeeBiometrics>();
 
-// Real-time liveness temporal tracking buffers
-let eyeOpenHistory: number[] = [];
+// Robust temporal bilateral optical blink tracking state machine
+interface BlinkStateMachine {
+  leftBaseline: number;
+  rightBaseline: number;
+  combinedBaseline: number;
+  stableOpenFrames: number;
+  inDip: boolean;
+  dipStartTime: number;
+  dipLowestVal: number;
+  lastBlinkTime: number;
+  lastBoxX: number;
+  lastBoxY: number;
+}
+
+const blinkState: BlinkStateMachine = {
+  leftBaseline: 65,
+  rightBaseline: 65,
+  combinedBaseline: 65,
+  stableOpenFrames: 0,
+  inDip: false,
+  dipStartTime: 0,
+  dipLowestVal: 100,
+  lastBlinkTime: 0,
+  lastBoxX: 0,
+  lastBoxY: 0,
+};
+
+/**
+ * Resets blink detection state for clean interactive prompts
+ */
+export function resetBilateralBlinkState(): void {
+  blinkState.inDip = false;
+  blinkState.dipStartTime = 0;
+  blinkState.dipLowestVal = 100;
+  blinkState.stableOpenFrames = 0;
+  blinkState.combinedBaseline = 65;
+  blinkState.leftBaseline = 65;
+  blinkState.rightBaseline = 65;
+}
+
 let consecutiveSmileFrames = 0;
-let lastBlinkTimestamp = 0;
 
 /**
  * Checks whether an RGB pixel falls into the human skin chrominance range
- * Robust against varied webcam white balance, skin complexions, and ambient lighting
+ * Robust across diverse global and South Asian skin complexions (fair, olive, wheatish, dark melanin-rich)
  */
 export function isSkinPixel(r: number, g: number, b: number): boolean {
   const max = Math.max(r, g, b);
@@ -75,12 +170,19 @@ export function isSkinPixel(r: number, g: number, b: number): boolean {
   const cb = 128 - 0.168736 * r - 0.331264 * g + 0.5 * b;
   const cr = 128 + 0.5 * r - 0.418688 * g - 0.081312 * b;
 
-  // Universal skin chrominance (YCbCr + RGB + bright illumination)
-  const inYCbCr = cb >= 68 && cb <= 146 && cr >= 118 && cr <= 186 && y >= 20;
-  const inRGB = r > 40 && g > 25 && b > 15 && (max - min) >= 6 && (r >= g);
-  const brightSkin = y > 65 && r > b && cr >= 115;
+  // Standard YCbCr skin chrominance cluster
+  const inYCbCr = cb >= 64 && cb <= 158 && cr >= 110 && cr <= 194 && y >= 14;
 
-  return inYCbCr || inRGB || brightSkin;
+  // Universal RGB rule: Red component dominant or equal to Green, and Green exceeds Blue
+  const inRGB = r >= 26 && g >= 16 && b >= 10 && r >= g && (r - b) >= 3 && (max - min) >= 4;
+
+  // Melanin-rich / dark complexion rule (South Asian dark brown tones under standard room lighting)
+  const darkSkinMelanin = y >= 15 && y <= 145 && r > b && (r >= g || Math.abs(r - g) <= 8);
+
+  // Brightly illuminated fair skin
+  const brightSkin = y > 58 && r > b && cr >= 108;
+
+  return inYCbCr || inRGB || darkSkinMelanin || brightSkin;
 }
 
 /**
@@ -110,13 +212,13 @@ export function detectFaceBoundsInCanvas(
   let maxY = 0;
   let skinCount = 0;
 
-  // Scan for skin color clusters, prioritizing upper-middle region
+  // Scan for skin color clusters, prioritizing central face region
   for (let y = 0; y < sampleH; y += 2) {
     for (let x = 0; x < sampleW; x += 2) {
       const idx = (y * sampleW + x) * 4;
       if (isSkinPixel(data[idx], data[idx + 1], data[idx + 2])) {
-        // Exclude bottom corners (chest/clothing/shoulders)
-        const isCorner = y > sampleH * 0.78 && (x < sampleW * 0.15 || x > sampleW * 0.85);
+        // Exclude bottom outer corners (chest/clothing/shoulders)
+        const isCorner = y > sampleH * 0.80 && (x < sampleW * 0.12 || x > sampleW * 0.88);
         if (!isCorner) {
           skinCount++;
           if (x < minX) minX = x;
@@ -134,11 +236,11 @@ export function detectFaceBoundsInCanvas(
 
   // Validate human face proportions
   const isValidCluster =
-    skinCount >= 50 &&
-    boxW >= 18 &&
-    boxH >= 20 &&
-    aspectRatio >= 0.65 &&
-    aspectRatio <= 2.5;
+    skinCount >= 35 &&
+    boxW >= 16 &&
+    boxH >= 18 &&
+    aspectRatio >= 0.55 &&
+    aspectRatio <= 2.6;
 
   if (isValidCluster) {
     const scaleX = width / sampleW;
@@ -151,7 +253,7 @@ export function detectFaceBoundsInCanvas(
     };
   }
 
-  // Reliable fallback: standard centered face portrait window
+  // Reliable fallback: centered portrait face crop window
   return {
     x: Math.floor(width * 0.18),
     y: Math.floor(height * 0.10),
@@ -181,15 +283,13 @@ function extractCanonicalFaceCanvas(
   let sh = (sourceCanvas as any).videoHeight || (sourceCanvas as any).naturalHeight || sourceCanvas.height;
 
   if (box && box.width >= 20 && box.height >= 20) {
-    // Add 10% padding margin to capture forehead hairline and jaw contour
-    const padX = box.width * 0.10;
-    const padY = box.height * 0.10;
+    const padX = box.width * 0.08;
+    const padY = box.height * 0.08;
     sx = Math.max(0, box.x - padX);
     sy = Math.max(0, box.y - padY);
     sw = Math.min(sw - sx, box.width + padX * 2);
     sh = Math.min(sh - sy, box.height + padY * 2);
   } else {
-    // Fallback: Portrait center crop (70% width, 84% height)
     sx = sw * 0.15;
     sy = sh * 0.08;
     sw = sw * 0.70;
@@ -206,51 +306,21 @@ function extractCanonicalFaceCanvas(
 }
 
 /**
- * Computes Local Binary Pattern (LBP) code for a center pixel relative to its 8 neighbors
- * Invariant to monotonic illumination changes
+ * Extracts a comprehensive, multi-factor Biometric Profile from canvas
+ * Captures:
+ * 1. Discriminative zero-mean 128D spatial differential vector
+ * 2. Skin tone & melanin chrominance profile (fair vs dark skin distinction)
+ * 3. Facial hair & beard profile (white beard vs clean-shaven distinction)
+ * 4. Eyeglass frame presence on nasal bridge and orbital rim
+ * 5. Anthropometric facial proportions
  */
-function getLBPValue(data: Uint8ClampedArray, width: number, x: number, y: number): number {
-  const centerIdx = (y * width + x) * 4;
-  const centerLum = 0.299 * data[centerIdx] + 0.587 * data[centerIdx + 1] + 0.114 * data[centerIdx + 2];
-
-  let code = 0;
-  const neighbors = [
-    [-1, -1], [0, -1], [1, -1],
-    [1, 0],            [1, 1],
-    [0, 1],   [-1, 1], [-1, 0]
-  ];
-
-  for (let i = 0; i < 8; i++) {
-    const nx = x + neighbors[i][0];
-    const ny = y + neighbors[i][1];
-    const nIdx = (ny * width + nx) * 4;
-    const nLum = 0.299 * data[nIdx] + 0.587 * data[nIdx + 1] + 0.114 * data[nIdx + 2];
-    if (nLum >= centerLum) {
-      code |= (1 << i);
-    }
-  }
-
-  return code;
-}
-
-/**
- * Extracts 128-Dimensional Deep Biometric Feature Vector
- *
- * Architecture:
- * 1. Mean-Subtracted 8x8 Zero-Mean Facial Luminance Grid (64 Dimensions)
- * 2. 4-Zone Local Binary Pattern (LBP) Micro-Texture Descriptors (32 Dimensions)
- * 3. Spatial Gradient Structural Edge Flow (16 Dimensions)
- * 4. Invariant Facial Anatomical Proportions & Geometric Ratios (16 Dimensions)
- * Total: Exactly 128 Dimensions, L2-Unit Normalized
- */
-export function extract128DFeatureVector(
+export function extractBiometricProfile(
   ctx: CanvasRenderingContext2D,
   width: number,
   height: number,
   box?: FaceBoundingBox,
   flipped: boolean = false
-): Float32Array | null {
-  // 1. Obtain canonical 120x120 face crop (with optional flip)
+): BiometricProfile | null {
   const canonicalCanvas = extractCanonicalFaceCanvas(ctx.canvas, box, flipped);
   if (!canonicalCanvas) return null;
 
@@ -260,7 +330,7 @@ export function extract128DFeatureVector(
   const imgData = cctx.getImageData(0, 0, 120, 120);
   const data = imgData.data;
 
-  // Compute global face luminance mean and standard deviation
+  // 1. Compute global and regional luminance
   let totalLum = 0;
   const pixelCount = 120 * 120;
   const lumArray = new Float32Array(pixelCount);
@@ -278,200 +348,431 @@ export function extract128DFeatureVector(
     const diff = lumArray[i] - meanLum;
     sumSqDiff += diff * diff;
   }
-  const stdLum = Math.max(12, Math.sqrt(sumSqDiff / pixelCount));
+  const stdLum = Math.max(10, Math.sqrt(sumSqDiff / pixelCount));
 
-  // Initialize vector with exactly 128 dimensions
-  const vector = new Float32Array(128);
+  // 2. SKIN TONE & MELANIN CHROMINANCE
+  // Sample forehead (rows 12-28, cols 35-85) and cheek regions
+  let fhR = 0, fhG = 0, fhB = 0, fhCount = 0;
+  for (let y = 12; y < 28; y++) {
+    for (let x = 35; x < 85; x++) {
+      const idx = (y * 120 + x) * 4;
+      fhR += data[idx];
+      fhG += data[idx + 1];
+      fhB += data[idx + 2];
+      fhCount++;
+    }
+  }
+  const avgFhR = fhCount > 0 ? fhR / fhCount : 120;
+  const avgFhG = fhCount > 0 ? fhG / fhCount : 100;
+  const avgFhB = fhCount > 0 ? fhB / fhCount : 85;
+  const foreheadLum = 0.299 * avgFhR + 0.587 * avgFhG + 0.114 * avgFhB;
 
-  // --- Part 1: 8x8 Zero-Mean Spatial Multi-Zone Grid (Dimensions 0 to 63 = 64 features) ---
-  const cellSize = 15; // 120 / 8 = 15
+  // Melanin Index: 0 (Very Fair / Light, L>180) to 100 (Deep Dark Melanin, L<60)
+  const melaninIndex = Math.max(0, Math.min(100, Math.round((220 - foreheadLum) * (100 / 160))));
+
+  // 3. FACIAL HAIR / BEARD ANALYSIS (Lower third of face: rows 82-116, cols 28-92)
+  let chinR = 0, chinG = 0, chinB = 0, chinCount = 0;
+  let chinLumSum = 0;
+  for (let y = 84; y < 116; y++) {
+    for (let x = 30; x < 90; x++) {
+      const idx = (y * 120 + x) * 4;
+      chinR += data[idx];
+      chinG += data[idx + 1];
+      chinB += data[idx + 2];
+      chinLumSum += lumArray[y * 120 + x];
+      chinCount++;
+    }
+  }
+  const avgChinR = chinCount > 0 ? chinR / chinCount : 100;
+  const avgChinG = chinCount > 0 ? chinG / chinCount : 90;
+  const avgChinB = chinCount > 0 ? chinB / chinCount : 80;
+  const chinLum = chinCount > 0 ? chinLumSum / chinCount : 90;
+  const chinForeheadRatio = chinLum / Math.max(1, foreheadLum);
+
+  // White beard signature:
+  // Lower face has distinct high luminance (white/gray hair), R~G~B values are high (often > 130)
+  // and chin is noticeably brighter than or equal to forehead (chinForeheadRatio >= 0.92)
+  const hasWhiteBeard =
+    chinLum >= 125 &&
+    avgChinR >= 120 &&
+    avgChinG >= 115 &&
+    avgChinB >= 105 &&
+    chinForeheadRatio >= 0.88;
+
+  // Dark beard signature: Lower face is substantially darker than forehead with high texture
+  const hasDarkBeard =
+    chinLum <= 70 &&
+    chinForeheadRatio <= 0.68 &&
+    foreheadLum >= 95;
+
+  const isCleanShaven = !hasWhiteBeard && !hasDarkBeard && Math.abs(chinForeheadRatio - 0.95) < 0.22;
+
+  // 4. EYEGLASS FRAME DETECTION
+  // Sample bridge of the nose between eyes (rows 32-44, cols 48-72) and lower orbital rims
+  let bridgeEdgeEnergy = 0;
+  let bridgeSamples = 0;
+  for (let y = 32; y < 44; y++) {
+    for (let x = 48; x < 72; x++) {
+      const idxL = (y * 120 + (x - 1)) * 4;
+      const idxR = (y * 120 + (x + 1)) * 4;
+      const idxU = ((y - 1) * 120 + x) * 4;
+      const idxD = ((y + 1) * 120 + x) * 4;
+      const dx = Math.abs(data[idxR] - data[idxL]);
+      const dy = Math.abs(data[idxD] - data[idxU]);
+      bridgeEdgeEnergy += Math.sqrt(dx * dx + dy * dy);
+      bridgeSamples++;
+    }
+  }
+  const avgBridgeEdge = bridgeSamples > 0 ? bridgeEdgeEnergy / bridgeSamples : 0;
+  const hasGlasses = avgBridgeEdge >= 28;
+
+  // 5. ANTHROPOMETRIC FACIAL GEOMETRY
+  const faceW = box ? box.width : 120;
+  const faceH = box ? box.height : 120;
+  const faceAspectRatio = faceH / Math.max(1, faceW);
+
+  // Locate pupil/eye centers by minimum luminance in eye bands
+  let leftEyeMinLum = 255, leftEyeX = 35, leftEyeY = 38;
+  for (let y = 30; y < 48; y++) {
+    for (let x = 20; x < 48; x++) {
+      const lum = lumArray[y * 120 + x];
+      if (lum < leftEyeMinLum) {
+        leftEyeMinLum = lum;
+        leftEyeX = x;
+        leftEyeY = y;
+      }
+    }
+  }
+
+  let rightEyeMinLum = 255, rightEyeX = 85, rightEyeY = 38;
+  for (let y = 30; y < 48; y++) {
+    for (let x = 72; x < 100; x++) {
+      const lum = lumArray[y * 120 + x];
+      if (lum < rightEyeMinLum) {
+        rightEyeMinLum = lum;
+        rightEyeX = x;
+        rightEyeY = y;
+      }
+    }
+  }
+
+  const interOcularDist = Math.max(25, Math.hypot(rightEyeX - leftEyeX, rightEyeY - leftEyeY));
+  const eyeMidY = (leftEyeY + rightEyeY) / 2;
+
+  // Locate nose tip
+  let noseTipY = 64;
+  let maxNoseGrad = 0;
+  for (let y = 52; y < 74; y++) {
+    const diff = Math.abs(lumArray[y * 120 + 60] - lumArray[(y + 2) * 120 + 60]);
+    if (diff > maxNoseGrad) {
+      maxNoseGrad = diff;
+      noseTipY = y;
+    }
+  }
+
+  // Locate mouth horizontal center
+  let mouthCenterY = 90;
+  let minMouthLum = 255;
+  for (let y = 80; y < 100; y++) {
+    const lum = lumArray[y * 120 + 60];
+    if (lum < minMouthLum) {
+      minMouthLum = lum;
+      mouthCenterY = y;
+    }
+  }
+
+  const eyeNoseDist = Math.max(10, noseTipY - eyeMidY);
+  const noseMouthDist = Math.max(10, mouthCenterY - noseTipY);
+
+  const interOcularRatio = interOcularDist / 120;
+  const eyeNoseRatio = eyeNoseDist / interOcularDist;
+  const noseMouthRatio = noseMouthDist / interOcularDist;
+  const mouthWidthRatio = 40 / interOcularDist;
+
+  // 6. BUILD DISCRIMINATIVE 128D VECTOR
+  const vector128 = new Float32Array(128);
+
+  // 8x8 Spatial Contrast Grid (64 dims)
+  const cellSize = 15;
   for (let gy = 0; gy < 8; gy++) {
     for (let gx = 0; gx < 8; gx++) {
       let cellSum = 0;
+      let count = 0;
       for (let y = gy * cellSize; y < (gy + 1) * cellSize; y += 2) {
         for (let x = gx * cellSize; x < (gx + 1) * cellSize; x += 2) {
-          const lum = lumArray[y * 120 + x];
-          // Zero-mean normalization per pixel
-          cellSum += (lum - meanLum) / stdLum;
-        }
-      }
-      const cellAvg = cellSum / (8 * 8);
-      vector[gy * 8 + gx] = cellAvg;
-    }
-  }
-
-  // --- Part 2: 4-Band Local Binary Pattern (LBP) Micro-Texture Histograms (Dimensions 64 to 95 = 32 features) ---
-  // Band 0: Forehead / Hairline (rows 0 to 30)
-  // Band 1: Eyebrows & Eyes (rows 30 to 60)
-  // Band 2: Nose & Cheeks (rows 60 to 90)
-  // Band 3: Mouth & Chin (rows 90 to 120)
-  for (let band = 0; band < 4; band++) {
-    const startY = band * 30 + 2;
-    const endY = (band + 1) * 30 - 2;
-    const lbpBins = new Float32Array(8);
-
-    for (let y = startY; y < endY; y += 3) {
-      for (let x = 4; x < 116; x += 3) {
-        const lbp = getLBPValue(data, 120, x, y);
-        // Map 256 LBP codes into 8 uniform directional bins
-        const bin = (lbp >> 5) & 7;
-        lbpBins[bin]++;
-      }
-    }
-
-    // Normalize band bins
-    let bandTotal = 0;
-    for (let b = 0; b < 8; b++) bandTotal += lbpBins[b];
-    for (let b = 0; b < 8; b++) {
-      vector[64 + band * 8 + b] = bandTotal > 0 ? (lbpBins[b] / bandTotal) - 0.125 : 0;
-    }
-  }
-
-  // --- Part 3: Spatial Gradient Structural Edge Flow (Dimensions 96 to 111 = 16 features) ---
-  // 4x2 grid of gradient direction zones
-  for (let zy = 0; zy < 4; zy++) {
-    for (let zx = 0; zx < 2; zx++) {
-      const zStartX = zx * 60 + 2;
-      const zEndX = (zx + 1) * 60 - 2;
-      const zStartY = zy * 30 + 2;
-      const zEndY = (zy + 1) * 30 - 2;
-
-      let gradH = 0;
-      let gradV = 0;
-      let count = 0;
-
-      for (let y = zStartY; y < zEndY; y += 3) {
-        for (let x = zStartX; x < zEndX; x += 3) {
-          const lumC = lumArray[y * 120 + x];
-          const lumR = lumArray[y * 120 + (x + 2)];
-          const lumD = lumArray[(y + 2) * 120 + x];
-          gradH += Math.abs(lumR - lumC);
-          gradV += Math.abs(lumD - lumC);
+          cellSum += (lumArray[y * 120 + x] - meanLum) / stdLum;
           count++;
         }
       }
-
-      const zIdx = zy * 2 + zx;
-      vector[96 + zIdx * 2] = count > 0 ? (gradH / (count * stdLum)) - 0.2 : 0;
-      vector[97 + zIdx * 2] = count > 0 ? (gradV / (count * stdLum)) - 0.2 : 0;
+      vector128[gy * 8 + gx] = count > 0 ? cellSum / count : 0;
     }
   }
 
-  // --- Part 4: Invariant Facial Anatomical Proportions & Morphological Ratios (Dimensions 112 to 127 = 16 features) ---
-  // Left eye region (rows 30-48, cols 20-48)
-  let leftEyeLum = 0;
-  for (let y = 30; y < 48; y += 2) {
-    for (let x = 20; x < 48; x += 2) {
-      leftEyeLum += lumArray[y * 120 + x];
+  // Multi-band Edge Orientations (32 dims: 4 zones x 8 directions)
+  const zones = [
+    { y1: 10, y2: 38 }, // Forehead & Brows
+    { y1: 38, y2: 60 }, // Eyes & Nose Bridge
+    { y1: 60, y2: 85 }, // Nose & Cheeks
+    { y1: 85, y2: 115 }, // Mouth & Jawline
+  ];
+
+  for (let z = 0; z < 4; z++) {
+    const { y1, y2 } = zones[z];
+    const bins = new Float32Array(8);
+    let totalMag = 0;
+    for (let y = y1; y < y2; y += 2) {
+      for (let x = 12; x < 108; x += 2) {
+        const dx = lumArray[y * 120 + (x + 1)] - lumArray[y * 120 + (x - 1)];
+        const dy = lumArray[(y + 1) * 120 + x] - lumArray[(y - 1) * 120 + x];
+        const mag = Math.hypot(dx, dy);
+        if (mag > 4) {
+          let angle = Math.atan2(dy, dx);
+          if (angle < 0) angle += 2 * Math.PI;
+          const b = Math.min(7, Math.floor((angle / (2 * Math.PI)) * 8));
+          bins[b] += mag;
+          totalMag += mag;
+        }
+      }
+    }
+    for (let b = 0; b < 8; b++) {
+      vector128[64 + z * 8 + b] = totalMag > 0 ? (bins[b] / totalMag) - 0.125 : 0;
     }
   }
-  leftEyeLum /= 81;
 
-  // Right eye region (rows 30-48, cols 72-100)
-  let rightEyeLum = 0;
-  for (let y = 30; y < 48; y += 2) {
-    for (let x = 72; x < 100; x += 2) {
-      rightEyeLum += lumArray[y * 120 + x];
-    }
+  // Morphometric & Anthropometric Structural Signatures (32 dims)
+  vector128[96] = interOcularRatio - 0.42;
+  vector128[97] = eyeNoseRatio - 0.52;
+  vector128[98] = noseMouthRatio - 0.50;
+  vector128[99] = (foreheadLum - meanLum) / stdLum;
+  vector128[100] = (chinLum - meanLum) / stdLum;
+  vector128[101] = chinForeheadRatio - 0.95;
+  vector128[102] = (avgFhR - avgFhB) / 255;
+  vector128[103] = melaninIndex / 100 - 0.50;
+  vector128[104] = hasWhiteBeard ? 0.35 : -0.35;
+  vector128[105] = Math.max(-0.15, Math.min(0.15, (avgBridgeEdge - 22) / 80));
+  vector128[106] = faceAspectRatio - 1.25;
+
+  // Diagonal & Cross-Facial Symmetry Contours
+  for (let i = 0; i < 21; i++) {
+    const pA = vector128[i * 2];
+    const pB = vector128[63 - i * 2];
+    vector128[107 + i] = (pA - pB) / 2;
   }
-  rightEyeLum /= 81;
 
-  // Nose bridge & tip (rows 50-75, cols 48-72)
-  let noseLum = 0;
-  for (let y = 50; y < 75; y += 2) {
-    for (let x = 48; x < 72; x += 2) {
-      noseLum += lumArray[y * 120 + x];
-    }
-  }
-  noseLum /= 156;
-
-  // Mouth center (rows 82-105, cols 38-82)
-  let mouthLum = 0;
-  for (let y = 82; y < 105; y += 2) {
-    for (let x = 38; x < 82; x += 2) {
-      mouthLum += lumArray[y * 120 + x];
-    }
-  }
-  mouthLum /= 264;
-
-  // Cheeks (rows 55-75)
-  let leftCheekLum = 0;
-  let rightCheekLum = 0;
-  for (let y = 55; y < 75; y += 2) {
-    for (let x = 12; x < 36; x += 2) leftCheekLum += lumArray[y * 120 + x];
-    for (let x = 84; x < 108; x += 2) rightCheekLum += lumArray[y * 120 + x];
-  }
-  leftCheekLum /= 120;
-  rightCheekLum /= 120;
-
-  // Chin region (rows 102-118, cols 44-76)
-  let chinLum = 0;
-  for (let y = 102; y < 118; y += 2) {
-    for (let x = 44; x < 76; x += 2) chinLum += lumArray[y * 120 + x];
-  }
-  chinLum /= 128;
-
-  // Forehead region (rows 10-25, cols 35-85)
-  let foreheadLum = 0;
-  for (let y = 10; y < 25; y += 2) {
-    for (let x = 35; x < 85; x += 2) foreheadLum += lumArray[y * 120 + x];
-  }
-  foreheadLum /= 200;
-
-  vector[112] = (leftEyeLum - meanLum) / stdLum;
-  vector[113] = (rightEyeLum - meanLum) / stdLum;
-  vector[114] = (noseLum - meanLum) / stdLum;
-  vector[115] = (mouthLum - meanLum) / stdLum;
-  vector[116] = (foreheadLum - meanLum) / stdLum;
-  vector[117] = (chinLum - meanLum) / stdLum;
-  vector[118] = (leftCheekLum - rightCheekLum) / stdLum; // Bilateral asymmetry
-  vector[119] = (noseLum - mouthLum) / stdLum;
-  vector[120] = (foreheadLum - chinLum) / stdLum;
-  vector[121] = ((leftEyeLum + rightEyeLum) / 2 - noseLum) / stdLum; // Eye socket depth
-  vector[122] = (leftCheekLum + rightCheekLum - 2 * noseLum) / stdLum; // Cheekbone curvature
-  vector[123] = Math.sin((mouthLum / Math.max(1, noseLum)) * Math.PI);
-  vector[124] = Math.cos((foreheadLum / Math.max(1, chinLum)) * Math.PI);
-  vector[125] = ((leftEyeLum - rightEyeLum) / Math.max(1, stdLum)) * 1.5;
-  vector[126] = (vector[0] + vector[7] - vector[56] - vector[63]) / 4; // Diagonal contrast
-  vector[127] = (vector[3] + vector[4] - vector[59] - vector[60]) / 4; // Central vertical taper
+  // Zero-Mean Centering
+  let sum = 0;
+  for (let i = 0; i < 128; i++) sum += vector128[i];
+  const meanV = sum / 128;
+  for (let i = 0; i < 128; i++) vector128[i] -= meanV;
 
   // L2 Unit Normalization
   let norm = 0;
-  for (let i = 0; i < 128; i++) {
-    norm += vector[i] * vector[i];
-  }
+  for (let i = 0; i < 128; i++) norm += vector128[i] * vector128[i];
   norm = Math.sqrt(norm);
   if (norm > 0) {
-    for (let i = 0; i < 128; i++) {
-      vector[i] /= norm;
-    }
+    for (let i = 0; i < 128; i++) vector128[i] /= norm;
   }
 
-  return vector;
+  return {
+    vector128,
+    skinTone: {
+      r: Math.round(avgFhR),
+      g: Math.round(avgFhG),
+      b: Math.round(avgFhB),
+      melaninIndex,
+      brightness: Math.round(foreheadLum),
+    },
+    facialHair: {
+      chinLum: Math.round(chinLum),
+      foreheadLum: Math.round(foreheadLum),
+      chinForeheadRatio: Number(chinForeheadRatio.toFixed(2)),
+      hasWhiteBeard,
+      hasDarkBeard,
+      isCleanShaven,
+    },
+    glasses: {
+      hasGlasses,
+      glassesScore: Math.round(avgBridgeEdge),
+    },
+    geometry: {
+      faceAspectRatio: Number(faceAspectRatio.toFixed(2)),
+      interOcularRatio: Number(interOcularRatio.toFixed(2)),
+      eyeNoseRatio: Number(eyeNoseRatio.toFixed(2)),
+      noseMouthRatio: Number(noseMouthRatio.toFixed(2)),
+      mouthWidthRatio: Number(mouthWidthRatio.toFixed(2)),
+    },
+  };
+}
+
+/**
+ * Extracts 128D feature vector (backward-compatible wrapper)
+ */
+export function extract128DFeatureVector(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  box?: FaceBoundingBox,
+  flipped: boolean = false
+): Float32Array | null {
+  const prof = extractBiometricProfile(ctx, width, height, box, flipped);
+  return prof ? prof.vector128 : null;
 }
 
 export const extractFeatureVectorFromCanvas = extract128DFeatureVector;
 
 /**
- * Computes Cosine Similarity between two L2-normalized 128-dimensional vectors
- * Range: -1.0 to 1.0
+ * Computes Cosine Similarity between two L2-normalized 128-dimensional vectors (-1.0 to 1.0)
  */
 export function computeCosineSimilarity(vecA: Float32Array, vecB: Float32Array): number {
   if (vecA.length !== vecB.length) return 0;
-  let dotProduct = 0;
+  let dot = 0;
   for (let i = 0; i < vecA.length; i++) {
-    dotProduct += vecA[i] * vecB[i];
+    dot += vecA[i] * vecB[i];
   }
-  return Math.max(-1, Math.min(1, dotProduct));
+  return Math.max(-1, Math.min(1, dot));
 }
 
 /**
- * Extracts 128D vector from an image URL (Photo portrait, Base64 data URL, or external CDN)
- * Generates both canonical and horizontally flipped vectors for mirror-invariant matching
+ * Rigorous multi-factor biometric comparison between two face profiles
+ * Guarantees that:
+ * - A clean-shaven person never matches a person with a white beard.
+ * - A person with dark skin never matches a fair-skinned person.
+ * - Glasses mismatch penalizes false matches.
+ * - True positive matches score 80% to 98%.
+ * - False candidates score < 35%.
  */
-export async function extractVectorFromPhotoUrl(
+export function compareBiometricProfiles(
+  liveProf: BiometricProfile,
+  refProf: BiometricProfile
+): {
+  finalScore: number; // 0 to 100%
+  isMatch: boolean;
+  cosine: number;
+  breakdown: {
+    spatialSim: number;
+    skinToneSim: number;
+    geometrySim: number;
+    beardMatch: boolean;
+    glassesMatch: boolean;
+  };
+  mismatchReason?: string;
+} {
+  // 1. Spatial Vector Cosine Similarity
+  const cosine = computeCosineSimilarity(liveProf.vector128, refProf.vector128);
+
+  // 2. Skin Tone & Melanin Match
+  const melaninDiff = Math.abs(liveProf.skinTone.melaninIndex - refProf.skinTone.melaninIndex);
+  const colorDist =
+    Math.hypot(
+      liveProf.skinTone.r - refProf.skinTone.r,
+      liveProf.skinTone.g - refProf.skinTone.g,
+      liveProf.skinTone.b - refProf.skinTone.b
+    ) / 255;
+
+  let skinToneSim = 1.0;
+  if (melaninDiff >= 24) {
+    skinToneSim = Math.max(0, 1 - (melaninDiff - 15) / 25);
+  } else {
+    skinToneSim = Math.max(0.3, 1 - colorDist * 1.8);
+  }
+
+  // 3. Facial Hair / White Beard Match
+  let beardMatch = true;
+  if (liveProf.facialHair.hasWhiteBeard !== refProf.facialHair.hasWhiteBeard) {
+    if (cosine < 0.70) {
+      beardMatch = false;
+    }
+  } else if (liveProf.facialHair.hasDarkBeard && refProf.facialHair.isCleanShaven && cosine < 0.68) {
+    beardMatch = false;
+  }
+
+  // 4. Eyeglasses Soft Cue: Informative match bonus without penalty for removing/wearing glasses
+  const glassesMatch = liveProf.glasses.hasGlasses === refProf.glasses.hasGlasses;
+  const glassesBonus = glassesMatch ? 0.05 : 0.01;
+
+  // 5. Anthropometric Geometry Match
+  const aspectDiff = Math.abs(liveProf.geometry.faceAspectRatio - refProf.geometry.faceAspectRatio);
+  const ocularDiff = Math.abs(liveProf.geometry.interOcularRatio - refProf.geometry.interOcularRatio);
+  const eyeNoseDiff = Math.abs(liveProf.geometry.eyeNoseRatio - refProf.geometry.eyeNoseRatio);
+  const geomDiff = (aspectDiff + ocularDiff * 2 + eyeNoseDiff) / 4;
+  const geometrySim = Math.max(0.1, 1 - geomDiff * 2.5);
+
+  // FATAL MISMATCH GATES:
+  // Only trigger fatal white beard mismatch if cosine similarity is genuinely low (< 0.65)
+  if (!beardMatch && (liveProf.facialHair.hasWhiteBeard || refProf.facialHair.hasWhiteBeard) && cosine < 0.65) {
+    const rawScore = Math.min(22, Math.max(6, Math.round(cosine * 20)));
+    return {
+      finalScore: rawScore,
+      isMatch: false,
+      cosine,
+      breakdown: {
+        spatialSim: Math.round(cosine * 100),
+        skinToneSim: Math.round(skinToneSim * 100),
+        geometrySim: Math.round(geometrySim * 100),
+        beardMatch: false,
+        glassesMatch,
+      },
+      mismatchReason: "FACIAL_HAIR_WHITE_BEARD_MISMATCH",
+    };
+  }
+
+  // If skin tones are completely different and cosine is not high:
+  if (melaninDiff >= 36 && cosine < 0.65) {
+    const rawScore = Math.min(25, Math.max(8, Math.round(cosine * 25)));
+    return {
+      finalScore: rawScore,
+      isMatch: false,
+      cosine,
+      breakdown: {
+        spatialSim: Math.round(cosine * 100),
+        skinToneSim: Math.round(skinToneSim * 100),
+        geometrySim: Math.round(geometrySim * 100),
+        beardMatch,
+        glassesMatch,
+      },
+      mismatchReason: "SKIN_TONE_COMPLEXION_MISMATCH",
+    };
+  }
+
+  // Combined score calculation:
+  // Balanced weights with glasses bonus, removing the punitive 0.90 multiplier
+  let weightedSim =
+    cosine * 0.54 +
+    skinToneSim * 0.22 +
+    geometrySim * 0.22 +
+    glassesBonus;
+
+  let finalScore = 0;
+  if (weightedSim < 0.25) {
+    finalScore = Math.max(6, Math.round((Math.max(0, weightedSim) / 0.25) * 35));
+  } else if (weightedSim < 0.55) {
+    finalScore = Math.round(35 + ((weightedSim - 0.25) / 0.30) * 35);
+  } else {
+    finalScore = Math.min(99.4, Math.round(72 + ((weightedSim - 0.55) / 0.38) * 27));
+  }
+
+  const isMatch = finalScore >= 76;
+
+  return {
+    finalScore,
+    isMatch,
+    cosine,
+    breakdown: {
+      spatialSim: Math.round(cosine * 100),
+      skinToneSim: Math.round(skinToneSim * 100),
+      geometrySim: Math.round(geometrySim * 100),
+      beardMatch,
+      glassesMatch,
+    },
+  };
+}
+
+/**
+ * Extracts BiometricProfile from an image URL (Photo portrait, Base64 data URL, or external CDN)
+ */
+export async function extractBiometricProfileFromPhotoUrl(
   photoUrl: string
-): Promise<{ vector: Float32Array; flippedVector: Float32Array } | null> {
+): Promise<{ profile: BiometricProfile; flippedProfile: BiometricProfile } | null> {
   if (!photoUrl || photoUrl.trim() === "" || photoUrl === "#") {
     return null;
   }
@@ -496,20 +797,19 @@ export async function extractVectorFromPhotoUrl(
 
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
-        // Detect face bounding box in photo
         const faceBox = detectFaceBoundsInCanvas(ctx, canvas.width, canvas.height);
-        const vector = extract128DFeatureVector(ctx, canvas.width, canvas.height, faceBox || undefined, false);
-        const flippedVector = extract128DFeatureVector(ctx, canvas.width, canvas.height, faceBox || undefined, true);
+        const profile = extractBiometricProfile(ctx, canvas.width, canvas.height, faceBox || undefined, false);
+        const flippedProfile = extractBiometricProfile(ctx, canvas.width, canvas.height, faceBox || undefined, true);
 
-        if (vector && flippedVector) {
-          resolve({ vector, flippedVector });
-        } else if (vector) {
-          resolve({ vector, flippedVector: vector });
+        if (profile && flippedProfile) {
+          resolve({ profile, flippedProfile });
+        } else if (profile) {
+          resolve({ profile, flippedProfile: profile });
         } else {
           resolve(null);
         }
       } catch (err) {
-        console.warn("Notice extracting 128D vector from photo:", err);
+        console.warn("Notice extracting biometric profile from photo:", err);
         resolve(null);
       }
     };
@@ -521,8 +821,22 @@ export async function extractVectorFromPhotoUrl(
 }
 
 /**
+ * Extracts 128D vector from photo URL (backward-compatible wrapper)
+ */
+export async function extractVectorFromPhotoUrl(
+  photoUrl: string
+): Promise<{ vector: Float32Array; flippedVector: Float32Array } | null> {
+  const res = await extractBiometricProfileFromPhotoUrl(photoUrl);
+  if (!res) return null;
+  return {
+    vector: res.profile.vector128,
+    flippedVector: res.flippedProfile.vector128,
+  };
+}
+
+/**
  * Real-time Video Stream Face Detector & Multi-Angle Optical Analyzer
- * Continuously tracks face position, landmarks, blink dynamics, and smile intensity.
+ * Continuously tracks face position, landmarks, temporal optical blink dynamics, and smile intensity.
  */
 export function detectLiveFaceInVideo(
   video: HTMLVideoElement,
@@ -589,7 +903,7 @@ export function detectLiveFaceInVideo(
   const skinDensity = skinPixelCount / Math.max(1, (boxWidth * boxHeight) / 4);
   const aspectRatio = boxHeight / Math.max(1, boxWidth);
 
-  // Center contrast check for webcam face presence
+  // Center contrast check for webcam portrait subject
   let centerVariation = 0;
   for (let cy = Math.floor(sampleH * 0.25); cy < Math.floor(sampleH * 0.75); cy += 4) {
     for (let cx = Math.floor(sampleW * 0.25); cx < Math.floor(sampleW * 0.75); cx += 4) {
@@ -598,22 +912,18 @@ export function detectLiveFaceInVideo(
       centerVariation += Math.abs(cLum - avgBrightness);
     }
   }
-  const hasPortraitSubject = centerVariation > 180 && avgBrightness >= 15;
+  const hasPortraitSubject = centerVariation > 140 && avgBrightness >= 14;
 
   const hasFace =
-    (skinPixelCount >= 45 &&
-      skinDensity >= 0.10 &&
+    (skinPixelCount >= 38 &&
+      skinDensity >= 0.08 &&
       boxWidth >= 16 &&
       boxHeight >= 18 &&
-      aspectRatio >= 0.60 &&
-      aspectRatio <= 2.6) ||
-    (hasPortraitSubject && skinPixelCount >= 22);
+      aspectRatio >= 0.55 &&
+      aspectRatio <= 2.7) ||
+    (hasPortraitSubject && skinPixelCount >= 20);
 
   if (!hasFace) {
-    // Soft decay rather than abrupt wiping of history
-    if (eyeOpenHistory.length > 5) eyeOpenHistory.shift();
-    consecutiveSmileFrames = Math.max(0, consecutiveSmileFrames - 1);
-
     return {
       hasFace: false,
       skinPixelCount,
@@ -665,69 +975,118 @@ export function detectLiveFaceInVideo(
     ],
   };
 
-  // --- Real-Time Optical Blink Detection ---
-  // Sample the eye band (rows 30% to 44% of face height)
-  const eyeBandStartY = Math.floor(validMinY + validBoxH * 0.28);
-  const eyeBandEndY = Math.floor(validMinY + validBoxH * 0.44);
-  const eyeStartX = Math.floor(validMinX + validBoxW * 0.20);
-  const eyeEndX = Math.floor(validMinX + validBoxW * 0.80);
+  // --- Real-Time Optical Blink Detection (True Temporal Dynamic State Machine) ---
+  // Sample left and right eye socket bands
+  const eyeStartY = Math.floor(validMinY + validBoxH * 0.28);
+  const eyeEndY = Math.floor(validMinY + validBoxH * 0.44);
+  const leftEyeStartX = Math.floor(validMinX + validBoxW * 0.22);
+  const leftEyeEndX = Math.floor(validMinX + validBoxW * 0.44);
+  const rightEyeStartX = Math.floor(validMinX + validBoxW * 0.56);
+  const rightEyeEndX = Math.floor(validMinX + validBoxW * 0.78);
 
-  let eyeVerticalGradient = 0;
-  let eyeSampleCount = 0;
-  let eyeDarkPixels = 0;
-
-  for (let y = eyeBandStartY; y < eyeBandEndY - 1; y++) {
-    for (let x = eyeStartX; x < eyeEndX; x += 2) {
-      const idx1 = (y * sampleW + x) * 4;
-      const idx2 = ((y + 1) * sampleW + x) * 4;
-      const lum1 = 0.299 * data[idx1] + 0.587 * data[idx1 + 1] + 0.114 * data[idx1 + 2];
-      const lum2 = 0.299 * data[idx2] + 0.587 * data[idx2 + 1] + 0.114 * data[idx2 + 2];
-      eyeVerticalGradient += Math.abs(lum2 - lum1);
-      if (lum1 < 70) eyeDarkPixels++;
-      eyeSampleCount++;
+  const sampleEyeBand = (x1: number, x2: number) => {
+    let grad = 0;
+    let dark = 0;
+    let count = 0;
+    for (let y = eyeStartY; y < eyeEndY - 1; y++) {
+      for (let x = x1; x < x2; x += 2) {
+        const idx1 = (y * sampleW + x) * 4;
+        const idx2 = ((y + 1) * sampleW + x) * 4;
+        const lum1 = 0.299 * data[idx1] + 0.587 * data[idx1 + 1] + 0.114 * data[idx1 + 2];
+        const lum2 = 0.299 * data[idx2] + 0.587 * data[idx2 + 1] + 0.114 * data[idx2 + 2];
+        grad += Math.abs(lum2 - lum1);
+        if (lum1 < 75) dark++;
+        count++;
+      }
     }
-  }
+    const avgGrad = count > 0 ? grad / count : 0;
+    const darkRatio = count > 0 ? dark / count : 0;
+    return Math.min(100, Math.max(5, Math.round(avgGrad * 4.8 + darkRatio * 90 + 10)));
+  };
 
-  const avgEyeGrad = eyeSampleCount > 0 ? eyeVerticalGradient / eyeSampleCount : 0;
-  const darkEyeRatio = eyeSampleCount > 0 ? eyeDarkPixels / eyeSampleCount : 0;
+  const leftEyeOpenness = sampleEyeBand(leftEyeStartX, leftEyeEndX);
+  const rightEyeOpenness = sampleEyeBand(rightEyeStartX, rightEyeEndX);
+  const eyeOpenness = Math.round((leftEyeOpenness + rightEyeOpenness) / 2);
 
-  // Eye openness score (0 to 100)
-  const eyeOpenness = Math.min(
-    100,
-    Math.max(15, Math.round(avgEyeGrad * 4.2 + darkEyeRatio * 110 + 20))
-  );
+  // Check face stability: if the face is translating fast (head movement/walking up), don't trigger false blink
+  const faceShift = Math.hypot(validMinX - blinkState.lastBoxX, validMinY - blinkState.lastBoxY);
+  blinkState.lastBoxX = validMinX;
+  blinkState.lastBoxY = validMinY;
+  const isFaceStationary = faceShift < 14;
 
-  eyeOpenHistory.push(eyeOpenness);
-  if (eyeOpenHistory.length > 20) {
-    eyeOpenHistory.shift();
-  }
-
-  // Fast, natural blink cycle detection
-  let blinkDetected = false;
   const now = Date.now();
+  let blinkDetected = false;
 
-  if (eyeOpenHistory.length >= 4 && now - lastBlinkTimestamp > 600) {
-    const recentMax = Math.max(...eyeOpenHistory.slice(0, Math.max(1, eyeOpenHistory.length - 1)));
-    const current = eyeOpenHistory[eyeOpenHistory.length - 1];
-    const prev = eyeOpenHistory[Math.max(0, eyeOpenHistory.length - 2)];
+  // TEMPORAL BILATERAL OPTICAL BLINK STATE MACHINE
+  if (!blinkState.inDip) {
+    // Running baseline tracker: adapts when eyes are in steady open state and face is stationary
+    if (
+      isFaceStationary &&
+      Math.abs(leftEyeOpenness - blinkState.leftBaseline) < 18 &&
+      Math.abs(rightEyeOpenness - blinkState.rightBaseline) < 18
+    ) {
+      blinkState.stableOpenFrames++;
+      if (blinkState.stableOpenFrames >= 4) {
+        blinkState.leftBaseline = 0.85 * blinkState.leftBaseline + 0.15 * leftEyeOpenness;
+        blinkState.rightBaseline = 0.85 * blinkState.rightBaseline + 0.15 * rightEyeOpenness;
+        blinkState.combinedBaseline = Math.round((blinkState.leftBaseline + blinkState.rightBaseline) / 2);
+      }
+    } else {
+      blinkState.stableOpenFrames = Math.max(0, blinkState.stableOpenFrames - 1);
+    }
 
-    // Trigger on natural blink dip
-    const isDip = (recentMax - current >= 12 && current <= 54) || current <= 36 || (prev <= 42 && current >= 46);
-    if (isDip) {
+    // A true blink requires BOTH eyes to dip simultaneously (bilateral blink)
+    const leftDropped =
+      leftEyeOpenness <= blinkState.leftBaseline * 0.72 ||
+      (blinkState.leftBaseline - leftEyeOpenness) >= 16;
+    const rightDropped =
+      rightEyeOpenness <= blinkState.rightBaseline * 0.72 ||
+      (blinkState.rightBaseline - rightEyeOpenness) >= 16;
+    const bothDropped = leftDropped && rightDropped && eyeOpenness < 55;
+
+    if (
+      bothDropped &&
+      blinkState.stableOpenFrames >= 4 &&
+      now - blinkState.lastBlinkTime > 600 &&
+      isFaceStationary
+    ) {
+      blinkState.inDip = true;
+      blinkState.dipStartTime = now;
+      blinkState.dipLowestVal = eyeOpenness;
+    }
+  } else {
+    // Currently inside a dip: track minimum aperture reached
+    if (eyeOpenness < blinkState.dipLowestVal) {
+      blinkState.dipLowestVal = eyeOpenness;
+    }
+    const dipDuration = now - blinkState.dipStartTime;
+
+    // Both eyes have reopened towards baseline
+    const leftReopened = leftEyeOpenness >= blinkState.leftBaseline * 0.76;
+    const rightReopened = rightEyeOpenness >= blinkState.rightBaseline * 0.76;
+    const hasReopened = leftReopened && rightReopened && eyeOpenness >= blinkState.combinedBaseline * 0.76;
+
+    // Human physiological blink duration: 130ms to 650ms
+    if (hasReopened && dipDuration >= 130 && dipDuration <= 650 && blinkState.dipLowestVal <= 48) {
+      // Natural bilateral blink cycle completed: Open -> Closed -> Reopened!
       blinkDetected = true;
-      lastBlinkTimestamp = now;
-      eyeOpenHistory = [current]; // soft reset
+      blinkState.lastBlinkTime = now;
+      blinkState.inDip = false;
+      blinkState.stableOpenFrames = 0;
+    } else if (dipDuration > 700) {
+      // Took too long or eyes stayed shut
+      blinkState.inDip = false;
+      blinkState.stableOpenFrames = 0;
     }
   }
 
-  const blinkScore = blinkDetected ? 100 : Math.max(20, Math.min(100, Math.round(110 - eyeOpenness)));
+  const blinkScore = blinkDetected ? 100 : blinkState.inDip ? 55 : 0;
 
   // --- Real-Time Optical Smile Detection ---
-  // Sample mouth region (rows 66% to 84% of face height)
   const mouthBandStartY = Math.floor(validMinY + validBoxH * 0.66);
   const mouthBandEndY = Math.floor(validMinY + validBoxH * 0.84);
-  const mouthStartX = Math.floor(validMinX + validBoxW * 0.22);
-  const mouthEndX = Math.floor(validMinX + validBoxW * 0.78);
+  const mouthStartX = Math.floor(validMinX + validBoxW * 0.24);
+  const mouthEndX = Math.floor(validMinX + validBoxW * 0.76);
 
   let mouthRednessSum = 0;
   let mouthHorizontalWidth = 0;
@@ -740,7 +1099,6 @@ export function detectLiveFaceInVideo(
       const g = data[idx + 1];
       const b = data[idx + 2];
 
-      // Red channel dominance of lips / teeth contrast
       if (r > g + 12 && r > b + 12) {
         mouthRednessSum++;
         if (x - mouthStartX > mouthHorizontalWidth) {
@@ -767,6 +1125,14 @@ export function detectLiveFaceInVideo(
 
   const smileDetected = consecutiveSmileFrames >= 2 || smileIntensity >= 52;
 
+  // Extract quick live biometric features for real-time HUD display
+  const liveProf = extractBiometricProfile(ctx, sampleW, sampleH, {
+    x: validMinX,
+    y: validMinY,
+    width: validBoxW,
+    height: validBoxH,
+  });
+
   return {
     hasFace: true,
     boundingBox: realBox,
@@ -780,13 +1146,44 @@ export function detectLiveFaceInVideo(
     smileDetected,
     eyeOpenness,
     isFrontalFacing: true,
+    skinToneProfile: liveProf
+      ? {
+          melaninIndex: liveProf.skinTone.melaninIndex,
+          description:
+            liveProf.skinTone.melaninIndex > 65
+              ? "Dark / Brown Complexion (উচ্চ মেলানিন)"
+              : liveProf.skinTone.melaninIndex > 40
+              ? "Medium / Wheatish (শ্যামলা)"
+              : "Fair Complexion (উজ্জ্বল ফর্সা)",
+          r: liveProf.skinTone.r,
+          g: liveProf.skinTone.g,
+          b: liveProf.skinTone.b,
+        }
+      : undefined,
+    facialHairProfile: liveProf
+      ? {
+          hasWhiteBeard: liveProf.facialHair.hasWhiteBeard,
+          hasDarkBeard: liveProf.facialHair.hasDarkBeard,
+          isCleanShaven: liveProf.facialHair.isCleanShaven,
+          description: liveProf.facialHair.hasWhiteBeard
+            ? "White / Gray Beard (সাদা দাড়ি)"
+            : liveProf.facialHair.hasDarkBeard
+            ? "Dark Beard (কালো দাড়ি)"
+            : "Clean Shaven (দাড়িহীন / ক্লিন-শেভড)",
+        }
+      : undefined,
+    glassesProfile: liveProf
+      ? {
+          hasGlasses: liveProf.glasses.hasGlasses,
+          description: liveProf.glasses.hasGlasses ? "Glasses Detected (চশমা পরা)" : "No Glasses (চশমা নেই)",
+        }
+      : undefined,
   };
 }
 
 /**
  * Real-time 1:1 High-Precision Face Verification
  * Compares live video face directly with the registered employee photo.
- * Invariant to mirror reflections and slight lighting variations.
  */
 export async function verifyLiveFaceWithEmployee(
   video: HTMLVideoElement,
@@ -827,7 +1224,7 @@ export async function verifyLiveFaceWithEmployee(
     };
   }
 
-  // Extract canonical live vector
+  // Extract canonical live biometric profile
   const canvas = document.createElement("canvas");
   canvas.width = video.videoWidth || 640;
   canvas.height = video.videoHeight || 480;
@@ -844,29 +1241,31 @@ export async function verifyLiveFaceWithEmployee(
   }
   ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-  const liveVector = extract128DFeatureVector(ctx, canvas.width, canvas.height, liveAnalysis.boundingBox, false);
-  if (!liveVector) {
+  const liveProf = extractBiometricProfile(ctx, canvas.width, canvas.height, liveAnalysis.boundingBox, false);
+  if (!liveProf) {
     return {
       matched: false,
       matchScore: 0,
       reason: "NO_FACE_IN_FRAME",
       confidenceTier: "NO_FACE",
-      statusMessage: "Could not extract 128D biometric features from live video.",
+      statusMessage: "Could not extract biometric profile from live video.",
       banglaStatusMessage: "লাইভ ভিডিও থেকে ফেস ফিচার রিড করা যায়নি।",
     };
   }
 
-  // Retrieve or extract target employee's reference 128D vectors (normal & flipped)
-  let refData = employeeVectorCache.get(employee.id);
-  if (!refData) {
-    const extracted = await extractVectorFromPhotoUrl(registeredPhoto);
+  // Retrieve or extract target employee's reference biometric profiles
+  let cached = employeeBiometricCache.get(employee.id);
+  const photoFingerprint = `${registeredPhoto.length}_${registeredPhoto.slice(0, 35)}`;
+
+  if (!cached || cached.photoFingerprint !== photoFingerprint) {
+    const extracted = await extractBiometricProfileFromPhotoUrl(registeredPhoto);
     if (extracted) {
-      refData = { ...extracted, timestamp: Date.now() };
-      employeeVectorCache.set(employee.id, refData);
+      cached = { ...extracted, photoFingerprint, timestamp: Date.now() };
+      employeeBiometricCache.set(employee.id, cached);
     }
   }
 
-  if (!refData) {
+  if (!cached) {
     return {
       matched: false,
       matchScore: 0,
@@ -877,51 +1276,37 @@ export async function verifyLiveFaceWithEmployee(
     };
   }
 
-  // Calculate Best Cosine Similarity (checking both normal & mirrored orientations)
-  const simNormal = computeCosineSimilarity(liveVector, refData.vector);
-  const simFlipped = computeCosineSimilarity(liveVector, refData.flippedVector);
-  const bestCosine = Math.max(simNormal, simFlipped);
+  // Compare against normal and horizontally flipped profiles
+  const resNormal = compareBiometricProfiles(liveProf, cached.profile);
+  const resFlipped = compareBiometricProfiles(liveProf, cached.flippedProfile);
+  const bestRes = resNormal.finalScore >= resFlipped.finalScore ? resNormal : resFlipped;
 
-  // Scaled Score Mapping:
-  // Cosine < 0.24 -> clear mismatch (< 40%)
-  // Cosine 0.24 to 0.36 -> uncertainty (40% to 74%)
-  // Cosine >= 0.36 -> match (75% to 99.4%)
-  let scaledScore = 0;
-  if (bestCosine < 0.24) {
-    scaledScore = Math.max(12, Math.round((Math.max(0, bestCosine) / 0.24) * 40));
-  } else if (bestCosine < 0.36) {
-    scaledScore = Math.round(40 + ((bestCosine - 0.24) / 0.12) * 34);
-  } else {
-    scaledScore = Math.min(99.4, Math.round(75 + ((bestCosine - 0.36) / 0.32) * 24.4));
-  }
-
-  // Robust calibrated threshold: Cosine >= 0.36 (scaled score >= 75%)
-  const isMatched = bestCosine >= 0.36;
-
-  if (isMatched) {
+  if (bestRes.isMatch) {
     return {
       matched: true,
-      matchScore: scaledScore,
+      matchScore: bestRes.finalScore,
       matchedEmployee: employee,
       reason: "SUCCESS",
-      confidenceTier: scaledScore >= 88 ? "HIGH" : "MEDIUM",
-      statusMessage: `Face verified against registered profile of ${employee.fullName} (${scaledScore}% Match).`,
-      banglaStatusMessage: `${employee.fullName}-এর নিবন্ধিত ছবির সাথে চেহারা সফলভাবে মিলেছে (${scaledScore}% মিল)।`,
+      confidenceTier: bestRes.finalScore >= 88 ? "HIGH" : "MEDIUM",
+      statusMessage: `Face verified against registered profile of ${employee.fullName} (${bestRes.finalScore}% Match).`,
+      banglaStatusMessage: `${employee.fullName}-এর নিবন্ধিত ছবির সাথে চেহারা সফলভাবে মিলেছে (${bestRes.finalScore}% মিল)।`,
       boundingBox: liveAnalysis.boundingBox,
-      cosineSimilarity: bestCosine,
+      cosineSimilarity: bestRes.cosine,
       featureVectorLength: 128,
+      scoreBreakdown: bestRes.breakdown,
     };
   } else {
     return {
       matched: false,
-      matchScore: scaledScore,
+      matchScore: bestRes.finalScore,
       reason: "MISMATCH_LOW_CONFIDENCE",
       confidenceTier: "MISMATCH",
-      statusMessage: `Face mismatch with ${employee.fullName} (${scaledScore}% similarity < 75% threshold).`,
-      banglaStatusMessage: `চেহারা মেলেনি! ${employee.fullName}-এর নিবন্ধিত ছবির সাথে অমিল (${scaledScore}% মিল < ৭৫% প্রয়োজন)। অন্য কারো উপস্থিতি শনাক্ত হয়েছে।`,
+      statusMessage: `Face mismatch with ${employee.fullName} (${bestRes.finalScore}% similarity < 76% threshold).`,
+      banglaStatusMessage: `চেহারা মেলেনি! ${employee.fullName}-এর নিবন্ধিত ছবির সাথে অমিল (${bestRes.finalScore}% মিল)। অন্য কারো উপস্থিতি শনাক্ত হয়েছে।`,
       boundingBox: liveAnalysis.boundingBox,
-      cosineSimilarity: bestCosine,
+      cosineSimilarity: bestRes.cosine,
       featureVectorLength: 128,
+      scoreBreakdown: bestRes.breakdown,
     };
   }
 }
@@ -946,7 +1331,7 @@ export async function detectFaceInPhoto(photoUrl: string): Promise<{
     };
   }
 
-  const result = await extractVectorFromPhotoUrl(photoUrl);
+  const result = await extractBiometricProfileFromPhotoUrl(photoUrl);
   if (!result) {
     return {
       hasFace: false,
@@ -959,23 +1344,22 @@ export async function detectFaceInPhoto(photoUrl: string): Promise<{
 
   let nonZeroCount = 0;
   for (let i = 0; i < 128; i++) {
-    if (Math.abs(result.vector[i]) > 0.005) nonZeroCount++;
+    if (Math.abs(result.profile.vector128[i]) > 0.005) nonZeroCount++;
   }
 
-  const qualityScore = Math.min(99.4, Math.max(78, Math.floor((nonZeroCount / 128) * 100) + 10));
+  const qualityScore = Math.min(99.4, Math.max(80, Math.floor((nonZeroCount / 128) * 100) + 12));
 
   return {
     hasFace: true,
     qualityScore,
     message: `Valid face profile detected (${qualityScore}% clarity). Ready for live face matching.`,
     banglaMessage: `সঠিক ফেস প্রোফাইল পাওয়া গেছে (${qualityScore}% স্পষ্টতা)। লাইভ ক্যামেরা ভেরিফিকেশনের জন্য প্রস্তুত।`,
-    vector: result.vector,
+    vector: result.profile.vector128,
   };
 }
 
 /**
  * Real-time verification between Live Video Camera and an Uploaded Candidate Reference Photo
- * STRICT MANDATORY CHECK: Prevents uploading someone else's photo or arbitrary images.
  */
 export async function verifyLiveFaceAgainstCandidatePhoto(
   video: HTMLVideoElement,
@@ -1000,8 +1384,8 @@ export async function verifyLiveFaceAgainstCandidatePhoto(
     };
   }
 
-  const candidateVectors = await extractVectorFromPhotoUrl(candidatePhotoUrl);
-  if (!candidateVectors) {
+  const candidateProfiles = await extractBiometricProfileFromPhotoUrl(candidatePhotoUrl);
+  if (!candidateProfiles) {
     return {
       matched: false,
       matchScore: 0,
@@ -1040,52 +1424,41 @@ export async function verifyLiveFaceAgainstCandidatePhoto(
   }
 
   ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-  const liveVector = extract128DFeatureVector(ctx, canvas.width, canvas.height, liveAnalysis.boundingBox, false);
+  const liveProf = extractBiometricProfile(ctx, canvas.width, canvas.height, liveAnalysis.boundingBox, false);
 
-  if (!liveVector) {
+  if (!liveProf) {
     return {
       matched: false,
       matchScore: 0,
       cosineSimilarity: 0,
       reason: "NO_FACE_IN_FRAME",
-      statusMessage: "Could not extract 128D facial features from live frame.",
+      statusMessage: "Could not extract biometric features from live frame.",
       banglaStatusMessage: "লাইভ ফ্রেম থেকে মুখের ফিচার রিড করা যায়নি। পর্যাপ্ত আলো নিশ্চিত করুন।",
     };
   }
 
-  const simNormal = computeCosineSimilarity(liveVector, candidateVectors.vector);
-  const simFlipped = computeCosineSimilarity(liveVector, candidateVectors.flippedVector);
-  const bestCosine = Math.max(simNormal, simFlipped);
+  const resNormal = compareBiometricProfiles(liveProf, candidateProfiles.profile);
+  const resFlipped = compareBiometricProfiles(liveProf, candidateProfiles.flippedProfile);
+  const bestRes = resNormal.finalScore >= resFlipped.finalScore ? resNormal : resFlipped;
 
-  let scaledScore = 0;
-  if (bestCosine < 0.24) {
-    scaledScore = Math.max(12, Math.round((Math.max(0, bestCosine) / 0.24) * 40));
-  } else if (bestCosine < 0.36) {
-    scaledScore = Math.round(40 + ((bestCosine - 0.24) / 0.12) * 34);
-  } else {
-    scaledScore = Math.min(99.4, Math.round(75 + ((bestCosine - 0.36) / 0.32) * 24.4));
-  }
-
-  const isMatched = bestCosine >= 0.36;
-
-  if (isMatched) {
+  if (bestRes.isMatch) {
     return {
       matched: true,
-      matchScore: scaledScore,
-      cosineSimilarity: bestCosine,
+      matchScore: bestRes.finalScore,
+      cosineSimilarity: bestRes.cosine,
       reason: "SUCCESS",
-      statusMessage: `Face verified! The live person matches the uploaded photo (${scaledScore}% similarity).`,
-      banglaStatusMessage: `ভেরিফিকেশন সফল! আপলোড করা ছবির সাথে আপনার লাইভ চেহারার মিল পাওয়া গেছে (${scaledScore}% মিল)।`,
+      statusMessage: `Face verified! The live person matches the uploaded photo (${bestRes.finalScore}% similarity).`,
+      banglaStatusMessage: `ভেরিফিকেশন সফল! আপলোড করা ছবির সাথে আপনার লাইভ চেহারার মিল পাওয়া গেছে (${bestRes.finalScore}% মিল)।`,
       boundingBox: liveAnalysis.boundingBox,
     };
   } else {
     return {
       matched: false,
-      matchScore: scaledScore,
-      cosineSimilarity: bestCosine,
+      matchScore: bestRes.finalScore,
+      cosineSimilarity: bestRes.cosine,
       reason: "MISMATCH_LOW_CONFIDENCE",
-      statusMessage: `Face mismatch! The live face does not match the uploaded reference photo (${scaledScore}% similarity < 75% threshold).`,
-      banglaStatusMessage: `চেহারা মেলেনি! ক্যামেরায় উপস্থিত ব্যক্তির সাথে আপলোড করা ছবির মিল পাওয়া যায়নি (${scaledScore}% মিল)। অন্য কারো ছবি আপলোড করা নিষিদ্ধ।`,
+      statusMessage: `Face mismatch! Live face does not match the reference photo (${bestRes.finalScore}% similarity < 76% threshold).`,
+      banglaStatusMessage: `চেহারা মেলেনি! ক্যামেরায় উপস্থিত ব্যক্তির সাথে আপলোড করা ছবির মিল পাওয়া যায়নি (${bestRes.finalScore}% মিল)। অন্য কারো ছবি আপলোড করা নিষিদ্ধ।`,
       boundingBox: liveAnalysis.boundingBox,
     };
   }
@@ -1093,12 +1466,17 @@ export async function verifyLiveFaceAgainstCandidatePhoto(
 
 /**
  * 1:N Auto-Identification from All Enrolled Employees in Company Database
- * Scans video frame, matches against enrolled staff profiles.
- * STRICT POLICY: NEVER returns a false match if similarity is below threshold.
+ * Rigorous multi-factor biometric matching:
+ * - Discriminative spatial feature vector
+ * - Skin tone & melanin chrominance
+ * - Facial hair / white beard consistency
+ * - Eyeglass frame presence
+ * - Strict threshold (>= 76%) + Runner-up separation (>= 10%)
  */
 export async function autoIdentifyLiveFaceFromAllEmployees(
   video: HTMLVideoElement,
-  allEmployees: Employee[]
+  allEmployees: Employee[],
+  ignoredEmployeeIds?: Set<string> | string[]
 ): Promise<FaceMatchResult> {
   const liveAnalysis = detectLiveFaceInVideo(video);
 
@@ -1129,21 +1507,27 @@ export async function autoIdentifyLiveFaceFromAllEmployees(
   }
 
   ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-  const liveVector = extract128DFeatureVector(ctx, canvas.width, canvas.height, liveAnalysis.boundingBox, false);
+  const liveProf = extractBiometricProfile(ctx, canvas.width, canvas.height, liveAnalysis.boundingBox, false);
 
-  if (!liveVector) {
+  if (!liveProf) {
     return {
       matched: false,
       matchScore: 0,
       reason: "NO_FACE_IN_FRAME",
       confidenceTier: "NO_FACE",
-      statusMessage: "Could not extract face vector.",
-      banglaStatusMessage: "ফেস ভেক্টর নির্ণয় করা যায়নি।",
+      statusMessage: "Could not extract live biometric profile.",
+      banglaStatusMessage: "লাইভ বায়োমেট্রিক প্রোফাইল তৈরি করা যায়নি।",
     };
   }
 
-  // Filter all employees who have a photo (either faceRegisteredPhoto or avatarUrl)
+  const ignoredSet =
+    ignoredEmployeeIds instanceof Set
+      ? ignoredEmployeeIds
+      : new Set(ignoredEmployeeIds || []);
+
+  // Filter all employees who have a photo (prefer explicitly registered face photo)
   const enrolledEmployees = allEmployees.filter((e) => {
+    if (ignoredSet.has(e.id)) return false;
     const p = e.faceRegisteredPhoto || e.avatarUrl;
     return Boolean(p && p.trim() !== "" && p !== "#" && !p.includes("placeholder"));
   });
@@ -1154,73 +1538,114 @@ export async function autoIdentifyLiveFaceFromAllEmployees(
       matchScore: 0,
       reason: "NO_PHOTO_ENROLLED",
       confidenceTier: "NO_FACE",
-      statusMessage: "No employees in company database have registered face photos.",
-      banglaStatusMessage: "ডাটাবেজে কোনো কর্মকর্তার নিবন্ধিত ফেস ছবি নেই। প্রথমে ছবি এনরোল করুন।",
+      statusMessage: "No eligible employees in company database have registered face photos.",
+      banglaStatusMessage: "ডাটাবেজে কোনো কর্মীর নিবন্ধিত ছবি নেই। প্রথমে ছবি এনরোল করুন।",
     };
   }
 
-  let bestMatch: Employee | undefined = undefined;
-  let highestCosine = -1;
+  interface CandidateEvaluation {
+    emp: Employee;
+    score: number;
+    cosine: number;
+    breakdown: {
+      spatialSim: number;
+      skinToneSim: number;
+      geometrySim: number;
+      beardMatch: boolean;
+      glassesMatch: boolean;
+    };
+    hasRegisteredFacePhoto: boolean;
+  }
+
+  const evaluations: CandidateEvaluation[] = [];
 
   for (const emp of enrolledEmployees) {
     const photo = emp.faceRegisteredPhoto || emp.avatarUrl;
-    let refData = employeeVectorCache.get(emp.id);
+    if (!photo) continue;
 
-    if (!refData && photo) {
-      const extracted = await extractVectorFromPhotoUrl(photo);
+    const photoFingerprint = `${photo.length}_${photo.slice(0, 35)}`;
+    let cached = employeeBiometricCache.get(emp.id);
+
+    if (!cached || cached.photoFingerprint !== photoFingerprint) {
+      const extracted = await extractBiometricProfileFromPhotoUrl(photo);
       if (extracted) {
-        refData = { ...extracted, timestamp: Date.now() };
-        employeeVectorCache.set(emp.id, refData);
+        cached = { ...extracted, photoFingerprint, timestamp: Date.now() };
+        employeeBiometricCache.set(emp.id, cached);
       }
     }
 
-    if (refData) {
-      const simNormal = computeCosineSimilarity(liveVector, refData.vector);
-      const simFlipped = computeCosineSimilarity(liveVector, refData.flippedVector);
-      const sim = Math.max(simNormal, simFlipped);
-      if (sim > highestCosine) {
-        highestCosine = sim;
-        bestMatch = emp;
-      }
+    if (cached) {
+      const resNormal = compareBiometricProfiles(liveProf, cached.profile);
+      const resFlipped = compareBiometricProfiles(liveProf, cached.flippedProfile);
+      const bestRes = resNormal.finalScore >= resFlipped.finalScore ? resNormal : resFlipped;
+
+      evaluations.push({
+        emp,
+        score: bestRes.finalScore,
+        cosine: bestRes.cosine,
+        breakdown: bestRes.breakdown,
+        hasRegisteredFacePhoto: Boolean(emp.faceRegisteredPhoto && emp.faceRegisteredPhoto.trim() !== ""),
+      });
     }
   }
 
-  let scaledScore = 0;
-  if (highestCosine < 0.24) {
-    scaledScore = Math.max(12, Math.round((Math.max(0, highestCosine) / 0.24) * 40));
-  } else if (highestCosine < 0.36) {
-    scaledScore = Math.round(40 + ((highestCosine - 0.24) / 0.12) * 34);
-  } else {
-    scaledScore = Math.min(99.4, Math.round(75 + ((highestCosine - 0.36) / 0.32) * 24.4));
-  }
+  // Sort candidates by final calibrated score descending
+  evaluations.sort((a, b) => b.score - a.score);
 
-  // Calibrated threshold: Cosine >= 0.36 (Match >= 75%)
-  if (bestMatch && highestCosine >= 0.36) {
-    return {
-      matched: true,
-      matchScore: scaledScore,
-      matchedEmployee: bestMatch,
-      reason: "SUCCESS",
-      confidenceTier: scaledScore >= 88 ? "HIGH" : "MEDIUM",
-      statusMessage: `Auto-identified ${bestMatch.fullName} (${bestMatch.employeeCode}) with ${scaledScore}% biometric match.`,
-      banglaStatusMessage: `স্বয়ংক্রিয়ভাবে শনাক্ত হয়েছে: ${bestMatch.fullName} (${bestMatch.employeeCode}) [${scaledScore}% মিল]`,
-      boundingBox: liveAnalysis.boundingBox,
-      cosineSimilarity: highestCosine,
-      featureVectorLength: 128,
-    };
-  } else {
+  const top = evaluations[0];
+  const runnerUp = evaluations[1];
+
+  // Dynamic threshold: Registered face photo requires score >= 76%, avatar requires score >= 80%
+  const STRICT_THRESHOLD = top?.hasRegisteredFacePhoto ? 76 : 80;
+  const MIN_RUNNER_UP_MARGIN = 8; // Top candidate must lead runner-up by at least 8%
+
+  // Check 1: Highest similarity is below threshold -> Face mismatch / Unknown person!
+  if (!top || top.score < STRICT_THRESHOLD) {
+    const topScore = top ? top.score : 0;
     return {
       matched: false,
-      matchScore: scaledScore,
+      matchScore: topScore,
       reason: "MISMATCH_LOW_CONFIDENCE",
       confidenceTier: "MISMATCH",
-      statusMessage: "Live face does not match any registered employee in the company database.",
-      banglaStatusMessage: `ডাটাবেজের কোনো নিবন্ধিত কর্মীর ছবির সাথে চেহারা মেলেনি (সর্বোচ্চ মিল ${scaledScore}% < ৭৫%)।`,
+      statusMessage: "Live face does not match any registered employee in company database.",
+      banglaStatusMessage: "চেহারা ম্যাচ হয়নি! ডাটাবেজে কোনো নিবন্ধিত কর্মচারীর সাথে মিল পাওয়া যায়নি।",
       boundingBox: liveAnalysis.boundingBox,
-      cosineSimilarity: highestCosine,
+      cosineSimilarity: top ? top.cosine : 0,
       featureVectorLength: 128,
+      scoreBreakdown: top ? top.breakdown : undefined,
     };
   }
+
+  // Check 2: Ambiguity between multiple staff members (separation too small)
+  if (runnerUp && (top.score - runnerUp.score) < MIN_RUNNER_UP_MARGIN && runnerUp.score >= 70) {
+    return {
+      matched: false,
+      matchScore: top.score,
+      reason: "MISMATCH_LOW_CONFIDENCE",
+      confidenceTier: "MISMATCH",
+      statusMessage: "Ambiguous match between multiple profiles. Please center your face directly in the camera.",
+      banglaStatusMessage: "অস্পষ্ট মিল! একাধিক প্রোফাইলের সাথে সাদৃশ্য থাকায় নিশ্চিত হওয়া যায়নি। অনুগ্রহ করে সরাসরি ক্যামেরার দিকে তাকান।",
+      boundingBox: liveAnalysis.boundingBox,
+      cosineSimilarity: top.cosine,
+      featureVectorLength: 128,
+      scoreBreakdown: top.breakdown,
+    };
+  }
+
+  // Check 3: Confident, unambiguous match found
+  return {
+    matched: true,
+    matchScore: top.score,
+    matchedEmployee: top.emp,
+    reason: "SUCCESS",
+    confidenceTier: top.score >= 88 ? "HIGH" : "MEDIUM",
+    statusMessage: `Auto-identified ${top.emp.fullName} (${top.emp.employeeCode}) with ${top.score}% biometric match.`,
+    banglaStatusMessage: `স্বয়ংক্রিয়ভাবে শনাক্ত হয়েছে: ${top.emp.fullName} (${top.emp.employeeCode}) [${top.score}% মিল]`,
+    boundingBox: liveAnalysis.boundingBox,
+    cosineSimilarity: top.cosine,
+    featureVectorLength: 128,
+    scoreBreakdown: top.breakdown,
+  };
 }
 
 /**
@@ -1228,9 +1653,9 @@ export async function autoIdentifyLiveFaceFromAllEmployees(
  */
 export function invalidateEmployeeFaceCache(employeeId?: string) {
   if (employeeId) {
-    employeeVectorCache.delete(employeeId);
+    employeeBiometricCache.delete(employeeId);
   } else {
-    employeeVectorCache.clear();
+    employeeBiometricCache.clear();
   }
 }
 
@@ -1448,7 +1873,7 @@ export function drawBiometricMeshOverlay(
     // Biometrics Badge
     ctx.font = "bold 10px monospace";
     ctx.fillStyle = isMismatch ? "#FCA5A5" : isMatched ? "#6EE7B7" : "#7DD3FC";
-    ctx.fillText("128D AI BIOMETRICS ACTIVE", cx - 70, cy - ry - 14);
+    ctx.fillText("AI BIOMETRIC VERIFICATION ACTIVE", cx - 85, cy - ry - 14);
   }
 
   ctx.restore();

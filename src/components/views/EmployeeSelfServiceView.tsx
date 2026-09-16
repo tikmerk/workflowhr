@@ -130,8 +130,11 @@ export const EmployeeSelfServiceView: React.FC<EmployeeSelfServiceViewProps> = (
 
   // Apply Loan Modal State
   const [showLoanModal, setShowLoanModal] = useState(false);
+  const [loanCategory, setLoanCategory] = useState<"ADVANCE_SALARY" | "COMPANY_LOAN">("ADVANCE_SALARY");
   const [loanAmount, setLoanAmount] = useState(30000);
+  const [loanAdvanceMonths, setLoanAdvanceMonths] = useState(1);
   const [loanMonths, setLoanMonths] = useState(6);
+  const [loanRepaymentType, setLoanRepaymentType] = useState<"LUMP_SUM" | "MONTHLY_INSTALLMENT">("MONTHLY_INSTALLMENT");
   const [loanReason, setLoanReason] = useState("");
 
   // Profile & Designation Edit Modal State
@@ -241,18 +244,35 @@ export const EmployeeSelfServiceView: React.FC<EmployeeSelfServiceViewProps> = (
 
   const handleLoanSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const monthlyEmi = Math.round(loanAmount / loanMonths);
+    let installments = 1;
+    let monthlyEmi = loanAmount;
+
+    if (loanCategory === "ADVANCE_SALARY") {
+      installments = Math.max(1, loanAdvanceMonths);
+      monthlyEmi = Math.round(loanAmount / installments);
+    } else {
+      if (loanRepaymentType === "MONTHLY_INSTALLMENT") {
+        installments = Math.max(1, loanMonths);
+        monthlyEmi = Math.round(loanAmount / installments);
+      } else {
+        installments = 1;
+        monthlyEmi = loanAmount;
+      }
+    }
 
     onApplyLoan({
       employeeId: currentEmployee.id,
       employeeName: currentEmployee.fullName,
       branchName: currentEmployee.branchName,
+      category: loanCategory,
+      advanceDurationMonths: loanCategory === "ADVANCE_SALARY" ? loanAdvanceMonths : undefined,
+      repaymentType: loanCategory === "COMPANY_LOAN" ? loanRepaymentType : undefined,
       amount: loanAmount,
       monthlyEmi,
-      totalInstallments: loanMonths,
+      totalInstallments: installments,
       paidInstallments: 0,
       remainingAmount: loanAmount,
-      reason: loanReason || "Personal employee advance",
+      reason: loanReason || (loanCategory === "ADVANCE_SALARY" ? "অগ্রিম বেতন প্রয়োজন" : "ব্যক্তিগত জরুরি ঋণ"),
       applicationDate: new Date().toISOString().split("T")[0],
       status: "PENDING_APPROVAL",
     });
@@ -672,7 +692,11 @@ export const EmployeeSelfServiceView: React.FC<EmployeeSelfServiceViewProps> = (
               </div>
               <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/50">
                 <span className="text-slate-500 dark:text-slate-400 block text-[11px]">National ID (NID)</span>
-                <span className="font-bold text-slate-900 dark:text-slate-200">{currentEmployee.nidNumber}</span>
+                <span className="font-bold text-slate-900 dark:text-slate-200">
+                  {currentEmployee.nidNumber && currentEmployee.nidNumber.trim() !== ""
+                    ? currentEmployee.nidNumber
+                    : "তথ্য দেওয়া হয়নি (Not provided)"}
+                </span>
               </div>
               <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/50">
                 <span className="text-slate-500 dark:text-slate-400 block text-[11px]">Blood Group</span>
@@ -686,7 +710,11 @@ export const EmployeeSelfServiceView: React.FC<EmployeeSelfServiceViewProps> = (
               </div>
               <div className="sm:col-span-2 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/50">
                 <span className="text-slate-500 dark:text-slate-400 block text-[11px]">Present Residential Address</span>
-                <span className="font-medium text-slate-800 dark:text-slate-200">{currentEmployee.presentAddress}</span>
+                <span className="font-medium text-slate-800 dark:text-slate-200">
+                  {currentEmployee.presentAddress && currentEmployee.presentAddress.trim() !== ""
+                    ? currentEmployee.presentAddress
+                    : "তথ্য দেওয়া হয়নি (Not provided)"}
+                </span>
               </div>
             </div>
 
@@ -1366,38 +1394,115 @@ export const EmployeeSelfServiceView: React.FC<EmployeeSelfServiceViewProps> = (
 
             <form onSubmit={handleLoanSubmit} className="space-y-3 text-xs">
               <div>
-                <label className="block text-slate-600 dark:text-slate-400 mb-1">Loan Amount (৳ BDT)</label>
+                <label className="block text-slate-600 dark:text-slate-400 mb-1 font-semibold">আবেদনের ধরন (Category) *</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setLoanCategory("ADVANCE_SALARY")}
+                    className={`p-2.5 rounded-xl border text-left cursor-pointer transition-all ${
+                      loanCategory === "ADVANCE_SALARY"
+                        ? "bg-teal-500/15 border-teal-500 text-teal-900 dark:text-teal-200 font-bold ring-1 ring-teal-500"
+                        : "bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300"
+                    }`}
+                  >
+                    <div className="text-xs">অ্যাডভান্স বেতন</div>
+                    <div className="text-[10px] text-slate-500 dark:text-slate-400 font-normal">
+                      পরবর্তী মাসের বেতন থেকে সমন্বয়
+                    </div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setLoanCategory("COMPANY_LOAN")}
+                    className={`p-2.5 rounded-xl border text-left cursor-pointer transition-all ${
+                      loanCategory === "COMPANY_LOAN"
+                        ? "bg-blue-500/15 border-blue-500 text-blue-900 dark:text-blue-200 font-bold ring-1 ring-blue-500"
+                        : "bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300"
+                    }`}
+                  >
+                    <div className="text-xs">বসের / কোম্পানি লোন</div>
+                    <div className="text-[10px] text-slate-500 dark:text-slate-400 font-normal">
+                      বেতনের বাইরে সরাসরি ফেরত
+                    </div>
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-slate-600 dark:text-slate-400 mb-1 font-semibold">
+                  {loanCategory === "ADVANCE_SALARY" ? "অগ্রিম বেতনের পরিমাণ (৳ BDT)" : "ঋণের পরিমাণ (৳ BDT)"}
+                </label>
                 <input
                   type="number"
                   value={loanAmount}
                   onChange={(e) => setLoanAmount(Number(e.target.value))}
-                  step={5000}
-                  className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white focus:outline-none focus:border-teal-500"
+                  step={1000}
+                  min={1000}
+                  className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white font-mono font-bold focus:outline-none focus:border-teal-500"
                   required
                 />
               </div>
 
-              <div>
-                <label className="block text-slate-600 dark:text-slate-400 mb-1">Repayment Tenor (Months)</label>
-                <select
-                  value={loanMonths}
-                  onChange={(e) => setLoanMonths(Number(e.target.value))}
-                  className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white focus:outline-none focus:border-teal-500"
-                >
-                  <option value={3}>3 Months (EMI: ৳{Math.round(loanAmount / 3)})</option>
-                  <option value={6}>6 Months (EMI: ৳{Math.round(loanAmount / 6)})</option>
-                  <option value={10}>10 Months (EMI: ৳{Math.round(loanAmount / 10)})</option>
-                  <option value={12}>12 Months (EMI: ৳{Math.round(loanAmount / 12)})</option>
-                </select>
-              </div>
+              {loanCategory === "ADVANCE_SALARY" ? (
+                <div>
+                  <label className="block text-slate-600 dark:text-slate-400 mb-1 font-semibold">
+                    কত মাসে বেতন থেকে কর্তন হবে? (Advance Duration)
+                  </label>
+                  <select
+                    value={loanAdvanceMonths}
+                    onChange={(e) => setLoanAdvanceMonths(Number(e.target.value))}
+                    className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white font-bold focus:outline-none focus:border-teal-500"
+                  >
+                    <option value={1}>১ মাস (পরের মাসের বেতনে এককালীন ৳{loanAmount.toLocaleString()} কর্তন)</option>
+                    <option value={2}>২ মাস (প্রতি মাসে ৳{Math.round(loanAmount / 2).toLocaleString()} করে কর্তন)</option>
+                    <option value={3}>৩ মাস (প্রতি মাসে ৳{Math.round(loanAmount / 3).toLocaleString()} করে কর্তন)</option>
+                    <option value={6}>৬ মাস (প্রতি মাসে ৳{Math.round(loanAmount / 6).toLocaleString()} করে কর্তন)</option>
+                  </select>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-slate-600 dark:text-slate-400 mb-1 font-semibold">
+                      পরিশোধের ধরন (Repayment Method)
+                    </label>
+                    <select
+                      value={loanRepaymentType}
+                      onChange={(e) => setLoanRepaymentType(e.target.value as any)}
+                      className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white font-bold focus:outline-none focus:border-blue-500"
+                    >
+                      <option value="LUMP_SUM">এককালীন সরাসরি বসের কাছে ফেরত (বেতনের বাইরে)</option>
+                      <option value="MONTHLY_INSTALLMENT">মাসিক কিস্তিতে অফিসকে ফেরত</option>
+                    </select>
+                  </div>
+
+                  {loanRepaymentType === "MONTHLY_INSTALLMENT" && (
+                    <div>
+                      <label className="block text-slate-600 dark:text-slate-400 mb-1 font-semibold">কিস্তির মেয়াদ (মাস)</label>
+                      <select
+                        value={loanMonths}
+                        onChange={(e) => setLoanMonths(Number(e.target.value))}
+                        className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white font-bold focus:outline-none focus:border-blue-500"
+                      >
+                        <option value={3}>৩ মাস (কিস্তি: ৳{Math.round(loanAmount / 3).toLocaleString()})</option>
+                        <option value={6}>৬ মাস (কিস্তি: ৳{Math.round(loanAmount / 6).toLocaleString()})</option>
+                        <option value={10}>১০ মাস (কিস্তি: ৳{Math.round(loanAmount / 10).toLocaleString()})</option>
+                        <option value={12}>১২ মাস (কিস্তি: ৳{Math.round(loanAmount / 12).toLocaleString()})</option>
+                      </select>
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div>
-                <label className="block text-slate-600 dark:text-slate-400 mb-1">Reason for Loan Request</label>
+                <label className="block text-slate-600 dark:text-slate-400 mb-1 font-semibold">আবেদনের কারণ বা উদ্দেশ্য</label>
                 <textarea
-                  rows={3}
+                  rows={2}
                   value={loanReason}
                   onChange={(e) => setLoanReason(e.target.value)}
-                  placeholder="Specify purpose of loan..."
+                  placeholder={
+                    loanCategory === "ADVANCE_SALARY"
+                      ? "অগ্রিম বেতনের কারণ লিখুন (যেমন: বাড়ি ভাড়া, পারিবারিক খরচ)..."
+                      : "ব্যক্তিগত লোনের কারণ লিখুন..."
+                  }
                   className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white focus:outline-none focus:border-teal-500"
                   required
                 />

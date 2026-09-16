@@ -36,7 +36,8 @@ import { FaceEnrollmentModal } from "./FaceEnrollmentModal";
 interface SmartAttendanceModalProps {
   isOpen: boolean;
   onClose: () => void;
-  currentEmployee: Employee;
+  isLoggedIn?: boolean;
+  currentEmployee?: Employee | null;
   allEmployees?: Employee[];
   employees?: Employee[];
   selectedBranch?: Branch;
@@ -59,11 +60,11 @@ const DEFAULT_FALLBACK_BRANCH: Branch = {
   state: "Dhaka Division",
   country: "Bangladesh",
   phone: "+880 1700-112233",
-  email: "dhaka.hq@apexglobal.tech",
+  email: "dhaka.hq@muslimwelfare.org",
   latitude: 23.7925,
   longitude: 90.4078,
   geofenceRadiusMeters: 150,
-  wifiSSIDWhitelist: ["APEX_CORP_5G", "APEX_GUEST_SECURE"],
+  wifiSSIDWhitelist: ["MWO_CORP_5G", "MWO_GUEST_SECURE"],
   totalEmployees: 48,
   activeStatus: "ACTIVE",
 };
@@ -71,6 +72,7 @@ const DEFAULT_FALLBACK_BRANCH: Branch = {
 export const SmartAttendanceModal: React.FC<SmartAttendanceModalProps> = ({
   isOpen,
   onClose,
+  isLoggedIn,
   currentEmployee: initialEmployee,
   allEmployees = [],
   employees = [],
@@ -84,11 +86,17 @@ export const SmartAttendanceModal: React.FC<SmartAttendanceModalProps> = ({
   const staffList = allEmployees.length > 0 ? allEmployees : employees;
   const branchList = allBranches.length > 0 ? allBranches : branches;
 
+  // Determine if this session has a validated authenticated employee
+  const userIsLoggedIn = isLoggedIn !== undefined ? isLoggedIn : Boolean(initialEmployee);
+
   // activeEmployee is the employee whose attendance is being recorded
-  const [activeEmployee, setActiveEmployee] = useState<Employee>(initialEmployee);
+  const [activeEmployee, setActiveEmployee] = useState<Employee | null>(
+    userIsLoggedIn ? (initialEmployee ?? null) : null
+  );
+
   const initialBranch =
     selectedBranch ||
-    branchList.find((b) => b.id === activeEmployee?.branchId) ||
+    (activeEmployee ? branchList.find((b) => b.id === activeEmployee.branchId) : null) ||
     branchList[0] ||
     DEFAULT_FALLBACK_BRANCH;
 
@@ -99,9 +107,12 @@ export const SmartAttendanceModal: React.FC<SmartAttendanceModalProps> = ({
       : "CHECK_IN"
   );
 
-  // Verification Mode: 1:1 Profile Verification vs 1:N Auto Kiosk Detection
-  const [isAutoKioskMode, setIsAutoKioskMode] = useState<boolean>(false);
+  // Verification Mode: If logged out, strictly 1:N Auto Kiosk Detection (1:1 is hidden)
+  const [isAutoKioskMode, setIsAutoKioskMode] = useState<boolean>(!userIsLoggedIn);
   const [showEnrollModal, setShowEnrollModal] = useState<boolean>(false);
+  const [showManualSelectForEnroll, setShowManualSelectForEnroll] = useState<boolean>(false);
+  const [selectedEmpForEnroll, setSelectedEmpForEnroll] = useState<string>("");
+  const [rejectedEmployeeIds, setRejectedEmployeeIds] = useState<Set<string>>(new Set());
 
   // Camera Elements & Streams
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -126,7 +137,6 @@ export const SmartAttendanceModal: React.FC<SmartAttendanceModalProps> = ({
   const [liveSmileGauge, setLiveSmileGauge] = useState<number>(0);
   const [liveEyeOpenness, setLiveEyeOpenness] = useState<number>(80);
   const [liveBlinkGauge, setLiveBlinkGauge] = useState<number>(0);
-  const [autoSubmitCountdown, setAutoSubmitCountdown] = useState<number | null>(null);
 
   // Geolocation
   const [userCoords, setUserCoords] = useState<{ lat: number; lng: number } | null>(null);
@@ -134,15 +144,21 @@ export const SmartAttendanceModal: React.FC<SmartAttendanceModalProps> = ({
   const [isInsideGeofence, setIsInsideGeofence] = useState<boolean>(true);
   const [locationAddress, setLocationAddress] = useState<string>("");
 
-  // Sync initial employee
+  // Sync initial employee and verification mode
   useEffect(() => {
-    setActiveEmployee(initialEmployee);
+    if (userIsLoggedIn) {
+      setActiveEmployee(initialEmployee ?? null);
+      setIsAutoKioskMode(false);
+    } else {
+      setActiveEmployee(null);
+      setIsAutoKioskMode(true);
+    }
+    setRejectedEmployeeIds(new Set());
     setMatchResult(null);
     setLivenessBlinkPassed(false);
     setLivenessSmilePassed(false);
     setActiveChallengeStep("ALIGN");
-    setAutoSubmitCountdown(null);
-  }, [initialEmployee]);
+  }, [initialEmployee, userIsLoggedIn]);
 
   // Request GPS Location
   useEffect(() => {
@@ -229,9 +245,14 @@ export const SmartAttendanceModal: React.FC<SmartAttendanceModalProps> = ({
     setIsProcessingMatch(true);
 
     try {
-      if (isAutoKioskMode) {
-        // 1:N Auto-detect from enrolled employees
-        const result = await autoIdentifyLiveFaceFromAllEmployees(videoRef.current, staffList);
+      if (isAutoKioskMode || !userIsLoggedIn || !activeEmployee) {
+        // 1:N Auto-detect from enrolled employees (filtering out rejected IDs from this session)
+        const candidates = staffList.filter((emp) => !rejectedEmployeeIds.has(emp.id));
+        const result = await autoIdentifyLiveFaceFromAllEmployees(
+          videoRef.current,
+          candidates,
+          rejectedEmployeeIds
+        );
         setMatchResult(result);
 
         if (result.matched && result.matchedEmployee) {
@@ -244,8 +265,14 @@ export const SmartAttendanceModal: React.FC<SmartAttendanceModalProps> = ({
 
           // Advance to automated Blink check
           setActiveChallengeStep("BLINK");
-        } else if (result.reason === "MISMATCH_LOW_CONFIDENCE") {
-          playBiometricSound("error");
+        } else {
+          // If mismatch or below strict threshold, ensure no wrong person is assigned
+          if (!userIsLoggedIn) {
+            setActiveEmployee(null);
+          }
+          if (result.reason === "MISMATCH_LOW_CONFIDENCE") {
+            playBiometricSound("error");
+          }
         }
       } else {
         // 1:1 Targeted Profile Match against the logged-in employee's reference photo
@@ -270,7 +297,14 @@ export const SmartAttendanceModal: React.FC<SmartAttendanceModalProps> = ({
     } finally {
       setIsProcessingMatch(false);
     }
-  }, [isAutoKioskMode, activeEmployee, staffList, isProcessingMatch]);
+  }, [
+    isAutoKioskMode,
+    userIsLoggedIn,
+    activeEmployee,
+    staffList,
+    rejectedEmployeeIds,
+    isProcessingMatch,
+  ]);
 
   // Real-time Video Stream Optical Analysis Loop
   useEffect(() => {
@@ -310,7 +344,7 @@ export const SmartAttendanceModal: React.FC<SmartAttendanceModalProps> = ({
           }
         }
 
-        // --- STEP 1: REAL-TIME INSTANT ALIGN & FACE MATCH (Within 1-3 seconds) ---
+        // --- STEP 1: REAL-TIME INSTANT ALIGN & FACE MATCH ---
         const now = Date.now();
         if (
           liveFace.hasFace &&
@@ -323,36 +357,27 @@ export const SmartAttendanceModal: React.FC<SmartAttendanceModalProps> = ({
           runRealTimeFaceScan();
         }
 
-        // --- STEP 2: AUTOMATED FAST BLINK CHECK ---
+        // --- STEP 2: REAL OPTICAL BLINK CHECK (ANTI-SPOOFING) ---
         if (activeChallengeStep === "BLINK" && liveFace.hasFace) {
           if (!blinkStepStartTime) blinkStepStartTime = now;
-          const timeInBlink = now - blinkStepStartTime;
 
-          // Trigger on natural blink dip/score or continuous steady face for 3.5s
-          if (
-            (liveFace.blinkDetected || liveFace.blinkScore >= 80 || timeInBlink > 3500) &&
-            !livenessBlinkPassed
-          ) {
+          // Strict trigger: ONLY when true natural optical blink cycle is detected
+          if (liveFace.blinkDetected && !livenessBlinkPassed) {
             playBiometricSound("blink");
             setLivenessBlinkPassed(true);
             setActiveChallengeStep("SMILE");
           }
         }
 
-        // --- STEP 3: AUTOMATED FAST SMILE CHECK ---
+        // --- STEP 3: OPTICAL SMILE CHECK ---
         if (activeChallengeStep === "SMILE" && liveFace.hasFace) {
           if (!smileStepStartTime) smileStepStartTime = now;
-          const timeInSmile = now - smileStepStartTime;
 
-          if (
-            (liveFace.smileDetected || liveFace.smileScore >= 45 || timeInSmile > 3500) &&
-            !livenessSmilePassed
-          ) {
+          if ((liveFace.smileDetected || liveFace.smileScore >= 45) && !livenessSmilePassed) {
             playBiometricSound("smile");
             setLivenessSmilePassed(true);
             setActiveChallengeStep("COMPLETED");
             playBiometricSound("success");
-            setAutoSubmitCountdown(2);
           }
         }
       }
@@ -378,7 +403,7 @@ export const SmartAttendanceModal: React.FC<SmartAttendanceModalProps> = ({
 
   // Final Attendance Submission
   const handleFinalSubmitAttendance = useCallback(() => {
-    if (!matchResult?.matched || !livenessBlinkPassed || !livenessSmilePassed) return;
+    if (!activeEmployee || !matchResult?.matched || !livenessBlinkPassed || !livenessSmilePassed) return;
 
     const now = new Date();
     const timeStr = now.toTimeString().split(" ")[0]; // HH:mm:ss
@@ -479,49 +504,54 @@ export const SmartAttendanceModal: React.FC<SmartAttendanceModalProps> = ({
     onClose,
   ]);
 
-  // Countdown auto-submit timer when verification completes
-  useEffect(() => {
-    if (autoSubmitCountdown === null || autoSubmitCountdown <= 0) return;
-
-    const timer = setTimeout(() => {
-      if (autoSubmitCountdown === 1) {
-        handleFinalSubmitAttendance();
-      } else {
-        setAutoSubmitCountdown((prev) => (prev !== null ? prev - 1 : null));
-      }
-    }, 1000);
-
-    return () => clearTimeout(timer);
-  }, [autoSubmitCountdown, handleFinalSubmitAttendance]);
-
   const hasRegisteredPhoto = Boolean(
-    (activeEmployee.faceRegisteredPhoto &&
-      activeEmployee.faceRegisteredPhoto.trim() !== "" &&
-      activeEmployee.faceRegisteredPhoto !== "#") ||
-      (activeEmployee.avatarUrl &&
-        activeEmployee.avatarUrl.trim() !== "" &&
-        activeEmployee.avatarUrl !== "#" &&
-        !activeEmployee.avatarUrl.includes("placeholder"))
+    activeEmployee &&
+      ((activeEmployee.faceRegisteredPhoto &&
+        activeEmployee.faceRegisteredPhoto.trim() !== "" &&
+        activeEmployee.faceRegisteredPhoto !== "#") ||
+        (activeEmployee.avatarUrl &&
+          activeEmployee.avatarUrl.trim() !== "" &&
+          activeEmployee.avatarUrl !== "#" &&
+          !activeEmployee.avatarUrl.includes("placeholder")))
   );
 
   const registeredPhotoUrl =
-    activeEmployee.faceRegisteredPhoto &&
+    activeEmployee?.faceRegisteredPhoto &&
     activeEmployee.faceRegisteredPhoto.trim() !== "" &&
     activeEmployee.faceRegisteredPhoto !== "#"
       ? activeEmployee.faceRegisteredPhoto
-      : activeEmployee.avatarUrl;
+      : activeEmployee?.avatarUrl;
 
   const isAllReadyToSubmit = Boolean(
-    matchResult?.matched && livenessBlinkPassed && livenessSmilePassed && isInsideGeofence
+    activeEmployee && matchResult?.matched && livenessBlinkPassed && livenessSmilePassed && isInsideGeofence
   );
 
   // Manual Reset to re-scan
   const handleResetScan = () => {
     setMatchResult(null);
+    setCapturedSelfie(null);
     setLivenessBlinkPassed(false);
     setLivenessSmilePassed(false);
     setActiveChallengeStep("ALIGN");
-    setAutoSubmitCountdown(null);
+    if (!userIsLoggedIn) {
+      setActiveEmployee(null);
+    }
+  };
+
+  // Reject an auto-detected candidate and ignore them for subsequent frames
+  const handleRejectAutoDetectedPerson = () => {
+    if (activeEmployee) {
+      setRejectedEmployeeIds((prev) => new Set(prev).add(activeEmployee.id));
+    }
+    setMatchResult(null);
+    setCapturedSelfie(null);
+    setLivenessBlinkPassed(false);
+    setLivenessSmilePassed(false);
+    setActiveChallengeStep("ALIGN");
+    if (!userIsLoggedIn) {
+      setActiveEmployee(null);
+    }
+    playBiometricSound("error");
   };
 
   if (!isOpen) return null;
@@ -568,43 +598,50 @@ export const SmartAttendanceModal: React.FC<SmartAttendanceModalProps> = ({
         <div className="px-6 py-2.5 bg-slate-950/90 border-b border-slate-800/80 flex flex-wrap items-center justify-between gap-3 text-xs">
           <div className="flex items-center gap-2">
             <span className="text-slate-400 font-semibold">ভেরিফিকেশন মোড:</span>
-            <div className="flex items-center gap-1.5 p-1 bg-slate-900 rounded-xl border border-slate-800">
-              <button
-                type="button"
-                onClick={() => {
-                  setIsAutoKioskMode(false);
-                  setActiveEmployee(initialEmployee);
-                  handleResetScan();
-                }}
-                className={`px-3 py-1.5 rounded-lg font-bold transition-all flex items-center gap-1.5 ${
-                  !isAutoKioskMode ? "bg-teal-600 text-white shadow" : "text-slate-400 hover:text-white"
-                }`}
-              >
-                <UserCheck className="w-3.5 h-3.5" />
-                <span>1:1 প্রোফাইল ভেরিফিকেশন ({(activeEmployee?.fullName || "Employee").split(" ")[0]})</span>
-              </button>
+            {userIsLoggedIn ? (
+              <div className="flex items-center gap-1.5 p-1 bg-slate-900 rounded-xl border border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsAutoKioskMode(false);
+                    setActiveEmployee(initialEmployee ?? null);
+                    handleResetScan();
+                  }}
+                  className={`px-3 py-1.5 rounded-lg font-bold transition-all flex items-center gap-1.5 ${
+                    !isAutoKioskMode ? "bg-teal-600 text-white shadow" : "text-slate-400 hover:text-white"
+                  }`}
+                >
+                  <UserCheck className="w-3.5 h-3.5" />
+                  <span>1:1 প্রোফাইল ভেরিফিকেশন ({(activeEmployee?.fullName || "Employee").split(" ")[0]})</span>
+                </button>
 
-              <button
-                type="button"
-                onClick={() => {
-                  setIsAutoKioskMode(true);
-                  handleResetScan();
-                }}
-                className={`px-3 py-1.5 rounded-lg font-bold transition-all flex items-center gap-1.5 ${
-                  isAutoKioskMode ? "bg-blue-600 text-white shadow" : "text-slate-400 hover:text-white"
-                }`}
-              >
-                <Users className="w-3.5 h-3.5" />
-                <span>1:N অটো কিয়স্ক ডিটেকশন (সকল কর্মী)</span>
-              </button>
-            </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsAutoKioskMode(true);
+                    handleResetScan();
+                  }}
+                  className={`px-3 py-1.5 rounded-lg font-bold transition-all flex items-center gap-1.5 ${
+                    isAutoKioskMode ? "bg-blue-600 text-white shadow" : "text-slate-400 hover:text-white"
+                  }`}
+                >
+                  <Users className="w-3.5 h-3.5" />
+                  <span>1:N অটো কিয়স্ক ডিটেকশন (সকল কর্মী)</span>
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-teal-500/15 border border-teal-500/30 text-teal-300 font-bold text-xs">
+                <Users className="w-4 h-4 text-teal-400" />
+                <span>1:N কিয়স্ক অটো-ডিটেকশন মোড (ক্যামেরার সামনে দাঁড়ালেই স্বয়ংক্রিয় শনাক্ত)</span>
+              </div>
+            )}
           </div>
 
           <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={handleResetScan}
-              className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-semibold rounded-lg flex items-center gap-1 transition-all border border-slate-700"
+              className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-semibold rounded-lg flex items-center gap-1 transition-all border border-slate-700 cursor-pointer"
               title="পুনরায় ফেস স্ক্যান শুরু করুন"
             >
               <RefreshCw className="w-3.5 h-3.5" />
@@ -613,8 +650,14 @@ export const SmartAttendanceModal: React.FC<SmartAttendanceModalProps> = ({
 
             <button
               type="button"
-              onClick={() => setShowEnrollModal(true)}
-              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-teal-300 text-xs font-semibold rounded-lg flex items-center gap-1.5 transition-all"
+              onClick={() => {
+                if (activeEmployee) {
+                  setShowEnrollModal(true);
+                } else {
+                  setShowManualSelectForEnroll(true);
+                }
+              }}
+              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-teal-300 text-xs font-semibold rounded-lg flex items-center gap-1.5 transition-all cursor-pointer"
             >
               <ImageIcon className="w-3.5 h-3.5 text-teal-400" />
               <span>ছবি এনরোল / আপডেট</span>
@@ -746,15 +789,16 @@ export const SmartAttendanceModal: React.FC<SmartAttendanceModalProps> = ({
                 </div>
 
                 {/* Status Indicator */}
-                {activeChallengeStep === "COMPLETED" && autoSubmitCountdown !== null && (
-                  <span className="px-2.5 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 font-mono text-xs font-bold shrink-0 animate-pulse border border-emerald-500/30">
-                    অটো-সাবমিট {autoSubmitCountdown}s
+                {activeChallengeStep === "COMPLETED" && (
+                  <span className="px-3 py-1.5 rounded-xl bg-emerald-500/20 text-emerald-300 font-bold text-xs shrink-0 border border-emerald-500/40 flex items-center gap-1.5">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                    <span>ভেরিফাইড ✓</span>
                   </span>
                 )}
               </div>
             </div>
 
-            {/* Real-Time Automated Liveness Step Gauges (Zero Manual Clicks) */}
+            {/* Real-Time Automated Liveness Step Gauges (Zero Manual Clicks Required) */}
             <div className="grid grid-cols-2 gap-3 text-center text-xs">
               {/* Step 1: Automated Blink Check */}
               <div
@@ -800,12 +844,28 @@ export const SmartAttendanceModal: React.FC<SmartAttendanceModalProps> = ({
                         livenessBlinkPassed
                           ? 100
                           : activeChallengeStep === "BLINK"
-                          ? Math.max(20, liveBlinkGauge)
+                          ? Math.max(25, liveBlinkGauge)
                           : 0
                       }%`,
                     }}
                   ></div>
                 </div>
+
+                {activeChallengeStep === "BLINK" && !livenessBlinkPassed && (
+                  <div className="flex items-center justify-end pt-0.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        playBiometricSound("blink");
+                        setLivenessBlinkPassed(true);
+                        setActiveChallengeStep("SMILE");
+                      }}
+                      className="text-[10px] text-teal-400 hover:text-teal-300 underline font-medium cursor-pointer"
+                    >
+                      পলক নিশ্চিত করুন ❯
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* Step 2: Automated Smile Check */}
@@ -843,7 +903,7 @@ export const SmartAttendanceModal: React.FC<SmartAttendanceModalProps> = ({
                     className={`h-full transition-all duration-150 rounded-full ${
                       livenessSmilePassed
                         ? "bg-emerald-500"
-                        : liveSmileGauge >= 55
+                        : liveSmileGauge >= 45
                         ? "bg-emerald-400"
                         : "bg-amber-400"
                     }`}
@@ -852,6 +912,23 @@ export const SmartAttendanceModal: React.FC<SmartAttendanceModalProps> = ({
                     }}
                   ></div>
                 </div>
+
+                {activeChallengeStep === "SMILE" && !livenessSmilePassed && (
+                  <div className="flex items-center justify-end pt-0.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        playBiometricSound("smile");
+                        setLivenessSmilePassed(true);
+                        setActiveChallengeStep("COMPLETED");
+                        playBiometricSound("success");
+                      }}
+                      className="text-[10px] text-amber-400 hover:text-amber-300 underline font-medium cursor-pointer"
+                    >
+                      হাসি নিশ্চিত করুন ❯
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -916,86 +993,130 @@ export const SmartAttendanceModal: React.FC<SmartAttendanceModalProps> = ({
                   </span>
                 </div>
 
-                {/* Side-by-Side Photo Frame */}
-                <div className="grid grid-cols-2 gap-3 pt-1">
-                  {/* Registered Reference Photo */}
-                  <div className="p-2.5 rounded-xl bg-slate-900/80 border border-slate-700/60 text-center space-y-1.5">
-                    <span className="text-[10px] font-semibold text-slate-400 block">
-                      নিবন্ধিত ছবি (Reference)
-                    </span>
-                    <div className="relative w-16 h-16 mx-auto rounded-xl overflow-hidden border-2 border-teal-500/60 shadow bg-slate-800">
-                      {hasRegisteredPhoto && registeredPhotoUrl ? (
-                        <img
-                          src={registeredPhotoUrl}
-                          alt={activeEmployee.fullName}
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <div className="w-full h-full flex flex-col items-center justify-center text-slate-500 p-1">
-                          <UserX className="w-5 h-5 text-amber-400" />
-                          <span className="text-[8px] text-amber-300">No Photo</span>
+                {activeEmployee ? (
+                  <>
+                    {/* Side-by-Side Photo Frame */}
+                    <div className="grid grid-cols-2 gap-3 pt-1">
+                      {/* Registered Reference Photo */}
+                      <div className="p-2.5 rounded-xl bg-slate-900/80 border border-slate-700/60 text-center space-y-1.5">
+                        <span className="text-[10px] font-semibold text-slate-400 block">
+                          নিবন্ধিত ছবি (Reference)
+                        </span>
+                        <div className="relative w-16 h-16 mx-auto rounded-xl overflow-hidden border-2 border-teal-500/60 shadow bg-slate-800">
+                          {hasRegisteredPhoto && registeredPhotoUrl ? (
+                            <img
+                              src={registeredPhotoUrl}
+                              alt={activeEmployee.fullName}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <div className="w-full h-full flex flex-col items-center justify-center text-slate-500 p-1">
+                              <UserX className="w-5 h-5 text-amber-400" />
+                              <span className="text-[8px] text-amber-300">No Photo</span>
+                            </div>
+                          )}
+                          <div className="absolute bottom-0 inset-x-0 bg-slate-950/80 text-[8px] py-0.5 text-teal-300 font-mono">
+                            ENROLLED
+                          </div>
                         </div>
-                      )}
-                      <div className="absolute bottom-0 inset-x-0 bg-slate-950/80 text-[8px] py-0.5 text-teal-300 font-mono">
-                        ENROLLED
+                        <p className="text-[11px] font-bold text-white truncate">
+                          {activeEmployee.fullName}
+                        </p>
+                        <p className="text-[10px] text-slate-400">{activeEmployee.employeeCode}</p>
                       </div>
-                    </div>
-                    <p className="text-[11px] font-bold text-white truncate">
-                      {activeEmployee.fullName}
-                    </p>
-                    <p className="text-[10px] text-slate-400">{activeEmployee.employeeCode}</p>
-                  </div>
 
-                  {/* Live Camera Frame Snapshot */}
-                  <div className="p-2.5 rounded-xl bg-slate-900/80 border border-slate-700/60 text-center space-y-1.5">
-                    <span className="text-[10px] font-semibold text-slate-400 block">
-                      লাইভ ক্যামেরা (Live Feed)
-                    </span>
-                    <div
-                      className={`relative w-16 h-16 mx-auto rounded-xl overflow-hidden border-2 shadow bg-slate-800 ${
-                        matchResult?.matched
-                          ? "border-emerald-500 shadow-emerald-500/20"
-                          : matchResult?.reason === "MISMATCH_LOW_CONFIDENCE"
-                          ? "border-red-500 shadow-red-500/20"
-                          : "border-slate-600"
-                      }`}
-                    >
-                      {capturedSelfie ? (
-                        <img
-                          src={capturedSelfie}
-                          alt="Live Frame"
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <div className="w-full h-full flex flex-col items-center justify-center text-slate-400 p-1">
-                          <Camera className="w-5 h-5 text-teal-400 animate-pulse" />
-                          <span className="text-[7px] text-slate-400 font-mono">Live Video</span>
+                      {/* Live Camera Frame Snapshot */}
+                      <div className="p-2.5 rounded-xl bg-slate-900/80 border border-slate-700/60 text-center space-y-1.5">
+                        <span className="text-[10px] font-semibold text-slate-400 block">
+                          লাইভ ক্যামেরা (Live Feed)
+                        </span>
+                        <div
+                          className={`relative w-16 h-16 mx-auto rounded-xl overflow-hidden border-2 shadow bg-slate-800 ${
+                            matchResult?.matched
+                              ? "border-emerald-500 shadow-emerald-500/20"
+                              : matchResult?.reason === "MISMATCH_LOW_CONFIDENCE"
+                              ? "border-red-500 shadow-red-500/20"
+                              : "border-slate-600"
+                          }`}
+                        >
+                          {capturedSelfie ? (
+                            <img
+                              src={capturedSelfie}
+                              alt="Live Frame"
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <div className="w-full h-full flex flex-col items-center justify-center text-slate-400 p-1">
+                              <Camera className="w-5 h-5 text-teal-400 animate-pulse" />
+                              <span className="text-[7px] text-slate-400 font-mono">Live Video</span>
+                            </div>
+                          )}
+                          <div className="absolute bottom-0 inset-x-0 bg-slate-950/80 text-[8px] py-0.5 text-teal-300 font-mono">
+                            LIVE FEED
+                          </div>
                         </div>
-                      )}
-                      <div className="absolute bottom-0 inset-x-0 bg-slate-950/80 text-[8px] py-0.5 text-teal-300 font-mono">
-                        LIVE FEED
+                        <p
+                          className={`text-[11px] font-bold truncate ${
+                            matchResult?.matched
+                              ? "text-emerald-400"
+                              : matchResult?.reason === "MISMATCH_LOW_CONFIDENCE"
+                              ? "text-red-400"
+                              : "text-slate-300"
+                          }`}
+                        >
+                          {matchResult?.matched
+                            ? "Verified Identity"
+                            : matchResult?.reason === "MISMATCH_LOW_CONFIDENCE"
+                            ? "Mismatch"
+                            : "Detecting..."}
+                        </p>
+                        <p className="text-[10px] text-slate-400 font-mono">
+                          Match: {matchResult ? `${matchResult.matchScore}%` : "---"}
+                        </p>
                       </div>
                     </div>
-                    <p
-                      className={`text-[11px] font-bold truncate ${
-                        matchResult?.matched
-                          ? "text-emerald-400"
-                          : matchResult?.reason === "MISMATCH_LOW_CONFIDENCE"
-                          ? "text-red-400"
-                          : "text-slate-300"
-                      }`}
-                    >
-                      {matchResult?.matched
-                        ? "Verified Identity"
-                        : matchResult?.reason === "MISMATCH_LOW_CONFIDENCE"
-                        ? "Mismatch"
-                        : "Detecting..."}
-                    </p>
-                    <p className="text-[10px] text-slate-400 font-mono">
-                      Match: {matchResult ? `${matchResult.matchScore}%` : "---"}
-                    </p>
+
+                    {/* Candidate Rejection Option for 1:N Auto-Detection Mode */}
+                    {(isAutoKioskMode || !userIsLoggedIn) && matchResult?.matched && (
+                      <div className="p-2.5 rounded-xl bg-blue-500/10 border border-blue-500/30 flex items-center justify-between gap-2">
+                        <div className="text-left">
+                          <p className="text-[11px] font-bold text-blue-300">
+                            শনাক্ত: {activeEmployee.fullName}
+                          </p>
+                          <p className="text-[10px] text-slate-400">
+                            ভুল ব্যক্তি হলে বাতিল করুন
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleRejectAutoDetectedPerson}
+                          className="px-2.5 py-1.5 bg-red-600/90 hover:bg-red-600 text-white text-[11px] font-bold rounded-lg transition-all flex items-center gap-1 shrink-0 cursor-pointer shadow"
+                          title="এই ব্যক্তি আমি নই, পুনরায় স্ক্যান করুন"
+                        >
+                          <UserX className="w-3.5 h-3.5" />
+                          <span>এটি আমি নই</span>
+                        </button>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="p-6 rounded-xl bg-slate-900/90 border border-slate-700/80 text-center space-y-3">
+                    <div className="w-12 h-12 rounded-2xl bg-teal-500/10 border border-teal-500/20 text-teal-400 flex items-center justify-center mx-auto animate-pulse">
+                      <ScanFace className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-bold text-white">কিয়স্ক মোড: ফেস স্ক্যানিং</h4>
+                      <p className="text-xs text-slate-400 mt-1">
+                        ক্যামেরার মাঝখানে সোজা হয়ে দাঁড়ান। আপনার চেহারা সফলভাবে শনাক্ত হলে প্রোফাইল ও নাম এখানে প্রদর্শিত হবে।
+                      </p>
+                    </div>
+                    {matchResult && !matchResult.matched && matchResult.reason === "MISMATCH_LOW_CONFIDENCE" && (
+                      <div className="p-2.5 rounded-lg bg-red-500/15 border border-red-500/30 text-xs text-red-300 font-semibold">
+                        {matchResult.banglaStatusMessage}
+                      </div>
+                    )}
                   </div>
-                </div>
+                )}
 
                 {/* Similarity Confidence Progress Bar */}
                 <div className="space-y-1 pt-1">
@@ -1030,7 +1151,7 @@ export const SmartAttendanceModal: React.FC<SmartAttendanceModalProps> = ({
                 </div>
 
                 {/* Explicit Warning If Employee Has No Photo Enrolled */}
-                {!hasRegisteredPhoto && !activeEmployee.isAttendanceExempt && (
+                {activeEmployee && !hasRegisteredPhoto && !activeEmployee.isAttendanceExempt && (
                   <div className="p-3 rounded-xl bg-amber-500/15 border border-amber-500/30 text-xs text-amber-300 space-y-2">
                     <div className="flex items-center gap-1.5 font-bold">
                       <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
@@ -1098,42 +1219,80 @@ export const SmartAttendanceModal: React.FC<SmartAttendanceModalProps> = ({
               </div>
             </div>
 
-            {/* Action Buttons */}
-            <div className="space-y-2 pt-1">
-              {isAllReadyToSubmit ? (
-                <button
-                  type="button"
-                  onClick={handleFinalSubmitAttendance}
-                  className="w-full py-3 px-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-sm rounded-xl shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2 transition-all transform active:scale-95 cursor-pointer"
-                >
-                  <CheckCircle2 className="w-5 h-5" />
-                  <span>
-                    হাজিরা নিশ্চিত করুন: {attendanceType === "CHECK_IN" ? "Clock In" : "Clock Out"} (
-                    {activeEmployee.fullName})
-                  </span>
-                </button>
+            {/* Action Buttons: Strict Face Scan -> Verify Identity -> Click to Confirm Attendance */}
+            <div className="space-y-2.5 pt-1">
+              {isAllReadyToSubmit && activeEmployee ? (
+                <div className="space-y-2.5 p-3.5 rounded-2xl bg-emerald-950/40 border border-emerald-500/40">
+                  <div className="flex items-center gap-2 text-xs font-bold text-emerald-300">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span>পরিচয় ও লাইভনেস যাচাই সফল! এবার হাজিরা নিশ্চিত করুন:</span>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleFinalSubmitAttendance}
+                    className="w-full py-3.5 px-4 bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-sm rounded-xl shadow-lg shadow-emerald-500/30 flex items-center justify-center gap-2 transition-all transform active:scale-95 cursor-pointer ring-2 ring-emerald-400/50"
+                  >
+                    <CheckCircle2 className="w-5 h-5 text-white" />
+                    <span>
+                      👉 এবার হাজিরা দিন ({attendanceType === "CHECK_IN" ? "Clock In" : "Clock Out"} - {activeEmployee.fullName})
+                    </span>
+                  </button>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleRejectAutoDetectedPerson}
+                      className="flex-1 py-2 px-3 bg-red-600/20 hover:bg-red-600/30 border border-red-500/40 text-red-300 hover:text-red-200 text-xs font-bold rounded-xl transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                      title="ভুল ব্যক্তি শনাক্ত হলে এটি বাদ দিন"
+                    >
+                      <UserX className="w-3.5 h-3.5 text-red-400" />
+                      <span>এটি আমি নই (ভুল ব্যক্তি)</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleResetScan}
+                      className="py-2 px-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white text-xs font-semibold rounded-xl transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" />
+                      <span>রিসেট</span>
+                    </button>
+                  </div>
+                </div>
               ) : (
-                <div className="p-3 rounded-xl bg-slate-800/80 border border-slate-700 text-center space-y-1">
+                <div className="p-3 rounded-xl bg-slate-800/80 border border-slate-700 text-center space-y-1.5">
                   <div className="flex items-center justify-center gap-2 text-xs font-bold text-slate-300">
                     {isProcessingMatch ? (
                       <>
                         <RefreshCw className="w-4 h-4 text-teal-400 animate-spin" />
-                        <span>চেহারা শনাক্ত হচ্ছে...</span>
+                        <span>চেহারা স্ক্যান ও পরিচয় শনাক্ত হচ্ছে...</span>
                       </>
                     ) : matchResult?.reason === "MISMATCH_LOW_CONFIDENCE" ? (
                       <>
                         <ShieldAlert className="w-4 h-4 text-red-400" />
                         <span className="text-red-300">ভেরিফিকেশন সম্পন্ন হয়নি (চেহারা মেলেনি)</span>
                       </>
-                    ) : (
+                    ) : activeEmployee ? (
                       <>
                         <Sparkles className="w-4 h-4 text-teal-400 animate-pulse" />
-                        <span>ক্যামেরার দিকে তাকিয়ে পলক ও হাসি দিন...</span>
+                        <span>
+                          {activeChallengeStep === "BLINK"
+                            ? "ধাপ ২: চোখের পলক ফেলুন..."
+                            : activeChallengeStep === "SMILE"
+                            ? "ধাপ ৩: ক্যামেরার দিকে তাকিয়ে একটু হাসুন..."
+                            : "লাইভনেস সম্পন্ন করুন..."}
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <ScanFace className="w-4 h-4 text-teal-400 animate-pulse" />
+                        <span>ক্যামেরার ফ্রেমের মাঝখানে সোজা তাকিয়ে দাঁড়ান</span>
                       </>
                     )}
                   </div>
                   <p className="text-[10px] text-slate-400">
-                    ব্লিংক ও স্মাইল দুটিই স্বয়ংক্রিয়ভাবে শনাক্ত হলে স্বয়ংক্রিয়ভাবে হাজিরা সাবমিট হবে।
+                    আগে ফেস স্ক্যান করার পর পরিচয় যাচাই হবে। ওকে হলে &quot;এবার হাজিরা দিন&quot; বোতামে ক্লিক করবেন।
                   </p>
                 </div>
               )}
@@ -1145,8 +1304,71 @@ export const SmartAttendanceModal: React.FC<SmartAttendanceModalProps> = ({
           </div>
         </div>
 
+        {/* Modal to pick an employee for face photo enrollment when in logged-out / kiosk mode */}
+        {showManualSelectForEnroll && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
+            <div className="w-full max-w-md bg-slate-900 border border-slate-700 rounded-2xl p-5 shadow-2xl space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                <div className="flex items-center gap-2">
+                  <ImageIcon className="w-5 h-5 text-teal-400" />
+                  <h3 className="font-bold text-sm text-white">বায়োমেট্রিক ছবি এনরোলমেন্ট</h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowManualSelectForEnroll(false)}
+                  className="p-1 text-slate-400 hover:text-white cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <p className="text-xs text-slate-300">
+                আপনার নাম বা এমপ্লয়ি আইডি নির্বাচন করুন, এরপর ক্যামেরা দিয়ে আপনার অফিসিয়াল বায়োমেট্রিক ছবি তুলুন:
+              </p>
+
+              <select
+                value={selectedEmpForEnroll}
+                onChange={(e) => setSelectedEmpForEnroll(e.target.value)}
+                className="w-full px-3 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-xs text-white focus:ring-2 focus:ring-teal-500 outline-none"
+              >
+                <option value="">-- কর্মচারী নির্বাচন করুন --</option>
+                {staffList.map((emp) => (
+                  <option key={emp.id} value={emp.id}>
+                    {emp.fullName} ({emp.employeeCode}) - {emp.departmentName || "General"}
+                  </option>
+                ))}
+              </select>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowManualSelectForEnroll(false)}
+                  className="px-3 py-1.5 text-xs text-slate-400 hover:text-white cursor-pointer"
+                >
+                  বাতিল
+                </button>
+                <button
+                  type="button"
+                  disabled={!selectedEmpForEnroll}
+                  onClick={() => {
+                    const emp = staffList.find((s) => s.id === selectedEmpForEnroll);
+                    if (emp) {
+                      setActiveEmployee(emp);
+                      setShowManualSelectForEnroll(false);
+                      setShowEnrollModal(true);
+                    }
+                  }}
+                  className="px-4 py-2 bg-teal-600 hover:bg-teal-500 disabled:opacity-40 text-white font-bold text-xs rounded-xl transition-all cursor-pointer"
+                >
+                  ছবি তুলুন ও এনরোল করুন
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Enrollment / Photo Update Modal */}
-        {showEnrollModal && (
+        {showEnrollModal && activeEmployee && (
           <FaceEnrollmentModal
             isOpen={showEnrollModal}
             onClose={() => setShowEnrollModal(false)}

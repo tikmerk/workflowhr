@@ -165,7 +165,7 @@ export const NoticesChatView: React.FC<NoticesChatViewProps> = ({
   const [issuerDesignation, setIssuerDesignation] = useState(currentEmployee.designationTitle || "ব্যবস্থাপনা পরিচালক / শাখা প্রধান");
   const [issuerDepartment, setIssuerDepartment] = useState(currentEmployee.departmentName || "প্রশাসন ও মানবসম্পদ বিভাগ");
   const [issuerBranch, setIssuerBranch] = useState(currentEmployee.branchName || "প্রধান কার্যালয় (গুলশান)");
-  const [issuerOrganization, setIssuerOrganization] = useState(branding.companyName || "Apex Global Technologies Ltd.");
+  const [issuerOrganization, setIssuerOrganization] = useState(branding.companyName || "Muslim Welfare Organization");
   const [signatureImage, setSignatureImage] = useState<string>("");
   const [hasSavedProfile, setHasSavedProfile] = useState(false);
   const [saveProfileSuccess, setSaveProfileSuccess] = useState(false);
@@ -579,10 +579,10 @@ export const NoticesChatView: React.FC<NoticesChatViewProps> = ({
       issuerOrganization: issuerOrganization || branding.companyName,
       signatureImageUrl: signatureImage || undefined,
 
-      companyAddress: branding.address || "টাওয়ার ৭১, রোড ১১, ব্লক ডি, গুলশান-১, ঢাকা-১২১২",
-      companyPhone: branding.phone || "+৮৮০ ২-৯৮৮৭৭৬৬",
-      companyEmail: branding.email || "notice@apexglobal.tech",
-      companyWebsite: branding.website || "https://apexglobal.tech",
+      companyAddress: branding.address || "Gulshan Corporate Avenue, Dhaka-1212, Bangladesh",
+      companyPhone: branding.phone || "+880 2-9887766",
+      companyEmail: branding.email || "info@muslimwelfare.org",
+      companyWebsite: branding.website || "https://muslimwelfare.org",
       isPinned: isPinned,
     };
 

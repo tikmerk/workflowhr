@@ -97,16 +97,16 @@ export const NoticeA4LetterheadModal: React.FC<NoticeA4LetterheadModalProps> = (
   };
 
   const companyName = isBanglaMode
-    ? (branding.companyNameBn || branding.companyName || notice.issuerOrganization || "এপেক্স গ্লোবাল টেকনোলজিস লিমিটেড")
-    : (branding.companyName || notice.issuerOrganization || "Apex Global Technologies Ltd.");
+    ? (branding.companyNameBn || branding.companyName || notice.issuerOrganization || "মুসলিম ওয়েলফেয়ার অর্গানাইজেশন")
+    : (branding.companyName || notice.issuerOrganization || "Muslim Welfare Organization");
 
   const companyTagline = isBanglaMode
-    ? (branding.taglineBn || branding.tagline || "মাল্টি-ব্রাঞ্চ কর্মীবাহিনী ও স্মার্ট এইচআরএম সমাধান")
-    : (branding.tagline || "Enterprise Workforce & Multi-Branch Operations");
+    ? (branding.taglineBn || branding.tagline || "সমাজকল্যাণ, মানবিক সহায়তা ও সমাজসেবামূলক সংস্থা")
+    : (branding.tagline || "Social Welfare, Humanitarian Relief & Community Development");
 
   const companyAddress = isBanglaMode
-    ? (branding.addressBn || branding.address || notice.companyAddress || "টাওয়ার ৭১, রোড ১১, ব্লক ডি, গুলশান-১, ঢাকা-১২১২")
-    : (branding.address || notice.companyAddress || "Tower 71, Road 11, Block D, Gulshan-1, Dhaka-1212");
+    ? (branding.addressBn || branding.address || notice.companyAddress || "গুলশান করপোরেট এভিনিউ, ঢাকা-১২১২, বাংলাদেশ")
+    : (branding.address || notice.companyAddress || "Gulshan Corporate Avenue, Dhaka-1212, Bangladesh");
 
   const formattedDate = isBanglaMode ? formatBanglaDate(notice.publishedDate) : notice.publishedDate;
 
@@ -313,7 +313,7 @@ ${companyName}
                   </span>
                   <span className="flex items-center gap-1">
                     <Mail className="w-3 h-3 text-teal-700 shrink-0" />
-                    {branding.email || "notice@apexglobal.tech"}
+                    {branding.email || "info@muslimwelfare.org"}
                   </span>
                 </div>
               </div>

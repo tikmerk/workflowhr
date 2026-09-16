@@ -45,8 +45,10 @@ import {
   saveAttendanceRecordToFirestore,
   saveLeaveApplicationToFirestore,
   updateLeaveStatusInFirestore,
+  deleteLeaveFromFirestore,
   saveLoanToFirestore,
   updateLoanStatusInFirestore,
+  deleteLoanFromFirestore,
   savePayslipsToFirestore,
   saveAuditLogToFirestore,
   savePayrollPolicyToFirestore,
@@ -65,6 +67,7 @@ import { DepartmentsDesignationsView } from "./components/views/DepartmentsDesig
 import { BranchesGeofenceView } from "./components/views/BranchesGeofenceView";
 import { NgoProgramsTrainingView } from "./components/views/NgoProgramsTrainingView";
 import { AttendanceLogsView } from "./components/views/AttendanceLogsView";
+import { RealtimeFaceRecognitionView } from "./components/views/RealtimeFaceRecognitionView";
 import { ShiftsHolidaysView } from "./components/views/ShiftsHolidaysView";
 import { LeavesView } from "./components/views/LeavesView";
 import { PayrollView } from "./components/views/PayrollView";
@@ -107,7 +110,7 @@ import {
   INITIAL_PAYROLL_POLICY,
   INITIAL_TREASURY_ACCOUNTS,
 } from "./data/mockDatabase";
-import { calculateMonthlyPayroll } from "./utils/payrollEngine";
+import { calculateMonthlyPayroll, normalizeMonthKey } from "./utils/payrollEngine";
 import {
   NavigationTab,
   Employee,
@@ -164,8 +167,44 @@ function AppContent() {
   const [branches, setBranches] = useState<Branch[]>(mockBranches);
   const [departments, setDepartments] = useState<Department[]>(mockDepartments);
   const [designations, setDesignations] = useState<Designation[]>(mockDesignations);
-  const [shifts, setShifts] = useState<Shift[]>(mockShifts);
-  const [holidays, setHolidays] = useState<Holiday[]>(mockHolidays);
+  const [shifts, setShifts] = useState<Shift[]>(() => {
+    try {
+      const local = localStorage.getItem("wf_shifts");
+      return local ? JSON.parse(local) : mockShifts;
+    } catch {
+      return mockShifts;
+    }
+  });
+  const [holidays, setHolidays] = useState<Holiday[]>(() => {
+    try {
+      const local = localStorage.getItem("wf_holidays");
+      if (local) {
+        const parsed = JSON.parse(local);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.map((h: Holiday) => ({
+            ...h,
+            name: (h.name || "").replace(/Apex Global/gi, "Muslim Welfare"),
+            description: (h.description || "").replace(/Apex Global/gi, "Muslim Welfare"),
+          }));
+        }
+      }
+    } catch {
+      // fallback
+    }
+    return mockHolidays.map((h: Holiday) => ({
+      ...h,
+      name: (h.name || "").replace(/Apex Global/gi, "Muslim Welfare"),
+      description: (h.description || "").replace(/Apex Global/gi, "Muslim Welfare"),
+    }));
+  });
+  const [orgWeekendDays, setOrgWeekendDays] = useState<number[]>(() => {
+    try {
+      const local = localStorage.getItem("wf_org_weekend_days");
+      return local ? JSON.parse(local) : [5, 6]; // Friday & Saturday by default
+    } catch {
+      return [5, 6];
+    }
+  });
   const [employees, setEmployees] = useState<Employee[]>(mockEmployees);
   const [attendanceLogs, setAttendanceLogs] = useState<AttendanceRecord[]>(mockAttendanceRecords);
   const [leaves, setLeaves] = useState<LeaveApplication[]>(mockLeaves);
@@ -177,7 +216,11 @@ function AppContent() {
   const [tasks, setTasks] = useState<ProjectTask[]>(mockTasks);
   const [assets, setAssets] = useState<CompanyAsset[]>(mockAssets);
   const [certificates, setCertificates] = useState<CertificateRecord[]>(mockCertificates);
-  const [exitRecords, setExitRecords] = useState<ExitRecord[]>(mockExitRecords);
+  const [exitRecords, setExitRecords] = useState<ExitRecord[]>(() => {
+    return mockExitRecords.filter(
+      (r) => !["MWO1010", "MWO1011"].includes((r.employeeCode || "").toUpperCase().replace(/-/g, ""))
+    );
+  });
   const [notices, setNotices] = useState<Notice[]>(mockNotices);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>(mockChatMessages);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>(mockAuditLogs);
@@ -192,7 +235,11 @@ function AppContent() {
   const [rolePermissions, setRolePermissions] = useState<RolePermissionConfig[]>(() => {
     try {
       const local = localStorage.getItem("wf_role_permissions");
-      return local ? JSON.parse(local) : INITIAL_ROLE_PERMISSIONS;
+      if (local) {
+        const parsed = JSON.parse(local);
+        return parsed.filter((r: RolePermissionConfig) => r.role !== "DEPARTMENT_HEAD" && r.role !== "DEPT_HEAD");
+      }
+      return INITIAL_ROLE_PERMISSIONS;
     } catch {
       return INITIAL_ROLE_PERMISSIONS;
     }
@@ -250,6 +297,18 @@ function AppContent() {
   useEffect(() => {
     localStorage.setItem("wf_treasury_accounts", JSON.stringify(treasuryAccounts));
   }, [treasuryAccounts]);
+
+  useEffect(() => {
+    localStorage.setItem("wf_shifts", JSON.stringify(shifts));
+  }, [shifts]);
+
+  useEffect(() => {
+    localStorage.setItem("wf_holidays", JSON.stringify(holidays));
+  }, [holidays]);
+
+  useEffect(() => {
+    localStorage.setItem("wf_org_weekend_days", JSON.stringify(orgWeekendDays));
+  }, [orgWeekendDays]);
 
   // Active Logged-in Persona & Auth state
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
@@ -338,9 +397,24 @@ function AppContent() {
               ? Number(cachedScore)
               : undefined;
 
+          const isFixed = Boolean(emp.isFixedSalary || emp.isFixedContractSalary);
+          const normalizedSalary =
+            isFixed && emp.salary
+              ? {
+                  ...emp.salary,
+                  basic: emp.salary.basic !== undefined ? emp.salary.basic : (emp.salary.grossSalary ?? 0),
+                  grossSalary: emp.salary.basic !== undefined ? emp.salary.basic : (emp.salary.grossSalary ?? 0),
+                  houseRent: 0,
+                  medicalAllowance: 0,
+                  transportAllowance: 0,
+                  specialAllowance: 0,
+                }
+              : emp.salary;
+
           if (cached && (!emp.avatarUrl || emp.avatarUrl.includes("unsplash"))) {
             return {
               ...emp,
+              salary: normalizedSalary,
               avatarUrl: cached,
               faceRegisteredPhoto: cached,
               faceTemplateRegistered: isVerified,
@@ -351,6 +425,7 @@ function AppContent() {
           }
           return {
             ...emp,
+            salary: normalizedSalary,
             faceTemplateRegistered: isVerified,
             faceVerified: isVerified,
             faceVerificationRequired: !isVerified,
@@ -374,11 +449,32 @@ function AppContent() {
     });
 
     const unsubLeaves = subscribeToLeaves((updatedLeaves) => {
-      setLeaves(updatedLeaves);
+      const demoNames = ["tariqul", "nafis imtiaz", "anika tabassum"];
+      const cleaned = updatedLeaves.filter((l) => {
+        const isDemo =
+          demoNames.some((dn) => (l.employeeName || "").toLowerCase().includes(dn)) ||
+          ["leave-01", "leave-02", "leave-03"].includes(l.id);
+        if (isDemo) {
+          deleteLeaveFromFirestore(l.id).catch(() => {});
+          return false;
+        }
+        return true;
+      });
+      setLeaves(cleaned);
     });
 
     const unsubLoans = subscribeToLoans((updatedLoans) => {
-      setLoans(updatedLoans);
+      const cleaned = updatedLoans.filter((l) => {
+        const isDemo =
+          (l.employeeName || "").toLowerCase().includes("nafis imtiaz") ||
+          ["loan-01"].includes(l.id);
+        if (isDemo) {
+          deleteLoanFromFirestore(l.id).catch(() => {});
+          return false;
+        }
+        return true;
+      });
+      setLoans(cleaned);
     });
 
     const unsubBranches = subscribeToBranches((updatedBranches) => {
@@ -719,46 +815,127 @@ function AppContent() {
     notifyAndLog("LEAVE_REJECTION", "Leave application declined", "LEAVES");
   };
 
+  const handleCreateLeaveByAdmin = (newLeave: LeaveApplication) => {
+    setLeaves((prev) => [newLeave, ...prev]);
+    saveLeaveApplicationToFirestore(newLeave);
+    notifyAndLog(
+      "LEAVE_ASSIGNED",
+      `Assigned ${newLeave.totalDays} day(s) leave for ${newLeave.employeeName}`,
+      "LEAVES"
+    );
+  };
+
+  const handleUpdateLeave = (updatedLeave: LeaveApplication) => {
+    setLeaves((prev) =>
+      prev.map((l) => (l.id === updatedLeave.id ? updatedLeave : l))
+    );
+    saveLeaveApplicationToFirestore(updatedLeave);
+    notifyAndLog("LEAVE_UPDATED", `Updated leave record for ${updatedLeave.employeeName}`, "LEAVES");
+  };
+
+  const handleDeleteLeave = (leaveId: string) => {
+    setLeaves((prev) => prev.filter((l) => l.id !== leaveId));
+    deleteLeaveFromFirestore(leaveId);
+    notifyAndLog("LEAVE_DELETED", "Leave application deleted", "LEAVES");
+  };
+
   // Handlers for Payroll
   const handleGeneratePayroll = (month: string) => {
-    const activeStaff = employees.filter((e) => e.status === "ACTIVE" && !e.deletedAt);
+    const activeStaff = employees.filter((e) => e.status !== "EXITED" && !e.deletedAt);
     const newSlips = calculateMonthlyPayroll(
       month,
       activeStaff,
       attendanceLogs,
       loans,
-      payrollPolicy.customBonuses || []
+      payrollPolicy.customBonuses || [],
+      payrollPolicy
     );
-    // Replace current month's slips or append
+    const monthKey = normalizeMonthKey(month);
     setPayslips((prev) => [
       ...newSlips,
-      ...prev.filter((p) => p.payrollMonth !== month),
+      ...prev.filter((p) => normalizeMonthKey(p.payrollMonth) !== monthKey),
     ]);
     savePayslipsToFirestore(newSlips);
+    setToastMessage(`${month}-এর পে-রোল সফলভাবে রান ও জেনারেট হয়েছে`);
     notifyAndLog(
       "PAYROLL_CALCULATION",
-      `Generated ${month} automated payroll with festival bonuses for ${activeStaff.length} active employees`,
+      `Generated ${month} automated payroll with policies & bonuses for ${activeStaff.length} active employees`,
       "PAYROLL"
     );
   };
 
-  const handleDisburseAll = (month: string) => {
+  const handleApprovePayslip = (slipId: string) => {
     setPayslips((prev) =>
       prev.map((p) =>
-        p.payrollMonth === month
+        p.id === slipId ? { ...p, paymentStatus: "APPROVED" } : p
+      )
+    );
+    setToastMessage("পে-স্লিপ সফলভাবে অনুমোদিত (Approved) হয়েছে");
+    notifyAndLog("PAYSLIP_APPROVED", `Approved payslip ${slipId}`, "PAYROLL");
+  };
+
+  const handleDisbursePayslip = (slipId: string) => {
+    const today = new Date().toISOString().split("T")[0];
+    const ref = `FT-${today.replace(/-/g, "")}-DISB-${Math.floor(10000 + Math.random() * 90000)}`;
+    setPayslips((prev) =>
+      prev.map((p) =>
+        p.id === slipId
           ? {
               ...p,
               paymentStatus: "PAID",
-              paymentDate: new Date().toISOString().split("T")[0],
+              paymentDate: today,
+              transactionReference: p.transactionReference || ref,
             }
           : p
       )
     );
+    setToastMessage("স্যালারি সফলভাবে পরিশোধ (Paid / Disbursed) করা হয়েছে");
+    notifyAndLog("PAYSLIP_PAID", `Paid salary for payslip ${slipId}`, "PAYROLL");
+  };
+
+  const handleApproveAllPayroll = (month: string) => {
+    const targetKey = normalizeMonthKey(month);
+    setPayslips((prev) =>
+      prev.map((p) =>
+        targetKey === "ALL" || normalizeMonthKey(p.payrollMonth) === targetKey
+          ? { ...p, paymentStatus: "APPROVED" }
+          : p
+      )
+    );
+    setToastMessage(`${month}-এর সকল পে-স্লিপ সফলভাবে অনুমোদিত হয়েছে`);
+    notifyAndLog("PAYROLL_APPROVED_ALL", `Approved all payroll records for ${month}`, "PAYROLL");
+  };
+
+  const handleDisburseAll = (month: string) => {
+    const today = new Date().toISOString().split("T")[0];
+    const targetKey = normalizeMonthKey(month);
+    setPayslips((prev) =>
+      prev.map((p) =>
+        targetKey === "ALL" || normalizeMonthKey(p.payrollMonth) === targetKey
+          ? {
+              ...p,
+              paymentStatus: "PAID",
+              paymentDate: today,
+              transactionReference:
+                p.transactionReference ||
+                `FT-${today.replace(/-/g, "")}-BATCH-${Math.floor(10000 + Math.random() * 90000)}`,
+            }
+          : p
+      )
+    );
+    setToastMessage(`${month}-এর সকল স্যালারি পরিশোধ সম্পন্ন হয়েছে`);
     notifyAndLog(
       "PAYROLL_DISBURSEMENT",
       `Disbursed all salaries for ${month} via automated bank advice transfer`,
       "PAYROLL"
     );
+  };
+
+  const handleUpdatePayslip = (updatedSlip: Payslip) => {
+    setPayslips((prev) =>
+      prev.map((p) => (p.id === updatedSlip.id ? updatedSlip : p))
+    );
+    setToastMessage("পে-স্লিপ তথ্য সফলভাবে আপডেট হয়েছে");
   };
 
   // Handlers for Loans
@@ -786,6 +963,52 @@ function AppContent() {
     );
     updateLoanStatusInFirestore(loanId, "REJECTED");
     notifyAndLog("LOAN_REJECTION", "Employee loan request rejected", "FINANCE");
+  };
+
+  const handleUpdateLoan = (updatedLoan: EmployeeLoan) => {
+    setLoans((prev) =>
+      prev.map((l) => (l.id === updatedLoan.id ? updatedLoan : l))
+    );
+    saveLoanToFirestore(updatedLoan);
+    notifyAndLog(
+      "LOAN_UPDATED",
+      `Updated loan/advance record of ৳${(updatedLoan.amount ?? 0).toLocaleString()} for ${updatedLoan.employeeName}`,
+      "FINANCE"
+    );
+  };
+
+  const handleDeleteLoan = (loanId: string) => {
+    setLoans((prev) => prev.filter((l) => l.id !== loanId));
+    deleteLoanFromFirestore(loanId);
+    notifyAndLog("LOAN_DELETED", "Loan/advance record deleted", "FINANCE");
+  };
+
+  const handleRepayLoan = (loanId: string, returnAmount: number, notes?: string) => {
+    setLoans((prev) =>
+      prev.map((l) => {
+        if (l.id === loanId) {
+          const currentRem = l.remainingAmount !== undefined ? l.remainingAmount : l.amount;
+          const newRemaining = Math.max(0, currentRem - returnAmount);
+          const isClosed = newRemaining === 0;
+          const updated: EmployeeLoan = {
+            ...l,
+            remainingAmount: newRemaining,
+            paidInstallments: (l.paidInstallments || 0) + 1,
+            status: isClosed ? "CLOSED" : l.status,
+            notes: notes ? (l.notes ? `${l.notes} | ${notes}` : notes) : l.notes,
+            returnDate: isClosed ? new Date().toISOString().split("T")[0] : l.returnDate,
+          };
+          saveLoanToFirestore(updated);
+          return updated;
+        }
+        return l;
+      })
+    );
+    notifyAndLog(
+      "LOAN_REPAID",
+      `Recorded return/repayment of ৳${returnAmount.toLocaleString()}`,
+      "FINANCE"
+    );
   };
 
   // Handlers for Recruitment
@@ -910,12 +1133,12 @@ function AppContent() {
           <SmartAttendanceModal
             isOpen={isAttendanceModalOpen}
             onClose={() => setIsAttendanceModalOpen(false)}
-            currentEmployee={currentEmployee}
+            isLoggedIn={false}
+            currentEmployee={null}
             allEmployees={employees}
             employees={employees}
             selectedBranch={
               branches.find((b) => b.id === selectedBranchId) ||
-              branches.find((b) => b.id === currentEmployee.branchId) ||
               branches[0]
             }
             allBranches={branches}
@@ -1111,6 +1334,7 @@ function AppContent() {
               designations={designations}
               shifts={shifts}
               currentUser={currentEmployee}
+              rolePermissions={rolePermissions}
               exitRecords={exitRecords}
               onAddEmployee={(newEmp) => {
                 setEmployees((prev) => [newEmp, ...prev]);
@@ -1433,6 +1657,17 @@ function AppContent() {
             />
           )}
 
+          {activeTab === "face-recognition-kiosk" && (
+            <RealtimeFaceRecognitionView
+              employees={employees}
+              branches={branches}
+              attendanceLogs={attendanceLogs}
+              currentEmployee={currentEmployee}
+              onLogAttendance={handleAttendanceSuccess}
+              onOpenEnrollmentModal={handleOpenFaceEnrollModal}
+            />
+          )}
+
           {activeTab === "attendance-logs" && (
             <AttendanceLogsView
               attendanceLogs={attendanceLogs}
@@ -1447,13 +1682,34 @@ function AppContent() {
               shifts={shifts}
               holidays={holidays}
               branches={branches}
+              weekendDays={orgWeekendDays}
+              onUpdateWeekendDays={(days) => {
+                setOrgWeekendDays(days);
+                notifyAndLog("WEEKEND_RULES_UPDATED", `Updated company weekend rules`, "HR_OPERATIONS");
+              }}
               onAddShift={(s) => {
                 setShifts((prev) => [s, ...prev]);
                 notifyAndLog("SHIFT_CREATED", `Added shift roster: ${s.name}`, "HR_OPERATIONS");
               }}
+              onUpdateShift={(updated) => {
+                setShifts((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
+                notifyAndLog("SHIFT_UPDATED", `Updated shift roster: ${updated.name}`, "HR_OPERATIONS");
+              }}
+              onDeleteShift={(shiftId) => {
+                setShifts((prev) => prev.filter((s) => s.id !== shiftId));
+                notifyAndLog("SHIFT_DELETED", `Deleted shift roster`, "HR_OPERATIONS");
+              }}
               onAddHoliday={(h) => {
                 setHolidays((prev) => [h, ...prev]);
                 notifyAndLog("HOLIDAY_CREATED", `Added holiday: ${h.name}`, "HR_OPERATIONS");
+              }}
+              onUpdateHoliday={(updated) => {
+                setHolidays((prev) => prev.map((h) => (h.id === updated.id ? updated : h)));
+                notifyAndLog("HOLIDAY_UPDATED", `Updated holiday: ${updated.name}`, "HR_OPERATIONS");
+              }}
+              onDeleteHoliday={(holidayId) => {
+                setHolidays((prev) => prev.filter((h) => h.id !== holidayId));
+                notifyAndLog("HOLIDAY_DELETED", `Deleted holiday from calendar`, "HR_OPERATIONS");
               }}
             />
           )}
@@ -1462,8 +1718,12 @@ function AppContent() {
             <LeavesView
               leaves={leaves}
               branches={branches}
+              employees={employees}
               onApproveLeave={handleApproveLeave}
               onRejectLeave={handleRejectLeave}
+              onAddLeave={handleCreateLeaveByAdmin}
+              onUpdateLeave={handleUpdateLeave}
+              onDeleteLeave={handleDeleteLeave}
             />
           )}
 
@@ -1472,6 +1732,17 @@ function AppContent() {
               payslips={payslips}
               employees={employees}
               branches={branches}
+              payrollPolicy={payrollPolicy}
+              onUpdatePayrollPolicy={(newPolicy) => {
+                setPayrollPolicy(newPolicy);
+                savePayrollPolicyToFirestore(newPolicy);
+                setToastMessage("পে-রোল নীতিমালা ও কনফিগারেশন সফলভাবে সংরক্ষিত হয়েছে");
+                notifyAndLog(
+                  "PAYROLL_POLICY_UPDATED",
+                  "Updated global payroll policy and calculation rules",
+                  "PAYROLL"
+                );
+              }}
               customBonuses={payrollPolicy.customBonuses || []}
               onUpdateCustomBonuses={(updatedBonuses) => {
                 const nextPolicy = {
@@ -1489,6 +1760,10 @@ function AppContent() {
               }}
               onGeneratePayroll={handleGeneratePayroll}
               onDisburseAll={handleDisburseAll}
+              onApproveAll={handleApproveAllPayroll}
+              onApprovePayslip={handleApprovePayslip}
+              onDisbursePayslip={handleDisbursePayslip}
+              onUpdatePayslip={handleUpdatePayslip}
             />
           )}
 
@@ -1500,6 +1775,9 @@ function AppContent() {
               onApproveLoan={handleApproveLoan}
               onRejectLoan={handleRejectLoan}
               onAddLoan={handleAddLoan}
+              onUpdateLoan={handleUpdateLoan}
+              onDeleteLoan={handleDeleteLoan}
+              onRepayLoan={handleRepayLoan}
             />
           )}
 
@@ -1645,6 +1923,11 @@ function AppContent() {
               rolePermissions={rolePermissions}
               onUpdateRolePermissions={(updatedRoles) => {
                 setRolePermissions(updatedRoles);
+                try {
+                  localStorage.setItem("wf_role_permissions", JSON.stringify(updatedRoles));
+                } catch (e) {
+                  console.error(e);
+                }
                 notifyAndLog(
                   "ROLE_PERMISSIONS_UPDATED",
                   `Updated role permissions and access matrix`,
@@ -1695,6 +1978,7 @@ function AppContent() {
         <SmartAttendanceModal
           isOpen={isAttendanceModalOpen}
           onClose={() => setIsAttendanceModalOpen(false)}
+          isLoggedIn={true}
           currentEmployee={currentEmployee}
           allEmployees={employees}
           employees={employees}

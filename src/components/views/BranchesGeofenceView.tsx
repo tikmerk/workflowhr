@@ -50,11 +50,11 @@ const DEFAULT_BRANCH_RECORD: Branch = {
   state: "Dhaka Division",
   country: "Bangladesh",
   phone: "+880 1700-112233",
-  email: "dhaka.hq@apexglobal.tech",
+  email: "dhaka.hq@muslimwelfare.org",
   latitude: 23.7925,
   longitude: 90.4078,
   geofenceRadiusMeters: 150,
-  wifiSSIDWhitelist: ["APEX_CORP_5G", "APEX_GUEST_SECURE"],
+  wifiSSIDWhitelist: ["MWO_CORP_5G", "MWO_GUEST_SECURE"],
   totalEmployees: 48,
   activeStatus: "ACTIVE",
 };
@@ -222,7 +222,7 @@ export const BranchesGeofenceView: React.FC<BranchesGeofenceViewProps> = ({
       state: `${newCity} Division`,
       country: "Bangladesh",
       phone: "+880 1700-000000",
-      email: `${newCode.toLowerCase()}@apexglobal.tech`,
+      email: `${newCode.toLowerCase()}@muslimwelfare.org`,
       managerId: mgr?.id || "emp-001",
       managerName: mgr?.fullName || "Branch Manager",
       latitude: Number(newLat),
@@ -1171,7 +1171,7 @@ export const BranchesGeofenceView: React.FC<BranchesGeofenceViewProps> = ({
                   type="text"
                   value={newWifi}
                   onChange={(e) => setNewWifi(e.target.value)}
-                  placeholder="e.g. APEX_BRANCH_5G"
+                  placeholder="e.g. MWO_BRANCH_5G"
                   className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white font-mono placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-teal-500"
                 />
               </div>

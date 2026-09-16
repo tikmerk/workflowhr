@@ -6,12 +6,12 @@ export type UserRole =
   | "HR_MANAGER"
   | "ACCOUNTS_MANAGER"
   | "BRANCH_MANAGER"
-  | "DEPARTMENT_HEAD"
   | "PROJECT_MANAGER"
   | "TEAM_LEADER"
   | "EMPLOYEE"
   | "AUDITOR"
-  | "READ_ONLY";
+  | "READ_ONLY"
+  | (string & {});
 
 export type NavigationTab =
   | "dashboard"
@@ -23,6 +23,7 @@ export type NavigationTab =
   | "meetings-conferences"
   | "roles-permissions"
   | "attendance-logs"
+  | "face-recognition-kiosk"
   | "shifts-holidays"
   | "leaves"
   | "payroll"
@@ -368,20 +369,28 @@ export interface Holiday {
   applicableBranchIds: string[];
 }
 
+export type LoanAdvanceCategory = "ADVANCE_SALARY" | "COMPANY_LOAN" | "EMPLOYEE_BORROWING";
+
 export interface EmployeeLoan {
   id: string;
   employeeId: string;
   employeeName: string;
   branchName?: string;
+  category?: LoanAdvanceCategory; // ADVANCE_SALARY (অ্যাডভান্স বেতন), COMPANY_LOAN (কোম্পানি/বসের লোন), EMPLOYEE_BORROWING (কর্মী থেকে প্রজেক্টের জন্য ধার)
   amount: number;
   monthlyEmi: number;
-  totalInstallments: number;
+  totalInstallments: number; // e.g. 1 month, 2 months for advance, or tenor
   paidInstallments: number;
   remainingAmount: number;
   reason: string;
   applicationDate: string;
   disbursedDate?: string;
-  status: "REQUESTED" | "APPROVED" | "REJECTED" | "ACTIVE" | "COMPLETED" | "PENDING_APPROVAL";
+  expectedReturnDate?: string; // কবে ফেরত দেওয়ার কথা
+  returnDate?: string; // প্রকৃত ফেরত দেওয়ার তারিখ
+  advanceDurationMonths?: number; // ১ মাস, ২ মাস ইত্যাদি
+  repaymentType?: "LUMP_SUM" | "MONTHLY_INSTALLMENT";
+  notes?: string;
+  status: "REQUESTED" | "APPROVED" | "REJECTED" | "ACTIVE" | "COMPLETED" | "PENDING_APPROVAL" | "CLOSED";
 }
 
 export interface Payslip {
@@ -430,6 +439,16 @@ export interface Payslip {
   paymentDate?: string;
   paymentMethod?: "BANK_TRANSFER" | "BKASH" | "NAGAD" | "CASH";
   transactionReference?: string;
+
+  // Additional & compatibility properties
+  branchId?: string;
+  bankName?: string;
+  bankAccountNumber?: string;
+  festivalBonus?: number;
+  commissionAmount?: number;
+  houseRent?: number;
+  lateDeductionAmount?: number;
+  loanInstallmentDeduction?: number;
 }
 
 export interface CompanyAsset {
@@ -916,6 +935,7 @@ export interface RolePermissionConfig {
   canManagePayroll: boolean;
   canConfigurePolicies: boolean;
   canViewAuditLogs: boolean;
+  isSystemCore?: boolean;
 }
 
 // Dynamic Custom Festival Bonus & Allowance Model
@@ -931,10 +951,10 @@ export interface CustomBonusConfig {
   fixedAmount?: number;
   maxCap?: number; // Optional maximum ceiling
   maxCapAmount?: number;
-  targetEligibility: "ALL_EMPLOYEES" | "MUSLIM_ONLY" | "HINDU_ONLY" | "CUSTOM_DEPARTMENT" | "PERMANENT_ONLY";
+  targetEligibility: "ALL_EMPLOYEES" | "MUSLIM_ONLY" | "HINDU_ONLY" | "CUSTOM_DEPARTMENT" | "PERMANENT_ONLY" | "MUSLIM_EMPLOYEES" | "HINDU_EMPLOYEES";
   targetDepartmentId?: string;
   targetDepartmentName?: string;
-  status: "ACTIVE" | "SCHEDULED" | "COMPLETED";
+  status: "ACTIVE" | "INACTIVE" | "PAUSED" | "SCHEDULED" | "COMPLETED";
   description?: string;
   notes?: string;
   createdAt?: string;
@@ -943,18 +963,67 @@ export interface CustomBonusConfig {
 
 // Global Super Admin Payroll & Attendance Penalty Policy
 export interface PayrollPolicyConfig {
-  id: string;
-  twoEidsFixedBonusAmount: number; // e.g. ৳15,000 per Eid
-  percentageBonusRate: number; // e.g. 50% of Basic
-  bonusMaxCap: number; // e.g. ৳50,000 max cap
-  isBonusFixedAmount: boolean; // True = fixed amount, False = percentage
-  activeBonusTitle: string; // e.g. "বাৎসরিক ২ ঈদ ফিক্সড বোনাস (Two Eids Fixed Festival Bonus)"
+  id?: string;
+  twoEidsFixedBonusAmount?: number; // e.g. ৳15,000 per Eid
+  percentageBonusRate?: number; // e.g. 50% of Basic
+  bonusMaxCap?: number; // e.g. ৳50,000 max cap
+  isBonusFixedAmount?: boolean; // True = fixed amount, False = percentage
+  activeBonusTitle?: string; // e.g. "বাৎসরিক ২ ঈদ ফিক্সড বোনাস (Two Eids Fixed Festival Bonus)"
+  
+  // Late Clock-in Penalty Policy
   latePenaltyEnabled: boolean; // Whether penalty is cut
-  latePenaltyPercentage: number; // e.g. 1% or 2% per late arrival
-  lateGracePeriodMinutes: number; // e.g. 15 minutes
-  exemptFieldStaffFromPenalty: boolean; // Default true: Field and flexible staff have no penalty
-  fixedSalaryStaffNoDeductions: boolean; // Default true: staff on fixed salary get no deductions
-  effectiveYear: number;
+  latePenaltyType?: "STANDARD_3_LATE_1_DAY" | "DAILY_BASIC_RATIO" | "FIXED_AMOUNT" | "PERCENTAGE"; // 3 late = 1 day, or fixed ৳, or %
+  latePenaltyFixedAmount?: number; // e.g. ৳300 per late arrival
+  latePenaltyPercentage?: number; // e.g. 1% or 2% per late arrival
+  lateGracePeriodMinutes?: number; // e.g. 15 minutes
+  exemptFieldStaffFromPenalty?: boolean; // Default true: Field and flexible staff have no penalty
+  fixedSalaryStaffNoDeductions?: boolean; // Default true: staff on fixed salary get no deductions
+
+  // Absenteeism Penalty Policy
+  absenteeismPenaltyEnabled?: boolean; // Whether absenteeism deduction is enabled (true/false)
+  absentPenaltyEnabled?: boolean; // alias for form binding
+  absenteeismPenaltyType?: "DAILY_BASIC_1_TO_1" | "DAILY_BASIC_1_POINT_5" | "FIXED_PER_DAY" | "ONE_POINT_FIVE_BASIC" | "FIXED_AMOUNT" | "DAILY_BASIC_RATIO";
+  absenteeismFixedAmount?: number; // e.g. ৳1000 per absent day
+  absenteeismFixedPenaltyAmount?: number; // alias for form binding
+
+  // Overtime Calculation Policy
+  overtimeEnabled?: boolean; // Whether overtime pay calculation is active (true/false)
+  overtimeCalculationType?: "BASIC_HOURLY_1_5X" | "BASIC_HOURLY_2X" | "FIXED_PER_HOUR" | "ONE_POINT_FIVE_BASIC" | "DOUBLE_BASIC" | "FIXED_RATE";
+  overtimeFixedRatePerHour?: number; // e.g. ৳150 or ৳200 per hour
+  overtimeFixedHourlyRate?: number; // alias for form binding
+  standardWorkHoursPerDay?: number; // default 8 hours
+  standardDailyWorkHours?: number; // alias for form binding
+
+  // Advance Salary Deduction Policy
+  advanceSalaryDeductionType?: "FULL_ONE_MONTH" | "EQUAL_TWO_INSTALLMENTS" | "EQUAL_THREE_INSTALLMENTS";
+  advanceSalaryRecoveryMonths?: number;
+
+  // Statutory Deductions
+  defaultProvidentFundPercentage?: number; // e.g. 8%
+  defaultTaxPercentage?: number; // e.g. 5%
+
+  // Earnings & Allowances Structure
+  defaultHouseRentPercentage?: number; // e.g. 40%
+  houseRentFixedAmount?: number;
+  houseRentCalculationMode?: "PERCENTAGE" | "FIXED_AMOUNT";
+  houseRentAllowanceType?: "PERCENTAGE" | "FIXED_AMOUNT";
+
+  defaultMedicalPercentage?: number; // e.g. 10%
+  medicalFixedAmount?: number;
+  medicalCalculationMode?: "PERCENTAGE" | "FIXED_AMOUNT";
+  medicalAllowanceType?: "PERCENTAGE" | "FIXED_AMOUNT";
+
+  defaultTransportPercentage?: number; // e.g. 10%
+  transportFixedAmount?: number;
+  transportCalculationMode?: "PERCENTAGE" | "FIXED_AMOUNT";
+  transportAllowanceType?: "PERCENTAGE" | "FIXED_AMOUNT";
+
+  defaultSpecialPercentage?: number; // e.g. 10%
+  specialFixedAmount?: number;
+  specialCalculationMode?: "PERCENTAGE" | "FIXED_AMOUNT";
+  specialAllowanceType?: "PERCENTAGE" | "FIXED_AMOUNT";
+
+  effectiveYear?: number;
   customBonuses?: CustomBonusConfig[]; // Dynamic custom festival bonuses & allowances
 }
 

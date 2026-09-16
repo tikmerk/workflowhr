@@ -138,8 +138,22 @@ export const validateEmployeeIdAvailability = (
   const num = extractEmployeeNumber(trimmed);
   const normalized = trimmed.toUpperCase().replace(/-/g, "");
 
-  // Check past exited employees first (permanent preservation)
+  // If editing an existing employee and they are retaining their current ID, allow immediately
+  if (currentEmployeeId) {
+    const currentEmp = employees.find((e) => e.id === currentEmployeeId);
+    if (currentEmp?.employeeCode) {
+      const currentNorm = currentEmp.employeeCode.toUpperCase().replace(/-/g, "");
+      if (currentNorm === normalized) {
+        return { available: true };
+      }
+    }
+  }
+
+  // Check past exited employees first (permanent preservation) - strictly skip current employee
   const isExitedInRecords = exitRecords.some((r) => {
+    if (currentEmployeeId && (r.employeeId === currentEmployeeId || (r as any).id === currentEmployeeId)) {
+      return false;
+    }
     if (r.employeeCode) {
       const recNorm = r.employeeCode.toUpperCase().replace(/-/g, "");
       if (recNorm === normalized) return true;
@@ -184,6 +198,7 @@ export const validateEmployeeIdAvailability = (
 
   // Check recycle bin
   const recycleConflict = deletedEmployees.find((e) => {
+    if (e.id === currentEmployeeId) return false;
     const empNorm = (e.employeeCode || "").toUpperCase().replace(/-/g, "");
     if (empNorm === normalized) return true;
     if (num !== null && extractEmployeeNumber(e.employeeCode) === num) return true;

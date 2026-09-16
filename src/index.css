@@ -22,3 +22,23 @@
   -ms-overflow-style: none !important;
   scrollbar-width: none !important;
 }
+
+/* Dedicated Print Styles for Salary Certificate and Payslips */
+@media print {
+  body > *:not(#workflowhr-print-mount) {
+    display: none !important;
+  }
+  #workflowhr-print-mount {
+    display: block !important;
+    position: static !important;
+    width: 100% !important;
+    margin: 0 auto !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+    color: #0f172a !important;
+  }
+  @page {
+    size: A4;
+    margin: 10mm 15mm;
+  }
+}

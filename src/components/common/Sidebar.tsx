@@ -26,6 +26,7 @@ import {
   Presentation,
   KeyRound,
   RotateCcw,
+  ScanFace,
 } from "lucide-react";
 import { Logo } from "./Logo";
 import { UserRole, Employee } from "../../types";
@@ -43,6 +44,7 @@ export type NavTabId =
   | "meetings-conferences"
   | "roles-permissions"
   | "attendance-logs"
+  | "face-recognition-kiosk"
   | "shifts-holidays"
   | "leaves"
   | "payroll"
@@ -177,6 +179,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
       groupTitleEn: "Time & Attendance",
       groupTitleBn: "সময় ও উপস্থিতি",
       items: [
+        {
+          id: "face-recognition-kiosk",
+          labelEn: "Face Recognition Kiosk",
+          labelBn: "রিয়েল-টাইম ফেস ডিটেকশন ও রিকগনাইজেশন",
+          icon: ScanFace,
+          badgeEn: "Live Kiosk",
+          badgeBn: "অটো ডিটেকশন",
+        },
         {
           id: "attendance-logs",
           labelEn: "Biometric Attendance",
