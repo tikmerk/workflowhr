@@ -1028,3 +1028,13 @@ export interface PayrollPolicyConfig {
   customBonuses?: CustomBonusConfig[]; // Dynamic custom festival bonuses & allowances
 }
 
+// Global Super Admin Biometric Attendance Kiosk Mode Configuration
+export type BiometricModeConfig = "AUTO_KIOSK_ONLY" | "ONE_TO_ONE_ONLY" | "BOTH";
+
+export interface BiometricKioskSettings {
+  modeAvailability: BiometricModeConfig; // "AUTO_KIOSK_ONLY" | "ONE_TO_ONE_ONLY" | "BOTH"
+  defaultMode: "AUTO_KIOSK" | "ONE_TO_ONE";
+  updatedAt?: string;
+  updatedBy?: string;
+}
+

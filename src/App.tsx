@@ -53,6 +53,8 @@ import {
   saveAuditLogToFirestore,
   savePayrollPolicyToFirestore,
   subscribeToPayrollPolicy,
+  saveBiometricSettingsToFirestore,
+  subscribeToBiometricSettings,
   saveDeletedEmployeesToFirestore,
   subscribeToDeletedEmployees,
 } from "./services/firestoreService";
@@ -138,6 +140,7 @@ import {
   MeetingConference,
   RolePermissionConfig,
   PayrollPolicyConfig,
+  BiometricKioskSettings,
   TreasuryAccount,
 } from "./types";
 import { CheckCircle2, Info, X } from "lucide-react";
@@ -279,6 +282,33 @@ function AppContent() {
       return INITIAL_TREASURY_ACCOUNTS;
     }
   });
+
+  // Global Biometric Kiosk Settings (Super Admin controlled)
+  const [biometricSettings, setBiometricSettings] = useState<BiometricKioskSettings>(() => {
+    try {
+      const local = localStorage.getItem("wf_biometric_settings");
+      if (local) return JSON.parse(local);
+    } catch {
+      // fallback
+    }
+    return {
+      modeAvailability: "BOTH",
+      defaultMode: "AUTO_KIOSK",
+    };
+  });
+
+  useEffect(() => {
+    localStorage.setItem("wf_biometric_settings", JSON.stringify(biometricSettings));
+  }, [biometricSettings]);
+
+  useEffect(() => {
+    const unsub = subscribeToBiometricSettings((settings) => {
+      if (settings) {
+        setBiometricSettings(settings);
+      }
+    });
+    return () => unsub();
+  }, []);
 
   useEffect(() => {
     localStorage.setItem("wf_meetings_conferences", JSON.stringify(meetings));
@@ -1722,6 +1752,12 @@ function AppContent() {
               attendanceLogs={attendanceLogs}
               currentEmployee={currentEmployee}
               shifts={shifts}
+              biometricSettings={biometricSettings}
+              onUpdateBiometricSettings={(newSettings) => {
+                setBiometricSettings(newSettings);
+                saveBiometricSettingsToFirestore(newSettings);
+                setToastMessage("বায়োমেট্রিক কিওস্ক সেটিংস সফলভাবে আপডেট ও সংরক্ষিত হয়েছে");
+              }}
               onLogAttendance={handleAttendanceSuccess}
               onOpenEnrollmentModal={handleOpenFaceEnrollModal}
               onOpenAttendanceModal={() => setIsAttendanceModalOpen(true)}
@@ -2016,6 +2052,17 @@ function AppContent() {
                   "HR_OPERATIONS"
                 );
               }}
+              biometricSettings={biometricSettings}
+              onUpdateBiometricSettings={(newSettings) => {
+                setBiometricSettings(newSettings);
+                saveBiometricSettingsToFirestore(newSettings);
+                setToastMessage("বায়োমেট্রিক কিওস্ক সেটিংস সফলভাবে আপডেট ও সংরক্ষিত হয়েছে");
+                notifyAndLog(
+                  "BIOMETRIC_SETTINGS_UPDATED",
+                  `Updated biometric kiosk policy to: ${newSettings.modeAvailability}`,
+                  "SECURITY"
+                );
+              }}
             />
           )}
 
@@ -2051,6 +2098,12 @@ function AppContent() {
           }
           allBranches={branches}
           branches={branches}
+          biometricSettings={biometricSettings}
+          onUpdateBiometricSettings={(newSettings) => {
+            setBiometricSettings(newSettings);
+            saveBiometricSettingsToFirestore(newSettings);
+            setToastMessage("বায়োমেট্রিক কিওস্ক সেটিংস সফলভাবে আপডেট ও সংরক্ষিত হয়েছে");
+          }}
           onAttendanceSuccess={handleAttendanceSuccess}
           onUpdateFacePhoto={handleUpdateFacePhoto}
         />

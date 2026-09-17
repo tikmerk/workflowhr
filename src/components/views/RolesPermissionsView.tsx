@@ -27,7 +27,8 @@ import {
   X,
   Check,
   Zap,
-  Ban
+  Ban,
+  ScanFace
 } from "lucide-react";
 import {
   RolePermissionConfig,
@@ -35,7 +36,9 @@ import {
   UserRole,
   NavigationTab,
   Employee,
-  CustomBonusConfig
+  CustomBonusConfig,
+  BiometricKioskSettings,
+  BiometricModeConfig
 } from "../../types";
 import { useThemeLanguage } from "../../context/ThemeLanguageContext";
 
@@ -46,6 +49,8 @@ interface RolesPermissionsViewProps {
   onUpdatePayrollPolicy: (policy: PayrollPolicyConfig) => void;
   employees: Employee[];
   onUpdateEmployee?: (employee: Employee) => void;
+  biometricSettings?: BiometricKioskSettings;
+  onUpdateBiometricSettings?: (settings: BiometricKioskSettings) => void;
 }
 
 export const RolesPermissionsView: React.FC<RolesPermissionsViewProps> = ({
@@ -55,10 +60,26 @@ export const RolesPermissionsView: React.FC<RolesPermissionsViewProps> = ({
   onUpdatePayrollPolicy,
   employees,
   onUpdateEmployee,
+  biometricSettings,
+  onUpdateBiometricSettings,
 }) => {
   const { isBangla } = useThemeLanguage();
 
-  const [activeTab, setActiveTab] = useState<"ROLES_MATRIX" | "POLICY_CONFIG" | "EXEMPT_STAFF">("ROLES_MATRIX");
+  const [activeTab, setActiveTab] = useState<"ROLES_MATRIX" | "POLICY_CONFIG" | "EXEMPT_STAFF" | "BIOMETRIC_KIOSK_SETTINGS">("ROLES_MATRIX");
+
+  // Local state for biometric kiosk mode settings
+  const [biometricState, setBiometricState] = useState<BiometricKioskSettings>(() => {
+    return biometricSettings || {
+      modeAvailability: "BOTH",
+      defaultMode: "AUTO_KIOSK",
+    };
+  });
+
+  useEffect(() => {
+    if (biometricSettings) {
+      setBiometricState(biometricSettings);
+    }
+  }, [biometricSettings]);
 
   // Local state for role permissions
   const [permissionsState, setPermissionsState] = useState<RolePermissionConfig[]>(rolePermissions);
@@ -556,6 +577,18 @@ export const RolesPermissionsView: React.FC<RolesPermissionsViewProps> = ({
         >
           <UserCheck className="w-4 h-4" />
           <span>{isBangla ? "ফিল্ড ও ফিক্সড কর্মী তালিকা (অব্যাহতিপ্রাপ্ত)" : "Field & Fixed Staff Status"}</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab("BIOMETRIC_KIOSK_SETTINGS")}
+          className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
+            activeTab === "BIOMETRIC_KIOSK_SETTINGS"
+              ? "bg-teal-600 text-white shadow-xs"
+              : "bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300"
+          }`}
+        >
+          <ScanFace className="w-4 h-4" />
+          <span>{isBangla ? "বায়োমেট্রিক ও ফেস কিওস্ক সেটিংস" : "Biometric & Face Kiosk Settings"}</span>
         </button>
       </div>
 
@@ -1279,6 +1312,194 @@ export const RolesPermissionsView: React.FC<RolesPermissionsViewProps> = ({
                 </div>
               );
             })}
+          </div>
+        </div>
+      )}
+
+      {/* TAB 4: BIOMETRIC & FACE KIOSK MODE SETTINGS */}
+      {activeTab === "BIOMETRIC_KIOSK_SETTINGS" && (
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 sm:p-7 space-y-6 shadow-xs">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-5">
+            <div className="flex items-start gap-3">
+              <div className="p-3 bg-teal-500/10 border border-teal-500/30 rounded-2xl text-teal-600 dark:text-teal-400 shrink-0">
+                <ScanFace className="w-7 h-7" />
+              </div>
+              <div>
+                <h3 className="text-base sm:text-lg font-black text-slate-900 dark:text-white">
+                  {isBangla ? "বায়োমেট্রিক হাজিরা ও ফেস কিওস্ক মোড পলিসি" : "Biometric Attendance & Face Kiosk Policy"}
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-2xl">
+                  {isBangla
+                    ? "সুপার অ্যাডমিন হিসেবে প্রতিষ্ঠানজুড়ে মোবাইল, ট্যাবলেট ও পিসিতে ফেস ভেরিফিকেশন কিওস্কের এক্সেস মোড নির্ধারণ করুন।"
+                    : "As Super Admin, configure which face verification kiosk modes are accessible across mobile, tablet, and desktop devices."}
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                onUpdateBiometricSettings?.(biometricState);
+                setSavedSuccess(isBangla ? "বায়োমেট্রিক কিওস্ক সেটিংস সফলভাবে সংরক্ষিত হয়েছে!" : "Biometric kiosk settings saved successfully!");
+                setTimeout(() => setSavedSuccess(null), 3500);
+              }}
+              className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white text-xs font-black shadow-lg shadow-teal-500/20 flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-[0.98]"
+            >
+              <Save className="w-4 h-4" />
+              <span>{isBangla ? "পলিসি সেভ করুন" : "Save Biometric Policy"}</span>
+            </button>
+          </div>
+
+          {/* Mode Availability Card Selector */}
+          <div className="space-y-4">
+            <label className="block text-xs font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              {isBangla ? "বায়োমেট্রিক্সের ক্ষেত্রে কোন কোন মোড সক্রিয় থাকবে?" : "Which biometric verification modes are active?"}
+            </label>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Option 1: BOTH */}
+              <div
+                onClick={() => setBiometricState((prev) => ({ ...prev, modeAvailability: "BOTH", defaultMode: "AUTO_KIOSK" }))}
+                className={`p-4 sm:p-5 rounded-2xl border-2 transition-all cursor-pointer relative flex flex-col justify-between ${
+                  biometricState.modeAvailability === "BOTH"
+                    ? "bg-teal-500/5 dark:bg-teal-950/20 border-teal-500 shadow-md ring-2 ring-teal-500/20"
+                    : "bg-slate-50 dark:bg-slate-950/50 border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700"
+                }`}
+              >
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-teal-500/20 text-teal-700 dark:text-teal-300">
+                      {isBangla ? "উভয় মোড (সুপারিশকৃত)" : "Both Modes (Recommended)"}
+                    </span>
+                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                      biometricState.modeAvailability === "BOTH" ? "border-teal-500 bg-teal-500 text-white" : "border-slate-300 dark:border-slate-700"
+                    }`}>
+                      {biometricState.modeAvailability === "BOTH" && <Check className="w-3 h-3" />}
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 className="font-bold text-sm text-slate-900 dark:text-white">
+                      {isBangla ? "অটো কিওস্ক + ১:১ প্রোফাইল (দুইটাই)" : "Auto Kiosk + 1:1 Profile (Both)"}
+                    </h4>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+                      {isBangla
+                        ? "ক্যামেরা ওপেন করলেই ডিফল্ট হিসেবে অটো কিওস্ক চালু হবে। তবে স্ক্রিনে সুইচ অপশন থাকবে, ফলে ব্যবহারকারী প্রয়োজন হলে ১:১ মোডেও ভেরিফাই করতে পারবে।"
+                        : "Opens with Auto Kiosk by default. Users have tab switches to toggle between 1:N auto scan and 1:1 single profile verification."}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-4 pt-3 border-t border-slate-200/60 dark:border-slate-800/60 text-[11px] text-teal-600 dark:text-teal-400 font-medium">
+                  {isBangla ? "✓ ট্যাবলেট, মোবাইল ও পিসিতে ফ্লেক্সিবল" : "✓ Maximum flexibility for all devices"}
+                </div>
+              </div>
+
+              {/* Option 2: AUTO_KIOSK_ONLY */}
+              <div
+                onClick={() => setBiometricState((prev) => ({ ...prev, modeAvailability: "AUTO_KIOSK_ONLY", defaultMode: "AUTO_KIOSK" }))}
+                className={`p-4 sm:p-5 rounded-2xl border-2 transition-all cursor-pointer relative flex flex-col justify-between ${
+                  biometricState.modeAvailability === "AUTO_KIOSK_ONLY"
+                    ? "bg-teal-500/5 dark:bg-teal-950/20 border-teal-500 shadow-md ring-2 ring-teal-500/20"
+                    : "bg-slate-50 dark:bg-slate-950/50 border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700"
+                }`}
+              >
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-500/20 text-emerald-700 dark:text-emerald-300">
+                      {isBangla ? "ফুল অটোমেটিক" : "Fully Automatic"}
+                    </span>
+                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                      biometricState.modeAvailability === "AUTO_KIOSK_ONLY" ? "border-teal-500 bg-teal-500 text-white" : "border-slate-300 dark:border-slate-700"
+                    }`}>
+                      {biometricState.modeAvailability === "AUTO_KIOSK_ONLY" && <Check className="w-3 h-3" />}
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 className="font-bold text-sm text-slate-900 dark:text-white">
+                      {isBangla ? "শুধুমাত্র অটো কিওস্ক (1:N Auto Scan)" : "Auto Kiosk Only (1:N)"}
+                    </h4>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+                      {isBangla
+                        ? "ক্যামেরার সামনে যে কেউ এলেই সিস্টেম কৃত্রিম বুদ্ধিমত্তার মাধ্যমে স্বয়ংক্রিয়ভাবে তার মুখ স্ক্যান ও শনাক্ত করবে। কোনো কর্মী আগে থেকে সিলেক্ট করার অপশন থাকবে না।"
+                        : "Any employee approaching camera is automatically identified via AI face vector database. No manual selection required or allowed."}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-4 pt-3 border-t border-slate-200/60 dark:border-slate-800/60 text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
+                  {isBangla ? "✓ দ্রুততম উপস্থিতি (হ্যান্ডস-ফ্রি)" : "✓ Fast hands-free kiosk check-in"}
+                </div>
+              </div>
+
+              {/* Option 3: ONE_TO_ONE_ONLY */}
+              <div
+                onClick={() => setBiometricState((prev) => ({ ...prev, modeAvailability: "ONE_TO_ONE_ONLY", defaultMode: "ONE_TO_ONE" }))}
+                className={`p-4 sm:p-5 rounded-2xl border-2 transition-all cursor-pointer relative flex flex-col justify-between ${
+                  biometricState.modeAvailability === "ONE_TO_ONE_ONLY"
+                    ? "bg-teal-500/5 dark:bg-teal-950/20 border-teal-500 shadow-md ring-2 ring-teal-500/20"
+                    : "bg-slate-50 dark:bg-slate-950/50 border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700"
+                }`}
+              >
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-indigo-500/20 text-indigo-700 dark:text-indigo-300">
+                      {isBangla ? "১:১ যাচাই" : "1:1 Verification"}
+                    </span>
+                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                      biometricState.modeAvailability === "ONE_TO_ONE_ONLY" ? "border-teal-500 bg-teal-500 text-white" : "border-slate-300 dark:border-slate-700"
+                    }`}>
+                      {biometricState.modeAvailability === "ONE_TO_ONE_ONLY" && <Check className="w-3 h-3" />}
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 className="font-bold text-sm text-slate-900 dark:text-white">
+                      {isBangla ? "শুধুমাত্র ১:১ প্রোফাইল ভেরিফিকেশন" : "1:1 Staff Profile Only"}
+                    </h4>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+                      {isBangla
+                        ? "শুধুমাত্র নির্দিষ্ট প্রোফাইলের লোকটি ওই ক্যামেরার মাধ্যমে খুঁজে পাবে এবং ফেস ম্যাচ করতে পারবে।"
+                        : "Camera strictly verifies against the specific selected or logged-in staff member profile."}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-4 pt-3 border-t border-slate-200/60 dark:border-slate-800/60 text-[11px] text-indigo-600 dark:text-indigo-400 font-medium">
+                  {isBangla ? "✓ ব্যক্তিগত ডিভাইসের জন্য আদর্শ" : "✓ Dedicated for individual staff devices"}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Current Policy Overview Banner */}
+          <div className="p-4 rounded-2xl bg-teal-500/10 border border-teal-500/20 flex items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-2 text-teal-800 dark:text-teal-300">
+              <Sparkles className="w-4 h-4 shrink-0" />
+              <span>
+                {isBangla
+                  ? `বর্তমানে সক্রিয় পলিসি: ${
+                      biometricState.modeAvailability === "AUTO_KIOSK_ONLY"
+                        ? "শুধুমাত্র স্বয়ংক্রিয় কিওস্ক (Auto Kiosk Only)"
+                        : biometricState.modeAvailability === "ONE_TO_ONE_ONLY"
+                        ? "শুধুমাত্র ১:১ কর্মচারী ভেরিফিকেশন (1:1 Only)"
+                        : "উভয় মোড সক্রিয় (Both Auto Kiosk & 1:1 Available)"
+                    }`
+                  : `Active Policy: ${biometricState.modeAvailability}`}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                onUpdateBiometricSettings?.(biometricState);
+                setSavedSuccess(isBangla ? "বায়োমেট্রিক কিওস্ক সেটিংস সফলভাবে সংরক্ষিত হয়েছে!" : "Biometric kiosk settings saved successfully!");
+                setTimeout(() => setSavedSuccess(null), 3500);
+              }}
+              className="px-3.5 py-1.5 rounded-xl bg-teal-600 hover:bg-teal-500 text-white font-bold cursor-pointer shrink-0"
+            >
+              {isBangla ? "সেভ করুন" : "Save"}
+            </button>
           </div>
         </div>
       )}

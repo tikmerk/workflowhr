@@ -57,6 +57,8 @@ export interface LiveFaceAnalysis {
     hasGlasses: boolean;
     description: string;
   };
+  ambientLuminance?: number; // 0 to 255
+  isLowLight?: boolean;
 }
 
 export interface FaceMatchResult {
@@ -186,13 +188,24 @@ export async function extractFaceDescriptor(
 
   try {
     const target = await ensureImageElement(input);
-    const detection = await faceapi
+    let detection = await faceapi
       .detectSingleFace(
         target,
-        new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.45 })
+        new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.40 })
       )
       .withFaceLandmarks()
       .withFaceDescriptor();
+
+    // Low-light / dim environment fallback: if not detected, retry with adaptive sensitivity
+    if (!detection) {
+      detection = await faceapi
+        .detectSingleFace(
+          target,
+          new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.22 })
+        )
+        .withFaceLandmarks()
+        .withFaceDescriptor();
+    }
 
     if (!detection) {
       return { descriptor: null };
@@ -565,12 +578,49 @@ let cachedAnalysis: LiveFaceAnalysis = {
   smileDetected: false,
   eyeOpenness: 90,
   livenessPassed: false,
+  ambientLuminance: 120,
+  isLowLight: false,
 };
 
 let lastAnalysisTime = 0;
 let isAnalyzingLandmarks = false;
 let consecutiveNoFaceCount = 0;
 const MAX_NO_FACE_DROPS = 6; // Tolerate up to 6 dropped frames (~750ms) to eliminate flickering
+
+// Fast offscreen sampler for ambient luminance measurement (32x24 for zero overhead)
+let offscreenLumCanvas: HTMLCanvasElement | null = null;
+let offscreenLumCtx: CanvasRenderingContext2D | null = null;
+
+function measureAmbientLuminance(video: HTMLVideoElement): { luminance: number; isLowLight: boolean } {
+  try {
+    if (typeof document === "undefined" || !video || video.readyState < 2) {
+      return { luminance: 120, isLowLight: false };
+    }
+    if (!offscreenLumCanvas) {
+      offscreenLumCanvas = document.createElement("canvas");
+      offscreenLumCanvas.width = 32;
+      offscreenLumCanvas.height = 24;
+      offscreenLumCtx = offscreenLumCanvas.getContext("2d", { willReadFrequently: true });
+    }
+    if (offscreenLumCtx && video.videoWidth > 0 && video.videoHeight > 0) {
+      offscreenLumCtx.drawImage(video, 0, 0, 32, 24);
+      const img = offscreenLumCtx.getImageData(0, 0, 32, 24);
+      const data = img.data;
+      let total = 0;
+      const count = data.length / 4;
+      for (let i = 0; i < data.length; i += 4) {
+        // Standard Rec. 601 optical luminance formula
+        total += 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+      }
+      const lum = Math.round(total / count);
+      // Low light if average pixel luminance < 65 out of 255
+      return { luminance: lum, isLowLight: lum < 65 };
+    }
+  } catch (e) {
+    // Ignore any canvas error
+  }
+  return { luminance: 120, isLowLight: false };
+}
 
 /**
  * Synchronous / Fast frame analysis for live HUD rendering
@@ -588,8 +638,13 @@ export function detectLiveFaceInVideo(videoElement: HTMLVideoElement): LiveFaceA
       smileDetected: false,
       eyeOpenness: 90,
       livenessPassed: false,
+      ambientLuminance: 120,
+      isLowLight: false,
     };
   }
+
+  // Fast ambient luminance sample
+  const { luminance, isLowLight } = measureAmbientLuminance(videoElement);
 
   // Run non-blocking background landmark update every 45ms (~22 fps) for rapid blink capture
   const now = Date.now();
@@ -599,12 +654,24 @@ export function detectLiveFaceInVideo(videoElement: HTMLVideoElement): LiveFaceA
 
     (async () => {
       try {
-        const detection = await faceapi
-          .detectSingleFace(
-            videoElement,
-            new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.38 })
-          )
+        // In low light, adaptively lower detection threshold so dim faces are not missed
+        const detectorOptions = isLowLight
+          ? new faceapi.TinyFaceDetectorOptions({ inputSize: 256, scoreThreshold: 0.24 })
+          : new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.38 });
+
+        let detection = await faceapi
+          .detectSingleFace(videoElement, detectorOptions)
           .withFaceLandmarks();
+
+        // Low-light secondary rescue pass if primary failed
+        if (!detection && isLowLight) {
+          detection = await faceapi
+            .detectSingleFace(
+              videoElement,
+              new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.18 })
+            )
+            .withFaceLandmarks();
+        }
 
         if (detection) {
           consecutiveNoFaceCount = 0;
@@ -754,6 +821,8 @@ export function detectLiveFaceInVideo(videoElement: HTMLVideoElement): LiveFaceA
               hasGlasses: false,
               description: "No Eyewear Detected",
             },
+            ambientLuminance: luminance,
+            isLowLight,
           };
         } else {
           // Latching buffer: only clear face after MAX_NO_FACE_DROPS missed frames
@@ -762,7 +831,7 @@ export function detectLiveFaceInVideo(videoElement: HTMLVideoElement): LiveFaceA
             cachedAnalysis = {
               hasFace: false,
               skinPixelCount: 0,
-              brightness: 120,
+              brightness: luminance,
               sharpness: 50,
               blinkScore: 100,
               smileScore: 0,
@@ -770,6 +839,8 @@ export function detectLiveFaceInVideo(videoElement: HTMLVideoElement): LiveFaceA
               smileDetected: false,
               eyeOpenness: 90,
               livenessPassed: false,
+              ambientLuminance: luminance,
+              isLowLight,
             };
           }
         }

@@ -26,8 +26,14 @@ import {
   Volume2,
   VolumeX,
   Sun,
+  Moon,
+  Activity,
+  ChevronDown,
+  ChevronUp,
+  Settings,
+  ShieldAlert,
 } from "lucide-react";
-import { Employee, Branch, AttendanceRecord, Shift } from "../../types";
+import { Employee, Branch, AttendanceRecord, Shift, BiometricKioskSettings, BiometricModeConfig } from "../../types";
 import {
   detectLiveFaceInVideo,
   autoIdentifyLiveFaceFromAllEmployees,
@@ -57,6 +63,8 @@ interface RealtimeFaceRecognitionViewProps {
   currentEmployee?: Employee;
   shifts?: Shift[];
   initialMode?: KioskMode;
+  biometricSettings?: BiometricKioskSettings;
+  onUpdateBiometricSettings?: (settings: BiometricKioskSettings) => void;
   isModal?: boolean;
   onClose?: () => void;
   selectedBranchId?: string;
@@ -74,6 +82,8 @@ export const RealtimeFaceRecognitionView: React.FC<RealtimeFaceRecognitionViewPr
   currentEmployee,
   shifts = [],
   initialMode = "AUTO_KIOSK",
+  biometricSettings,
+  onUpdateBiometricSettings,
   isModal = false,
   onClose,
   selectedBranchId: propSelectedBranchId,
@@ -83,11 +93,43 @@ export const RealtimeFaceRecognitionView: React.FC<RealtimeFaceRecognitionViewPr
 }) => {
   const { isBangla } = useThemeLanguage();
 
-  // Mode Selection
-  const [activeMode, setActiveMode] = useState<KioskMode>(initialMode);
+  // Mode Selection: Auto-defaults to AUTO_KIOSK across mobile, tablet, and PC
+  // unless Super Admin has locked the policy to ONE_TO_ONE_ONLY.
+  const [activeMode, setActiveMode] = useState<KioskMode>(() => {
+    if (biometricSettings?.modeAvailability === "ONE_TO_ONE_ONLY") return "ONE_TO_ONE";
+    if (biometricSettings?.modeAvailability === "AUTO_KIOSK_ONLY") return "AUTO_KIOSK";
+    return initialMode || "AUTO_KIOSK";
+  });
+
+  // Sync mode if biometricSettings change
+  useEffect(() => {
+    if (biometricSettings?.modeAvailability === "AUTO_KIOSK_ONLY" && activeMode === "ONE_TO_ONE") {
+      setActiveMode("AUTO_KIOSK");
+    } else if (biometricSettings?.modeAvailability === "ONE_TO_ONE_ONLY" && activeMode === "AUTO_KIOSK") {
+      setActiveMode("ONE_TO_ONE");
+    }
+  }, [biometricSettings?.modeAvailability]);
+
+  // Check if current user has Super Admin authority
+  const isSuperAdmin = Boolean(
+    currentEmployee?.role === "SUPER_ADMIN" ||
+    currentEmployee?.isSuperAdmin === true ||
+    currentEmployee?.permissions?.includes("ALL") ||
+    currentEmployee?.permissions?.includes("MANAGE_SETTINGS")
+  );
+
+  // Super Admin In-Kiosk Policy Modal
+  const [showAdminSettingsModal, setShowAdminSettingsModal] = useState<boolean>(false);
+  const [tempModeAvailability, setTempModeAvailability] = useState<BiometricModeConfig>(
+    biometricSettings?.modeAvailability || "BOTH"
+  );
 
   // Virtual Screen Fill-Light (for low light / night kiosks)
   const [screenFillLight, setScreenFillLight] = useState<boolean>(false);
+  // Auto digital low-light sensor gain & contrast boost
+  const [lowLightBoostEnabled, setLowLightBoostEnabled] = useState<boolean>(true);
+  // Collapsible telemetry panel on mobile (collapsed by default so it never blocks results)
+  const [telemetryExpandedMobile, setTelemetryExpandedMobile] = useState<boolean>(false);
 
   // Jitter and Match Latching Refs
   const matchLockedUntilRef = useRef<number>(0);
@@ -753,11 +795,61 @@ export const RealtimeFaceRecognitionView: React.FC<RealtimeFaceRecognitionViewPr
     );
   });
 
+  // Reusable Kiosk Recent Logs Component
+  const renderRecentKioskLogs = () => (
+    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-sm space-y-3">
+      <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
+        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+          <Clock className="w-3.5 h-3.5 text-teal-500" />
+          <span>{isBangla ? "আজকের কিওস্ক হাজিরা লগ" : "Today's Kiosk Attendance Logs"}</span>
+        </h3>
+        <span className="text-[11px] font-mono text-slate-400">
+          {recentKioskLogs.length} {isBangla ? "জন" : "stamped"}
+        </span>
+      </div>
+
+      {recentKioskLogs.length === 0 ? (
+        <p className="text-xs text-slate-400 text-center py-4">
+          {isBangla ? "আজ এখনও কিওস্ক থেকে কোনো হাজিরা নিশ্চিত করা হয়নি।" : "No kiosk attendances stamped yet today."}
+        </p>
+      ) : (
+        <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+          {recentKioskLogs.map((log) => (
+            <div
+              key={log.id}
+              className="flex items-center justify-between p-2.5 bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800/80 rounded-xl text-xs"
+            >
+              <div className="flex items-center gap-2.5">
+                <div
+                  className={`w-2 h-2 rounded-full ${
+                    log.type === "CHECK_IN" ? "bg-emerald-500" : "bg-blue-500"
+                  }`}
+                />
+                <div>
+                  <p className="font-bold text-slate-800 dark:text-slate-200">{log.employeeName}</p>
+                  <p className="text-[10px] text-slate-400 font-mono">{log.employeeCode}</p>
+                </div>
+              </div>
+              <div className="text-right">
+                <span className="font-mono font-semibold text-slate-700 dark:text-slate-300">
+                  {log.time}
+                </span>
+                <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">
+                  {log.type === "CHECK_IN" ? "ইন" : "আউট"} ({log.score}%)
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
   const mainContent = (
     <div className="space-y-6">
-      {/* Top Banner & Mode Navigation */}
+      {/* Top Banner & Mode Navigation: Visible on desktop (lg:block), hidden on mobile (hidden lg:block) so camera is immediately at the top */}
       {isModal ? (
-        <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 shadow-xl text-white">
+        <div className="hidden lg:block bg-slate-900/90 border border-slate-800 rounded-2xl p-4 shadow-xl text-white">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div className="flex items-center gap-3">
               <div className="p-2.5 bg-teal-500/10 border border-teal-500/30 rounded-xl text-teal-400 shrink-0">
@@ -899,7 +991,7 @@ export const RealtimeFaceRecognitionView: React.FC<RealtimeFaceRecognitionViewPr
           </div>
         </div>
       ) : (
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl text-white">
+        <div className="hidden lg:block bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl text-white">
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
             <div className="flex items-start gap-4">
               <div className="p-3 bg-teal-500/10 border border-teal-500/30 rounded-xl text-teal-400">
@@ -1067,12 +1159,16 @@ export const RealtimeFaceRecognitionView: React.FC<RealtimeFaceRecognitionViewPr
           />
         </div>
       ) : activeMode !== "DATABASE_DIRECTORY" ? (
-        <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
-          {/* LEFT 7 COLUMNS: LIVE CAMERA FEED & REAL-TIME BIOMETRIC HUD */}
-          <div className="xl:col-span-7 space-y-4">
-            <div className="bg-slate-950 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl relative">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 sm:gap-6">
+          {/* 1. CAMERA VIEWPORT: Always at top on mobile & tablet, 7 cols on desktop */}
+          <div className="order-1 lg:order-1 lg:col-span-7 space-y-4">
+            <div
+              className={`bg-slate-950 border rounded-2xl overflow-hidden shadow-2xl relative transition-all duration-300 ${
+                screenFillLight ? "border-amber-300 ring-4 ring-amber-400/40" : "border-slate-800"
+              }`}
+            >
               {/* Camera Header Status Strip */}
-              <div className="bg-slate-900/90 border-b border-slate-800 px-4 py-2.5 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-300">
+              <div className="bg-slate-900/90 border-b border-slate-800 px-3.5 py-2.5 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-300">
                 <div className="flex items-center gap-2">
                   <div
                     className={`w-2.5 h-2.5 rounded-full ${
@@ -1097,12 +1193,40 @@ export const RealtimeFaceRecognitionView: React.FC<RealtimeFaceRecognitionViewPr
 
                   {liveFaceAnalysis?.glassesDetected && (
                     <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/40">
-                      {isBangla ? "👓 চশমা সনাক্ত (অ্যাডাপ্টিভ)" : "👓 Glasses (Adaptive)"}
+                      {isBangla ? "👓 চশমা" : "👓 Glasses"}
                     </span>
                   )}
                 </div>
 
-                <div className="flex items-center gap-2.5">
+                <div className="flex items-center flex-wrap gap-2">
+                  {/* Low-Light Status & Toggle */}
+                  {(liveFaceAnalysis?.isLowLight || lowLightBoostEnabled) && (
+                    <div
+                      className={`flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                        liveFaceAnalysis?.isLowLight
+                          ? "bg-amber-500/20 text-amber-300 border-amber-500/50 animate-pulse"
+                          : "bg-slate-800 text-slate-300 border-slate-700"
+                      }`}
+                      title={isBangla ? "অটোমেটিক লো-লাইট বুস্ট সক্রিয়" : "Low light adaptive gain active"}
+                    >
+                      <Moon className="w-3 h-3 text-amber-400" />
+                      <span>{isBangla ? "🌙 কম আলো" : "🌙 Low Light"}</span>
+                    </div>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => setLowLightBoostEnabled((prev) => !prev)}
+                    className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-colors cursor-pointer ${
+                      lowLightBoostEnabled
+                        ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
+                        : "bg-slate-800 text-slate-400 border-slate-700 hover:text-slate-200"
+                    }`}
+                    title={isBangla ? "অটো লো-লাইট সেন্সর বুস্ট অন/অফ" : "Toggle Low-Light Gain"}
+                  >
+                    {lowLightBoostEnabled ? (isBangla ? "বুস্ট অন" : "Gain On") : (isBangla ? "বুস্ট অফ" : "Gain Off")}
+                  </button>
+
                   {/* Anti-spoofing verification method selector */}
                   <div className="flex items-center bg-slate-950/80 border border-slate-700/80 rounded-lg p-0.5">
                     <button
@@ -1155,10 +1279,75 @@ export const RealtimeFaceRecognitionView: React.FC<RealtimeFaceRecognitionViewPr
                       128D
                     </span>
                   )}
+
+                  {/* Geofence GPS status badge (compact for mobile & desktop) */}
+                  <div
+                    className={`flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-semibold border ${
+                      isInsideGeofence
+                        ? "bg-emerald-950/60 border-emerald-500/40 text-emerald-300"
+                        : "bg-amber-950/60 border-amber-500/40 text-amber-300"
+                    }`}
+                    title={gpsAddress || "Branch Geofence"}
+                  >
+                    <MapPin className="w-3 h-3 text-teal-400" />
+                    <span>{isInsideGeofence ? (isBangla ? "জোন ভ্যালিড" : "Zone Valid") : (isBangla ? "জোন বহির্ভূত" : "Out of Zone")}</span>
+                  </div>
+
+                  {/* Screen Fill Light Quick Toggle */}
+                  <button
+                    type="button"
+                    onClick={() => setScreenFillLight((prev) => !prev)}
+                    className={`p-1.5 rounded-lg text-xs font-bold transition-all border cursor-pointer ${
+                      screenFillLight
+                        ? "bg-amber-400 text-slate-950 border-amber-300"
+                        : "bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700"
+                    }`}
+                    title={isBangla ? "ফিল-লাইট অন/অফ" : "Fill-Light"}
+                  >
+                    <Sun className={`w-3.5 h-3.5 ${screenFillLight ? "text-slate-950 fill-slate-950" : "text-amber-400"}`} />
+                  </button>
+
+                  {/* Audio Toggle */}
+                  <button
+                    type="button"
+                    onClick={() => setSoundEnabled(!soundEnabled)}
+                    title={soundEnabled ? (isBangla ? "সাউন্ড মিউট" : "Mute") : (isBangla ? "সাউন্ড অন" : "Unmute")}
+                    className="p-1.5 rounded-lg border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors cursor-pointer"
+                  >
+                    {soundEnabled ? <Volume2 className="w-3.5 h-3.5 text-teal-400" /> : <VolumeX className="w-3.5 h-3.5 text-slate-400" />}
+                  </button>
+
+                  {/* Super Admin Quick Policy Button */}
+                  {isSuperAdmin && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTempModeAvailability(biometricSettings?.modeAvailability || "BOTH");
+                        setShowAdminSettingsModal(true);
+                      }}
+                      title={isBangla ? "সুপার অ্যাডমিন: কিওস্ক মোড পলিসি পরিবর্তন" : "Super Admin: Kiosk Mode Policy"}
+                      className="p-1.5 rounded-lg border border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 transition-colors cursor-pointer"
+                    >
+                      <Settings className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+
+                  {/* Close button if in modal */}
+                  {isModal && onClose && (
+                    <button
+                      type="button"
+                      onClick={onClose}
+                      className="p-1.5 rounded-lg border border-slate-700 bg-slate-800 hover:bg-red-950/50 hover:border-red-500/50 text-slate-400 hover:text-red-300 transition-colors cursor-pointer"
+                      title="Close"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+
                   <button
                     onClick={handleResetScan}
                     title="রিসেট"
-                    className="flex items-center gap-1 text-[11px] text-slate-400 hover:text-white transition-colors"
+                    className="flex items-center gap-1 text-[11px] text-slate-400 hover:text-white transition-colors cursor-pointer"
                   >
                     <RefreshCw className="w-3.5 h-3.5" />
                     <span>{isBangla ? "রিসেট" : "Reset"}</span>
@@ -1174,6 +1363,11 @@ export const RealtimeFaceRecognitionView: React.FC<RealtimeFaceRecognitionViewPr
                     autoPlay
                     playsInline
                     muted
+                    style={{
+                      filter: (screenFillLight || lowLightBoostEnabled || liveFaceAnalysis?.isLowLight)
+                        ? "brightness(1.36) contrast(1.22) saturate(1.15)"
+                        : "none",
+                    }}
                     className="w-full h-full object-cover scale-x-[-1]"
                   />
                 ) : (
@@ -1184,7 +1378,7 @@ export const RealtimeFaceRecognitionView: React.FC<RealtimeFaceRecognitionViewPr
                     </p>
                     <button
                       onClick={startCamera}
-                      className="px-4 py-2 bg-teal-600 text-white text-xs font-bold rounded-xl hover:bg-teal-500"
+                      className="px-4 py-2 bg-teal-600 text-white text-xs font-bold rounded-xl hover:bg-teal-500 cursor-pointer"
                     >
                       {isBangla ? "ক্যামেরা চালু করুন" : "Start Camera"}
                     </button>
@@ -1198,6 +1392,44 @@ export const RealtimeFaceRecognitionView: React.FC<RealtimeFaceRecognitionViewPr
                   height={480}
                   className="absolute inset-0 w-full h-full pointer-events-none"
                 />
+
+                {/* Floating Smart Low-Light Warning & Screen Fill-Light Guidance */}
+                {liveFaceAnalysis?.isLowLight && !screenFillLight && (
+                  <div className="absolute top-3 inset-x-3 z-20 bg-amber-950/90 backdrop-blur-md border border-amber-500/80 rounded-xl p-2.5 flex items-center justify-between shadow-xl text-xs animate-in fade-in slide-in-from-top-2">
+                    <div className="flex items-center gap-2 text-amber-200">
+                      <Sun className="w-4 h-4 text-amber-400 shrink-0" />
+                      <span className="font-medium text-[11px] sm:text-xs">
+                        {isBangla ? "চারপাশে আলো কম? স্ক্রিন ফিল-লাইট অন করুন" : "Low ambient light? Turn on Screen Fill-Light"}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setScreenFillLight(true)}
+                      className="px-2.5 py-1 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs rounded-lg shadow cursor-pointer transition-colors whitespace-nowrap"
+                    >
+                      {isBangla ? "💡 ফিল-লাইট অন" : "Turn On"}
+                    </button>
+                  </div>
+                )}
+
+                {/* Floating Fill-Light Active Notice */}
+                {screenFillLight && (
+                  <div className="absolute top-3 inset-x-3 z-20 bg-white/95 text-slate-900 border-2 border-amber-400 rounded-xl p-2 flex items-center justify-between shadow-lg text-xs">
+                    <div className="flex items-center gap-2 font-bold text-amber-800">
+                      <Sun className="w-4 h-4 text-amber-500 shrink-0" />
+                      <span className="text-[11px] sm:text-xs">
+                        {isBangla ? "💡 স্ক্রিন ফিল-লাইট সক্রিয় • মুখ আলোকিত হচ্ছে" : "💡 Fill-Light active • Face illuminated"}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setScreenFillLight(false)}
+                      className="px-2.5 py-0.5 bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold text-[11px] rounded-md transition-colors cursor-pointer"
+                    >
+                      {isBangla ? "বন্ধ করুন" : "Turn Off"}
+                    </button>
+                  </div>
+                )}
 
                 {/* Instant Verification Toast Floating Banner */}
                 {justCheckedInEmployee && (
@@ -1294,7 +1526,7 @@ export const RealtimeFaceRecognitionView: React.FC<RealtimeFaceRecognitionViewPr
                         setLivenessStage("VERIFIED");
                         playSound("blink");
                       }}
-                      className="text-[11px] px-3 py-1.5 bg-teal-600/30 hover:bg-teal-600/50 border border-teal-500/50 rounded-lg text-teal-200 font-bold whitespace-nowrap transition-colors"
+                      className="text-[11px] px-3 py-1.5 bg-teal-600/30 hover:bg-teal-600/50 border border-teal-500/50 rounded-lg text-teal-200 font-bold whitespace-nowrap transition-colors cursor-pointer"
                       title={isBangla ? "প্রতিকূল আলো বা ক্যামেরার ক্ষেত্রে সুপারভাইজার কর্তৃক সরাসরি উপস্থিতি অনুমোদন" : "Supervisor quick verify in low light"}
                     >
                       {isBangla ? "সুপারভাইজার ভেরিফাই" : "Supervisor Verify"}
@@ -1303,119 +1535,284 @@ export const RealtimeFaceRecognitionView: React.FC<RealtimeFaceRecognitionViewPr
                 </div>
               </div>
 
-              {/* LIVE BIOMETRIC FEATURE TELEMETRY METER */}
-              <div className="bg-slate-900 border-t border-slate-800 p-4 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-                {/* 1. Eye Openness & Blink */}
-                <div className="bg-slate-950/60 border border-slate-800 p-2.5 rounded-xl space-y-1.5">
-                  <div className="flex items-center justify-between text-slate-400">
-                    <span className="flex items-center gap-1.5 font-medium">
-                      <Eye className="w-3.5 h-3.5 text-teal-400" />
-                      {isBangla ? "চোখের পাতা" : "Eye Aperture"}
-                    </span>
-                    <span className="font-mono text-teal-300 font-bold">
-                      {liveFaceAnalysis?.eyeOpenness || 0}%
-                    </span>
-                  </div>
-                  <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
-                    <div
-                      className={`h-full transition-all duration-100 ${
-                        liveFaceAnalysis?.blinkDetected ? "bg-emerald-400" : "bg-teal-400"
-                      }`}
-                      style={{ width: `${liveFaceAnalysis?.eyeOpenness || 0}%` }}
-                    />
-                  </div>
-                  <span className="text-[10px] text-slate-400 block truncate">
-                    {blinkCompleted
-                      ? isBangla
-                        ? "✓ পলক গৃহীত"
-                        : "✓ Blink Confirmed"
-                      : isBangla
-                      ? "পর্যবেক্ষণাধীন"
-                      : "Tracking"}
-                  </span>
-                </div>
+              {/* ----------------------------------------------------------------- */}
+              {/* IN-CAMERA PROFILE SHOWCASE: Docked directly at bottom of camera   */}
+              {/* Shows recognized employee profile, score, countdown & touch buttons */}
+              {/* ----------------------------------------------------------------- */}
+              {matchResult?.matched && (matchResult.matchedEmployee || selectedTargetEmp) ? (
+                (() => {
+                  const emp = matchResult.matchedEmployee || selectedTargetEmp!;
+                  return (
+                    <div className="bg-slate-900/95 border-t border-emerald-500/50 backdrop-blur-md p-3 sm:p-4 animate-in fade-in slide-in-from-bottom-3 duration-200">
+                      {/* Matched Header Bar */}
+                      <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-800">
+                        <div className="flex items-center gap-2">
+                          <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
+                          <span className="text-xs font-black text-emerald-400">
+                            {isBangla
+                              ? `✓ বায়োমেট্রিক ম্যাচ নিশ্চিত (${matchResult.matchScore}%)`
+                              : `✓ Biometric Match Confirmed (${matchResult.matchScore}%)`}
+                          </span>
+                        </div>
+                        <span className="bg-emerald-500/20 text-emerald-300 text-[10px] font-mono px-2 py-0.5 rounded-full border border-emerald-500/40">
+                          AI 128D Multi-Factor
+                        </span>
+                      </div>
 
-                {/* 2. Skin Complexion / Melanin */}
-                <div className="bg-slate-950/60 border border-slate-800 p-2.5 rounded-xl space-y-1.5">
-                  <div className="flex items-center justify-between text-slate-400">
-                    <span className="flex items-center gap-1.5 font-medium">
-                      <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
-                      {isBangla ? "মেলানিন সূচক" : "Melanin Index"}
-                    </span>
-                    <span className="font-mono text-amber-300 font-bold">
-                      {liveFaceAnalysis?.skinToneProfile?.melaninIndex ?? "--"}
-                    </span>
-                  </div>
-                  <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-amber-400 transition-all duration-100"
-                      style={{ width: `${liveFaceAnalysis?.skinToneProfile?.melaninIndex || 0}%` }}
-                    />
-                  </div>
-                  <span className="text-[10px] text-slate-400 block truncate">
-                    {liveFaceAnalysis?.skinToneProfile?.melaninIndex !== undefined
-                      ? liveFaceAnalysis.skinToneProfile.melaninIndex > 60
-                        ? "Dark / Melanin"
-                        : liveFaceAnalysis.skinToneProfile.melaninIndex > 35
-                        ? "Wheatish"
-                        : "Fair"
-                      : "Scanning..."}
-                  </span>
-                </div>
+                      {/* Profile Row */}
+                      <div className="flex items-center gap-3">
+                        <img
+                          src={emp.faceRegisteredPhoto || emp.avatarUrl}
+                          alt={emp.fullName}
+                          className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl object-cover border-2 border-emerald-400 ring-4 ring-emerald-400/20 shadow-lg shrink-0"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h4 className="font-bold text-white text-sm sm:text-base truncate">
+                              {emp.fullName}
+                            </h4>
+                            <span className="bg-emerald-500 text-slate-950 text-[10px] font-extrabold px-2 py-0.5 rounded-full shrink-0">
+                              VERIFIED
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-400 font-mono truncate">
+                            ID: {emp.employeeCode} • {emp.designationTitle}
+                          </p>
+                          <p className="text-[11px] text-slate-300 truncate">
+                            {emp.departmentName} ({emp.branchName})
+                          </p>
+                        </div>
+                      </div>
 
-                {/* 3. Facial Hair / Beard Profile */}
-                <div className="bg-slate-950/60 border border-slate-800 p-2.5 rounded-xl space-y-1.5">
-                  <div className="flex items-center justify-between text-slate-400">
-                    <span className="font-medium">{isBangla ? "দাড়ি প্রোফাইল" : "Facial Hair"}</span>
-                    <span className="font-mono text-cyan-300 font-bold">
-                      {liveFaceAnalysis?.facialHairProfile?.hasWhiteBeard
-                        ? "সাদা দাড়ি"
-                        : liveFaceAnalysis?.facialHairProfile?.hasDarkBeard
-                        ? "কালো দাড়ি"
-                        : "ক্লিন-শেভড"}
-                    </span>
-                  </div>
-                  <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-cyan-400 transition-all duration-100"
-                      style={{
-                        width: liveFaceAnalysis?.facialHairProfile?.hasWhiteBeard
-                          ? "100%"
-                          : liveFaceAnalysis?.facialHairProfile?.hasDarkBeard
-                          ? "60%"
-                          : "20%",
-                      }}
-                    />
-                  </div>
-                  <span className="text-[10px] text-slate-400 block truncate">
-                    {liveFaceAnalysis?.facialHairProfile?.description || "Analyzing chin..."}
-                  </span>
-                </div>
+                      {/* Auto Countdown Progress Banner */}
+                      {autoClockInCountdown !== null && (
+                        <div className="mt-2.5 p-2 bg-emerald-950/60 border border-emerald-500/40 rounded-xl space-y-1.5">
+                          <div className="flex items-center justify-between text-xs font-bold text-emerald-300">
+                            <span className="flex items-center gap-1.5">
+                              <Clock className="w-3.5 h-3.5 text-emerald-400" />
+                              <span>
+                                {recommendedAction === "CHECK_OUT"
+                                  ? isBangla
+                                    ? "স্বয়ংক্রিয় প্রস্থান (Check-Out) কাউন্টডাউন:"
+                                    : "Auto Check-Out Countdown:"
+                                  : isBangla
+                                  ? "স্বয়ংক্রিয় উপস্থিতি (Check-In) কাউন্টডাউন:"
+                                  : "Auto Clock-In Countdown:"}
+                              </span>
+                            </span>
+                            <span className="font-mono text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/50">
+                              {autoClockInCountdown}s
+                            </span>
+                          </div>
+                          <div className="w-full bg-slate-950 h-1.5 rounded-full overflow-hidden border border-emerald-500/30">
+                            <div
+                              className="h-full bg-gradient-to-r from-teal-400 to-emerald-400 transition-all duration-100 ease-linear rounded-full"
+                              style={{ width: `${autoSubmitProgress}%` }}
+                            />
+                          </div>
+                        </div>
+                      )}
 
-                {/* 4. Glasses Detector */}
-                <div className="bg-slate-950/60 border border-slate-800 p-2.5 rounded-xl space-y-1.5">
-                  <div className="flex items-center justify-between text-slate-400">
-                    <span className="font-medium">{isBangla ? "চশমা" : "Eyeglasses"}</span>
-                    <span className="font-mono text-indigo-300 font-bold">
-                      {liveFaceAnalysis?.glassesProfile?.hasGlasses ? "চশমা পরা" : "নেই"}
+                      {/* Today's Status Banner if clocked in */}
+                      {matchedEmpTodayRecord && (
+                        <div className="mt-2 p-2 rounded-xl text-[11px] flex items-center gap-1.5 bg-slate-800/90 text-slate-300 border border-slate-700/80">
+                          <Clock className="w-3.5 h-3.5 text-teal-400 shrink-0" />
+                          <span className="truncate">
+                            {hasClockedInToday && !hasClockedOutToday
+                              ? isBangla
+                                ? `আজকের উপস্থিতি: ${matchedEmpTodayRecord.checkInTime} (প্রস্থান রেকর্ড করতে পারেন)`
+                                : `Checked in at ${matchedEmpTodayRecord.checkInTime}`
+                              : hasClockedInToday && hasClockedOutToday
+                              ? isBangla
+                                ? `আজকের হাজিরা সম্পন্ন (ইন: ${matchedEmpTodayRecord.checkInTime} | আউট: ${matchedEmpTodayRecord.checkOutTime})`
+                                : `Done today (In: ${matchedEmpTodayRecord.checkInTime} | Out: ${matchedEmpTodayRecord.checkOutTime})`
+                              : isBangla
+                              ? "আজকের উপস্থিতি রেকর্ড করুন"
+                              : "Record attendance"}
+                          </span>
+                        </div>
+                      )}
+
+                      {/* In-Camera Action Buttons */}
+                      <div className="grid grid-cols-2 gap-2 mt-3">
+                        <button
+                          type="button"
+                          onClick={() => handleConfirmAttendance("CHECK_IN")}
+                          className={`flex items-center justify-center gap-1.5 py-2.5 px-3 font-bold text-xs rounded-xl transition-all cursor-pointer ${
+                            recommendedAction === "CHECK_IN"
+                              ? "bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black shadow-lg shadow-emerald-500/20 ring-2 ring-emerald-300"
+                              : "bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700"
+                          }`}
+                        >
+                          <Check className="w-4 h-4" />
+                          <span>
+                            {isBangla
+                              ? `উপস্থিতি (In) ${recommendedAction === "CHECK_IN" && autoClockInCountdown ? `(${autoClockInCountdown}s)` : ""}`
+                              : `Confirm In ${recommendedAction === "CHECK_IN" && autoClockInCountdown ? `(${autoClockInCountdown}s)` : ""}`}
+                          </span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleConfirmAttendance("CHECK_OUT")}
+                          className={`flex items-center justify-center gap-1.5 py-2.5 px-3 font-bold text-xs rounded-xl transition-all cursor-pointer ${
+                            recommendedAction === "CHECK_OUT"
+                              ? "bg-gradient-to-r from-teal-500 to-emerald-500 text-slate-950 font-black shadow-lg shadow-teal-500/20 ring-2 ring-teal-300"
+                              : "bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700"
+                          }`}
+                        >
+                          <Clock className="w-4 h-4" />
+                          <span>
+                            {isBangla
+                              ? `প্রস্থান (Out) ${recommendedAction === "CHECK_OUT" && autoClockInCountdown ? `(${autoClockInCountdown}s)` : ""}`
+                              : `Confirm Out ${recommendedAction === "CHECK_OUT" && autoClockInCountdown ? `(${autoClockInCountdown}s)` : ""}`}
+                          </span>
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })()
+              ) : matchResult?.reason === "MISMATCH_LOW_CONFIDENCE" ? (
+                <div className="bg-slate-900/95 border-t border-red-500/50 backdrop-blur-md p-3 sm:p-4 space-y-2">
+                  <div className="flex items-center justify-between text-xs text-red-400 font-bold">
+                    <span className="flex items-center gap-1.5">
+                      <AlertTriangle className="w-4 h-4 text-red-400" />
+                      <span>{isBangla ? `চেহারা মেলেনি (${matchResult.matchScore}%)` : `Mismatch (${matchResult.matchScore}%)`}</span>
                     </span>
+                    <button
+                      onClick={handleResetScan}
+                      className="px-2.5 py-1 bg-red-600/30 hover:bg-red-600/50 border border-red-500/40 rounded-lg text-red-200 text-[11px] cursor-pointer"
+                    >
+                      {isBangla ? "পুনরায় চেষ্টা" : "Retry"}
+                    </button>
                   </div>
-                  <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-indigo-400 transition-all duration-100"
-                      style={{ width: liveFaceAnalysis?.glassesProfile?.hasGlasses ? "100%" : "0%" }}
-                    />
-                  </div>
-                  <span className="text-[10px] text-slate-400 block truncate">
-                    {liveFaceAnalysis?.glassesProfile?.description || "Scanning nasal rim..."}
-                  </span>
+                  <p className="text-[11px] text-slate-400">
+                    {isBangla
+                      ? "তালিকাভুক্ত কর্মচারীর সাথে কোনো মিল পাওয়া যায়নি। ফ্রেমের মাঝখানে সোজা দাঁড়ান অথবা সুপারভাইজারের সাহায্য নিন।"
+                      : "No enrolled match found. Re-align face or request supervisor assistance."}
+                  </p>
                 </div>
-              </div>
+              ) : null}
             </div>
           </div>
 
-          {/* RIGHT 5 COLUMNS: RECOGNITION RESULTS, VERIFICATION CARD & ACTIONS */}
-          <div className="xl:col-span-5 space-y-4">
+          {/* 2. RECOGNITION RESULTS & ACTIONS: order-2 on mobile (IMMEDIATELY BELOW CAMERA!), lg:order-2 lg:col-span-5 space-y-4 */}
+          <div className="order-2 lg:order-2 lg:col-span-5 space-y-4">
+            {/* KIOSK MODE & HARDWARE SETTINGS CARD (Always below camera on mobile, or in sidebar on desktop) */}
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-sm space-y-3.5 text-white">
+              {/* Header with Mode Status & Policy */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Settings className="w-4 h-4 text-teal-400" />
+                  <h3 className="text-xs font-bold text-white uppercase tracking-wider">
+                    {isBangla ? "কিওস্ক সেটিংস ও অপারেটিং মোড" : "Kiosk Operating Mode & Settings"}
+                  </h3>
+                </div>
+                {isSuperAdmin && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTempModeAvailability(biometricSettings?.modeAvailability || "BOTH");
+                      setShowAdminSettingsModal(true);
+                    }}
+                    className="text-[11px] text-amber-400 hover:text-amber-300 font-semibold flex items-center gap-1 cursor-pointer"
+                    title={isBangla ? "পলিসি পরিবর্তন করুন" : "Change Policy"}
+                  >
+                    <ShieldAlert className="w-3.5 h-3.5" />
+                    <span>{isBangla ? "পলিসি (সুপার অ্যাডমিন)" : "Policy"}</span>
+                  </button>
+                )}
+              </div>
+
+              {/* Mode Switching Buttons (if policy allows BOTH) or Policy Lock Indicator */}
+              {biometricSettings?.modeAvailability === "AUTO_KIOSK_ONLY" ? (
+                <div className="p-2.5 bg-teal-950/40 border border-teal-500/30 rounded-xl text-xs text-teal-200 flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-teal-400 shrink-0" />
+                  <span>
+                    {isBangla
+                      ? "সুপার অ্যাডমিন কর্তৃক শুধুমাত্র স্বয়ংক্রিয় কিওস্ক মোড (1:N) নির্ধারিত।"
+                      : "Locked to Auto Kiosk (1:N) by Super Admin policy."}
+                  </span>
+                </div>
+              ) : biometricSettings?.modeAvailability === "ONE_TO_ONE_ONLY" ? (
+                <div className="p-2.5 bg-teal-950/40 border border-teal-500/30 rounded-xl text-xs text-teal-200 flex items-center gap-2">
+                  <UserCheck className="w-4 h-4 text-teal-400 shrink-0" />
+                  <span>
+                    {isBangla
+                      ? "সুপার অ্যাডমিন কর্তৃক শুধুমাত্র ১:১ ভেরিফিকেশন মোড নির্ধারিত।"
+                      : "Locked to 1:1 Staff Verify by Super Admin policy."}
+                  </span>
+                </div>
+              ) : (
+                /* Both modes permitted: Switcher tabs */
+                <div className="grid grid-cols-2 gap-2 p-1 bg-slate-950/70 border border-slate-800 rounded-xl text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setActiveMode("AUTO_KIOSK")}
+                    className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg font-bold transition-all cursor-pointer ${
+                      activeMode === "AUTO_KIOSK"
+                        ? "bg-teal-500 text-slate-950 shadow-sm"
+                        : "text-slate-400 hover:text-white"
+                    }`}
+                  >
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>{isBangla ? "অটো কিওস্ক (1:N)" : "Auto Kiosk"}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveMode("ONE_TO_ONE")}
+                    className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg font-bold transition-all cursor-pointer ${
+                      activeMode === "ONE_TO_ONE"
+                        ? "bg-teal-500 text-slate-950 shadow-sm"
+                        : "text-slate-400 hover:text-white"
+                    }`}
+                  >
+                    <UserCheck className="w-3.5 h-3.5" />
+                    <span>{isBangla ? "১:১ নির্বাচন (1:1)" : "1:1 Staff Verify"}</span>
+                  </button>
+                </div>
+              )}
+
+              {/* Branch & Camera Device Quick Hardware Selection */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1 text-xs">
+                <div>
+                  <label className="text-[11px] text-slate-400 mb-1 block">
+                    {isBangla ? "ব্রাঞ্চ লোকেশন" : "Branch Location"}
+                  </label>
+                  <select
+                    value={selectedBranchId}
+                    onChange={(e) => setSelectedBranchId(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-2 text-xs text-white focus:outline-none cursor-pointer"
+                  >
+                    {branches.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {availableDevices.length > 1 && (
+                  <div>
+                    <label className="text-[11px] text-slate-400 mb-1 block">
+                      {isBangla ? "ক্যামেরা ডিভাইস পরিবর্তন" : "Camera Input Device"}
+                    </label>
+                    <select
+                      value={selectedDeviceId}
+                      onChange={(e) => setSelectedDeviceId(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-2 text-xs text-white focus:outline-none cursor-pointer"
+                    >
+                      {availableDevices.map((dev, i) => (
+                        <option key={dev.deviceId || i} value={dev.deviceId}>
+                          {dev.label || `Camera ${i + 1}`}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+            </div>
+
             {/* Mode Specific Selector Toolbar for 1:1 Verification */}
             {activeMode === "ONE_TO_ONE" && (
               <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-sm space-y-3">
@@ -1473,8 +1870,8 @@ export const RealtimeFaceRecognitionView: React.FC<RealtimeFaceRecognitionViewPr
               </div>
             )}
 
-            {/* RECOGNITION STATUS & IDENTITY CARD */}
-            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm space-y-4">
+            {/* RECOGNITION STATUS & IDENTITY CARD (Desktop full-view, hidden on mobile since mobile shows in-camera profile) */}
+            <div className="hidden lg:block bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm space-y-4">
               <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
                 <h2 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
                   <ScanFace className="w-4 h-4 text-teal-500" />
@@ -1775,53 +2172,161 @@ export const RealtimeFaceRecognitionView: React.FC<RealtimeFaceRecognitionViewPr
               )}
             </div>
 
-            {/* TODAY'S RECENT KIOSK ATTENDANCE STREAM */}
-            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-sm space-y-3">
-              <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
-                  <Clock className="w-3.5 h-3.5 text-teal-500" />
-                  <span>{isBangla ? "আজকের কিওস্ক হাজিরা লগ" : "Today's Kiosk Attendance Logs"}</span>
-                </h3>
-                <span className="text-[11px] font-mono text-slate-400">
-                  {recentKioskLogs.length} {isBangla ? "জন" : "stamped"}
-                </span>
+            {/* Desktop Logs: Shown inside right column on >= lg */}
+            <div className="hidden lg:block">
+              {renderRecentKioskLogs()}
+            </div>
+          </div>
+
+          {/* 3. BIOMETRIC TELEMETRY METER: order-3 on mobile (BELOW RECOGNITION CARD!), lg:order-3 lg:col-span-7 on desktop */}
+          <div className="order-3 lg:order-3 lg:col-span-7">
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-sm space-y-3">
+              <div
+                className="flex items-center justify-between cursor-pointer select-none"
+                onClick={() => setTelemetryExpandedMobile((prev) => !prev)}
+              >
+                <div className="flex items-center gap-2">
+                  <Activity className="w-4 h-4 text-teal-400" />
+                  <h3 className="text-xs font-bold text-white flex items-center gap-2">
+                    <span>{isBangla ? "বায়োমেট্রিক টেলিমেট্রি ও এআই প্যারামিটার" : "Biometric Diagnostics & AI Parameters"}</span>
+                    <span className="text-[10px] font-normal text-slate-400 hidden sm:inline">
+                      ({isBangla ? "আই অ্যাপারচার, মেলানিন, দাড়ি, চশমা" : "Eye Aperture, Melanin, Beard, Glasses"})
+                    </span>
+                  </h3>
+                </div>
+                <button
+                  type="button"
+                  className="text-[11px] text-teal-400 hover:text-teal-300 flex items-center gap-1 font-semibold cursor-pointer"
+                >
+                  <span>
+                    {telemetryExpandedMobile
+                      ? isBangla
+                        ? "সংক্ষেপ করুন"
+                        : "Collapse"
+                      : isBangla
+                      ? "বিস্তারিত দেখুন"
+                      : "Expand"}
+                  </span>
+                  {telemetryExpandedMobile ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                </button>
               </div>
 
-              {recentKioskLogs.length === 0 ? (
-                <p className="text-xs text-slate-400 text-center py-4">
-                  {isBangla ? "আজ এখনও কিওস্ক থেকে কোনো হাজিরা নিশ্চিত করা হয়নি।" : "No kiosk attendances stamped yet today."}
-                </p>
-              ) : (
-                <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
-                  {recentKioskLogs.map((log) => (
-                    <div
-                      key={log.id}
-                      className="flex items-center justify-between p-2.5 bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800/80 rounded-xl text-xs"
-                    >
-                      <div className="flex items-center gap-2.5">
-                        <div
-                          className={`w-2 h-2 rounded-full ${
-                            log.type === "CHECK_IN" ? "bg-emerald-500" : "bg-blue-500"
-                          }`}
-                        />
-                        <div>
-                          <p className="font-bold text-slate-800 dark:text-slate-200">{log.employeeName}</p>
-                          <p className="text-[10px] text-slate-400 font-mono">{log.employeeCode}</p>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <span className="font-mono font-semibold text-slate-700 dark:text-slate-300">
-                          {log.time}
-                        </span>
-                        <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">
-                          {log.type === "CHECK_IN" ? "ইন" : "আউট"} ({log.score}%)
-                        </p>
-                      </div>
+              {/* 4 Diagnostics Cards (Strictly collapsed by default on mobile/tablet, expands only on tap) */}
+              <div className={`${telemetryExpandedMobile ? "block" : "hidden lg:block"} pt-2 border-t border-slate-800`}>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                  {/* 1. Eye Openness & Blink */}
+                  <div className="bg-slate-950/60 border border-slate-800 p-2.5 rounded-xl space-y-1.5">
+                    <div className="flex items-center justify-between text-slate-400">
+                      <span className="flex items-center gap-1.5 font-medium">
+                        <Eye className="w-3.5 h-3.5 text-teal-400" />
+                        {isBangla ? "চোখের পাতা" : "Eye Aperture"}
+                      </span>
+                      <span className="font-mono text-teal-300 font-bold">
+                        {liveFaceAnalysis?.eyeOpenness || 0}%
+                      </span>
                     </div>
-                  ))}
+                    <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full transition-all duration-100 ${
+                          liveFaceAnalysis?.blinkDetected ? "bg-emerald-400" : "bg-teal-400"
+                        }`}
+                        style={{ width: `${liveFaceAnalysis?.eyeOpenness || 0}%` }}
+                      />
+                    </div>
+                    <span className="text-[10px] text-slate-400 block truncate">
+                      {blinkCompleted
+                        ? isBangla
+                          ? "✓ পলক গৃহীত"
+                          : "✓ Blink Confirmed"
+                        : isBangla
+                        ? "পর্যবেক্ষণাধীন"
+                        : "Tracking"}
+                    </span>
+                  </div>
+
+                  {/* 2. Skin Complexion / Melanin */}
+                  <div className="bg-slate-950/60 border border-slate-800 p-2.5 rounded-xl space-y-1.5">
+                    <div className="flex items-center justify-between text-slate-400">
+                      <span className="flex items-center gap-1.5 font-medium">
+                        <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
+                        {isBangla ? "মেলানিন সূচক" : "Melanin Index"}
+                      </span>
+                      <span className="font-mono text-amber-300 font-bold">
+                        {liveFaceAnalysis?.skinToneProfile?.melaninIndex ?? "--"}
+                      </span>
+                    </div>
+                    <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-amber-400 transition-all duration-100"
+                        style={{ width: `${liveFaceAnalysis?.skinToneProfile?.melaninIndex || 0}%` }}
+                      />
+                    </div>
+                    <span className="text-[10px] text-slate-400 block truncate">
+                      {liveFaceAnalysis?.skinToneProfile?.melaninIndex !== undefined
+                        ? liveFaceAnalysis.skinToneProfile.melaninIndex > 60
+                          ? "Dark / Melanin"
+                          : liveFaceAnalysis.skinToneProfile.melaninIndex > 35
+                          ? "Wheatish"
+                          : "Fair"
+                        : "Scanning..."}
+                    </span>
+                  </div>
+
+                  {/* 3. Facial Hair / Beard Profile */}
+                  <div className="bg-slate-950/60 border border-slate-800 p-2.5 rounded-xl space-y-1.5">
+                    <div className="flex items-center justify-between text-slate-400">
+                      <span className="font-medium">{isBangla ? "দাড়ি প্রোফাইল" : "Facial Hair"}</span>
+                      <span className="font-mono text-cyan-300 font-bold">
+                        {liveFaceAnalysis?.facialHairProfile?.hasWhiteBeard
+                          ? "সাদা দাড়ি"
+                          : liveFaceAnalysis?.facialHairProfile?.hasDarkBeard
+                          ? "কালো দাড়ি"
+                          : "ক্লিন-শেভড"}
+                      </span>
+                    </div>
+                    <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-cyan-400 transition-all duration-100"
+                        style={{
+                          width: liveFaceAnalysis?.facialHairProfile?.hasWhiteBeard
+                            ? "100%"
+                            : liveFaceAnalysis?.facialHairProfile?.hasDarkBeard
+                            ? "60%"
+                            : "20%",
+                        }}
+                      />
+                    </div>
+                    <span className="text-[10px] text-slate-400 block truncate">
+                      {liveFaceAnalysis?.facialHairProfile?.description || "Analyzing chin..."}
+                    </span>
+                  </div>
+
+                  {/* 4. Glasses Detector */}
+                  <div className="bg-slate-950/60 border border-slate-800 p-2.5 rounded-xl space-y-1.5">
+                    <div className="flex items-center justify-between text-slate-400">
+                      <span className="font-medium">{isBangla ? "চশমা" : "Eyeglasses"}</span>
+                      <span className="font-mono text-indigo-300 font-bold">
+                        {liveFaceAnalysis?.glassesProfile?.hasGlasses ? "চশমা পরা" : "নেই"}
+                      </span>
+                    </div>
+                    <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-indigo-400 transition-all duration-100"
+                        style={{ width: liveFaceAnalysis?.glassesProfile?.hasGlasses ? "100%" : "0%" }}
+                      />
+                    </div>
+                    <span className="text-[10px] text-slate-400 block truncate">
+                      {liveFaceAnalysis?.glassesProfile?.description || "Scanning nasal rim..."}
+                    </span>
+                  </div>
                 </div>
-              )}
+              </div>
             </div>
+          </div>
+
+          {/* 4. TODAY'S RECENT KIOSK ATTENDANCE LOGS: order-4 on mobile (at bottom), hidden on desktop */}
+          <div className="order-4 lg:hidden">
+            {renderRecentKioskLogs()}
           </div>
         </div>
       ) : (
@@ -1927,13 +2432,169 @@ export const RealtimeFaceRecognitionView: React.FC<RealtimeFaceRecognitionViewPr
           </div>
         </div>
       )}
+
+      {/* Super Admin Biometric Policy Modal */}
+      {showAdminSettingsModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-lg w-full p-5 text-white shadow-2xl space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-teal-500/20 text-teal-400 rounded-xl border border-teal-500/30">
+                  <ShieldAlert className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm sm:text-base font-bold text-white">
+                    {isBangla ? "সুপার অ্যাডমিন: কিওস্ক মোড পলিসি" : "Super Admin: Biometric Kiosk Policy"}
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    {isBangla ? "প্রতিষ্ঠান ও কর্মচারীদের জন্য কিওস্ক মোড নির্ধারণ করুন" : "Set allowed kiosk biometric modes"}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAdminSettingsModal(false)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <label
+                onClick={() => setTempModeAvailability("BOTH")}
+                className={`flex items-start gap-3 p-3.5 rounded-xl border cursor-pointer transition-all ${
+                  tempModeAvailability === "BOTH"
+                    ? "bg-teal-950/40 border-teal-500 text-teal-200 ring-1 ring-teal-500"
+                    : "bg-slate-950/60 border-slate-800 text-slate-300 hover:bg-slate-800/60"
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="kioskModeAvailability"
+                  checked={tempModeAvailability === "BOTH"}
+                  onChange={() => setTempModeAvailability("BOTH")}
+                  className="mt-0.5 accent-teal-500 cursor-pointer"
+                />
+                <div>
+                  <p className="font-bold text-white text-sm">
+                    {isBangla ? "১. উভয় মোড সক্রিয় (স্বয়ংক্রিয় কিওস্ক ও ১:১ নির্বাচন)" : "1. Both Modes Allowed (Auto Kiosk & 1:1)"}
+                  </p>
+                  <p className="text-slate-400 mt-1">
+                    {isBangla
+                      ? "কিওস্ক ওপেন করলে স্বয়ংক্রিয়ভাবে অটো কিওস্ক চালু হবে, তবে কিওস্ক অপারেটর বা কর্মচারী চাইলে ১:১ নির্বাচন মোডেও যেতে পারবে।"
+                      : "Defaults to Auto Kiosk on all devices, with option to switch to 1:1 staff verification."}
+                  </p>
+                </div>
+              </label>
+
+              <label
+                onClick={() => setTempModeAvailability("AUTO_KIOSK_ONLY")}
+                className={`flex items-start gap-3 p-3.5 rounded-xl border cursor-pointer transition-all ${
+                  tempModeAvailability === "AUTO_KIOSK_ONLY"
+                    ? "bg-teal-950/40 border-teal-500 text-teal-200 ring-1 ring-teal-500"
+                    : "bg-slate-950/60 border-slate-800 text-slate-300 hover:bg-slate-800/60"
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="kioskModeAvailability"
+                  checked={tempModeAvailability === "AUTO_KIOSK_ONLY"}
+                  onChange={() => setTempModeAvailability("AUTO_KIOSK_ONLY")}
+                  className="mt-0.5 accent-teal-500 cursor-pointer"
+                />
+                <div>
+                  <p className="font-bold text-white text-sm">
+                    {isBangla ? "২. শুধুমাত্র স্বয়ংক্রিয় কিওস্ক মোড (1:N)" : "2. Auto Kiosk Only (1:N Automated)"}
+                  </p>
+                  <p className="text-slate-400 mt-1">
+                    {isBangla
+                      ? "কোনো ম্যানুয়াল তালিকা নির্বাচন থাকবে না। ক্যামেরার সামনে মুখ রাখলেই এআই তাৎক্ষণিক ডাটাবেজ থেকে কর্মচারী শনাক্ত করবে।"
+                      : "Staff walk up and face is recognized automatically. No manual selection permitted."}
+                  </p>
+                </div>
+              </label>
+
+              <label
+                onClick={() => setTempModeAvailability("ONE_TO_ONE_ONLY")}
+                className={`flex items-start gap-3 p-3.5 rounded-xl border cursor-pointer transition-all ${
+                  tempModeAvailability === "ONE_TO_ONE_ONLY"
+                    ? "bg-teal-950/40 border-teal-500 text-teal-200 ring-1 ring-teal-500"
+                    : "bg-slate-950/60 border-slate-800 text-slate-300 hover:bg-slate-800/60"
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="kioskModeAvailability"
+                  checked={tempModeAvailability === "ONE_TO_ONE_ONLY"}
+                  onChange={() => setTempModeAvailability("ONE_TO_ONE_ONLY")}
+                  className="mt-0.5 accent-teal-500 cursor-pointer"
+                />
+                <div>
+                  <p className="font-bold text-white text-sm">
+                    {isBangla ? "৩. শুধুমাত্র ১:১ ভেরিফিকেশন মোড (1:1)" : "3. 1:1 Staff Verification Only"}
+                  </p>
+                  <p className="text-slate-400 mt-1">
+                    {isBangla
+                      ? "প্রথমে কর্মচারী সার্চ বা ড্রপডাউন থেকে নিজের নাম নির্বাচন করবে, এরপর ক্যামেরা তার রেজিস্টার্ড ছবির সাথে মেলাবে।"
+                      : "Staff selects their name first, then camera verifies specifically against their enrolled photo."}
+                  </p>
+                </div>
+              </label>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setShowAdminSettingsModal(false)}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs rounded-xl transition-colors cursor-pointer"
+              >
+                {isBangla ? "বাতিল" : "Cancel"}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const updated: BiometricKioskSettings = {
+                    modeAvailability: tempModeAvailability,
+                    defaultMode: tempModeAvailability === "ONE_TO_ONE_ONLY" ? "ONE_TO_ONE" : "AUTO_KIOSK",
+                    updatedAt: new Date().toISOString(),
+                    updatedBy: currentEmployee?.fullName || "Super Admin",
+                  };
+                  onUpdateBiometricSettings?.(updated);
+                  if (tempModeAvailability === "ONE_TO_ONE_ONLY") {
+                    setActiveMode("ONE_TO_ONE");
+                  } else if (tempModeAvailability === "AUTO_KIOSK_ONLY") {
+                    setActiveMode("AUTO_KIOSK");
+                  }
+                  setShowAdminSettingsModal(false);
+                }}
+                className="px-5 py-2 bg-teal-500 hover:bg-teal-400 text-slate-950 font-black text-xs rounded-xl shadow-lg shadow-teal-500/20 transition-colors cursor-pointer"
+              >
+                {isBangla ? "সংরক্ষণ ও প্রয়োগ করুন" : "Save & Apply"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 
   if (isModal) {
     return (
-      <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
-        <div className="relative w-full max-w-7xl max-h-[96vh] overflow-y-auto bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl p-3 sm:p-5 space-y-4">
+      <div
+        className={`fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 overflow-y-auto transition-colors duration-300 ${
+          screenFillLight
+            ? "bg-white text-slate-900 shadow-[inset_0_0_200px_rgba(255,255,255,1)]"
+            : "bg-slate-950/85 backdrop-blur-md"
+        }`}
+      >
+        <div
+          className={`relative w-full max-w-7xl max-h-[96vh] overflow-y-auto rounded-3xl shadow-2xl p-3 sm:p-5 space-y-4 transition-all duration-300 ${
+            screenFillLight
+              ? "bg-slate-900 border-4 border-amber-300 ring-8 ring-amber-300/30"
+              : "bg-slate-900 border border-slate-800"
+          }`}
+        >
           {mainContent}
         </div>
       </div>

@@ -26,6 +26,7 @@ import {
   JobPosting,
   Candidate,
   PayrollPolicyConfig,
+  BiometricKioskSettings,
 } from "../types";
 import {
   INITIAL_EMPLOYEES,
@@ -612,6 +613,42 @@ export function subscribeToPayrollPolicy(onUpdate: (policy: PayrollPolicyConfig)
         }
       },
       (err) => console.warn("Firestore payroll policy listener error:", err)
+    );
+  } catch (e) {
+    console.warn(e);
+    return () => {};
+  }
+}
+
+export async function saveBiometricSettingsToFirestore(settings: BiometricKioskSettings) {
+  try {
+    await setDoc(
+      doc(db, COL_SETTINGS, "biometric_kiosk"),
+      cleanForFirestore({
+        settings,
+        updatedAt: new Date().toISOString(),
+      }),
+      { merge: true }
+    );
+  } catch (err) {
+    console.error("Failed to save biometric settings to Firestore:", err);
+  }
+}
+
+export function subscribeToBiometricSettings(onUpdate: (settings: BiometricKioskSettings) => void) {
+  try {
+    return onSnapshot(
+      doc(db, COL_SETTINGS, "biometric_kiosk"),
+      (snap) => {
+        if (snap.metadata.hasPendingWrites) return;
+        if (snap.exists()) {
+          const data = snap.data();
+          if (data.settings) {
+            onUpdate(data.settings as BiometricKioskSettings);
+          }
+        }
+      },
+      (err) => console.warn("Firestore biometric settings listener error:", err)
     );
   } catch (e) {
     console.warn(e);

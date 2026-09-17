@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Employee, AttendanceRecord, Branch, Shift } from "../../types";
+import { Employee, AttendanceRecord, Branch, Shift, BiometricKioskSettings } from "../../types";
 import { RealtimeFaceRecognitionView } from "../views/RealtimeFaceRecognitionView";
 import { FaceEnrollmentModal } from "./FaceEnrollmentModal";
 
@@ -15,6 +15,8 @@ interface SmartAttendanceModalProps {
   branches?: Branch[];
   attendanceLogs?: AttendanceRecord[];
   shifts?: Shift[];
+  biometricSettings?: BiometricKioskSettings;
+  onUpdateBiometricSettings?: (settings: BiometricKioskSettings) => void;
   onAttendanceSuccess: (record: AttendanceRecord) => void;
   onSwitchEmployee?: (employee: Employee) => void;
   onUpdateFacePhoto?: (
@@ -58,6 +60,8 @@ export const SmartAttendanceModal: React.FC<SmartAttendanceModalProps> = ({
   branches = [],
   attendanceLogs = [],
   shifts = [],
+  biometricSettings,
+  onUpdateBiometricSettings,
   onAttendanceSuccess,
   onUpdateFacePhoto,
 }) => {
@@ -74,7 +78,11 @@ export const SmartAttendanceModal: React.FC<SmartAttendanceModalProps> = ({
     branchList[0] ||
     DEFAULT_FALLBACK_BRANCH;
 
-  const initialMode = isLoggedIn && initialEmployee ? "ONE_TO_ONE" : "AUTO_KIOSK";
+  // Mobile, Tablet, PC all default to AUTO_KIOSK unless super admin enforces ONE_TO_ONE_ONLY
+  const initialMode =
+    biometricSettings?.modeAvailability === "ONE_TO_ONE_ONLY"
+      ? "ONE_TO_ONE"
+      : "AUTO_KIOSK";
 
   return (
     <>
@@ -85,6 +93,8 @@ export const SmartAttendanceModal: React.FC<SmartAttendanceModalProps> = ({
         currentEmployee={initialEmployee || undefined}
         shifts={shifts}
         initialMode={initialMode}
+        biometricSettings={biometricSettings}
+        onUpdateBiometricSettings={onUpdateBiometricSettings}
         isModal={true}
         onClose={onClose}
         selectedBranchId={activeBranch.id}
