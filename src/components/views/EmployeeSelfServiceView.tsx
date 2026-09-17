@@ -55,7 +55,7 @@ interface EmployeeSelfServiceViewProps {
   onApplyLeave: (leave: Partial<LeaveApplication>) => void;
   onApplyLoan: (loan: Partial<EmployeeLoan>) => void;
   onViewPayslip: (slip: Payslip) => void;
-  onUpdateFacePhoto?: (employeeId: string, photoUrl: string, verificationScore?: number) => void;
+  onUpdateFacePhoto?: (employeeId: string, photoUrl: string, verificationScore?: number, faceDescriptor?: number[]) => void;
   onOpenDigitalIdCard?: () => void;
   onUpdateEmployee?: (emp: Employee) => void;
 }
@@ -1939,9 +1939,9 @@ export const EmployeeSelfServiceView: React.FC<EmployeeSelfServiceViewProps> = (
               : currentEmployee
           }
           isSuperAdmin={currentEmployee.role === "SUPER_ADMIN"}
-          onSaveFacePhoto={(empId, photoUrl, verificationScore) => {
+          onSaveFacePhoto={(empId, photoUrl, verificationScore, faceDescriptor) => {
             if (onUpdateFacePhoto) {
-              onUpdateFacePhoto(empId, photoUrl, verificationScore);
+              onUpdateFacePhoto(empId, photoUrl, verificationScore, faceDescriptor);
             }
             setCandidateUploadedPhoto(null);
             setShowFaceEnrollModal(false);

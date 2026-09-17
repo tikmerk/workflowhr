@@ -239,6 +239,7 @@ export interface Employee {
   faceTemplateRegistered?: boolean;
   faceRegisteredAt?: string;
   faceRegisteredPhoto?: string;
+  faceDescriptor?: number[]; // 128-dimensional biometric vector from face-api.js
   faceVerifiedAt?: string;
   faceVerificationScore?: number;
   faceVerified?: boolean;

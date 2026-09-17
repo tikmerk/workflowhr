@@ -25,6 +25,7 @@ import {
   X,
   Volume2,
   VolumeX,
+  Sun,
 } from "lucide-react";
 import { Employee, Branch, AttendanceRecord } from "../../types";
 import {
@@ -37,32 +38,49 @@ import {
   LiveFaceAnalysis,
   invalidateEmployeeFaceCache,
   resetBilateralBlinkState,
+  loadFaceApiModels,
 } from "../../utils/faceRecognitionEngine";
 import { useThemeLanguage } from "../../context/ThemeLanguageContext";
+import { AttendanceLogsView } from "./AttendanceLogsView";
 
 interface RealtimeFaceRecognitionViewProps {
   employees: Employee[];
   branches: Branch[];
   attendanceLogs: AttendanceRecord[];
   currentEmployee?: Employee;
+  initialMode?: KioskMode;
   onLogAttendance: (log: AttendanceRecord) => void;
   onOpenEnrollmentModal?: (employee?: Employee) => void;
+  onOpenAttendanceModal?: () => void;
 }
 
-type KioskMode = "AUTO_KIOSK" | "ONE_TO_ONE" | "DATABASE_DIRECTORY";
+export type KioskMode = "AUTO_KIOSK" | "ONE_TO_ONE" | "ATTENDANCE_LOGS" | "DATABASE_DIRECTORY";
 
 export const RealtimeFaceRecognitionView: React.FC<RealtimeFaceRecognitionViewProps> = ({
   employees,
   branches,
   attendanceLogs,
   currentEmployee,
+  initialMode = "AUTO_KIOSK",
   onLogAttendance,
   onOpenEnrollmentModal,
+  onOpenAttendanceModal,
 }) => {
   const { isBangla } = useThemeLanguage();
 
   // Mode Selection
-  const [activeMode, setActiveMode] = useState<KioskMode>("AUTO_KIOSK");
+  const [activeMode, setActiveMode] = useState<KioskMode>(initialMode);
+
+  // Virtual Screen Fill-Light (for low light / night kiosks)
+  const [screenFillLight, setScreenFillLight] = useState<boolean>(false);
+
+  // Jitter and Match Latching Refs
+  const matchLockedUntilRef = useRef<number>(0);
+  const consecutiveMissesRef = useRef<number>(0);
+
+  // Auto-Clock In Countdown
+  const [autoClockInCountdown, setAutoClockInCountdown] = useState<number | null>(null);
+  const [autoSubmitProgress, setAutoSubmitProgress] = useState<number>(100);
 
   // Camera State
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -88,7 +106,7 @@ export const RealtimeFaceRecognitionView: React.FC<RealtimeFaceRecognitionViewPr
 
   // Anti-Spoofing Liveness State
   const [livenessStage, setLivenessStage] = useState<"ALIGN" | "BLINK" | "VERIFIED">("ALIGN");
-  const [livenessMode, setLivenessMode] = useState<"BILATERAL_BLINK" | "STEADY_GAZE">("BILATERAL_BLINK");
+  const [livenessMode, setLivenessMode] = useState<"BILATERAL_BLINK" | "STEADY_GAZE" | "SMILE">("BILATERAL_BLINK");
   const [steadyGazeProgress, setSteadyGazeProgress] = useState<number>(0);
   const steadyGazeStartRef = useRef<number | null>(null);
   const [blinkCompleted, setBlinkCompleted] = useState<boolean>(false);
@@ -128,6 +146,11 @@ export const RealtimeFaceRecognitionView: React.FC<RealtimeFaceRecognitionViewPr
     },
     [soundEnabled]
   );
+
+  // Pre-load face-api.js neural networks on mount
+  useEffect(() => {
+    loadFaceApiModels().catch((e) => console.warn("Warmup face-api models warning:", e));
+  }, []);
 
   // 1. Initialize Camera and enumerate video devices
   useEffect(() => {
@@ -273,44 +296,65 @@ export const RealtimeFaceRecognitionView: React.FC<RealtimeFaceRecognitionViewPr
 
         const now = Date.now();
 
-        // Liveness Anti-Spoofing Verification
-        if (livenessStage === "BLINK") {
-          if (livenessMode === "STEADY_GAZE") {
-            // Steady face gaze: employee stays aligned and focused into camera
-            if (liveFace.hasFace) {
-              if (!steadyGazeStartRef.current) {
-                steadyGazeStartRef.current = now;
-              }
-              const elapsed = now - steadyGazeStartRef.current;
-              const progress = Math.min(100, Math.round((elapsed / 1300) * 100));
-              setSteadyGazeProgress(progress);
-              if (progress >= 100 && !blinkCompleted) {
-                setBlinkCompleted(true);
-                setLivenessStage("VERIFIED");
-                playSound("success");
-              }
-            } else {
-              steadyGazeStartRef.current = null;
-              setSteadyGazeProgress(0);
+        // Multi-Vector Liveness Anti-Spoofing Verification
+        // Accepts:
+        // 1. Adaptive relative blink
+        // 2. Natural smile
+        // 3. Steady gaze fallback
+        let livenessDetectedThisFrame = false;
+        let livenessReasonDetected: "blink" | "smile" | "steady" = "blink";
+
+        if (livenessMode === "BILATERAL_BLINK") {
+          if (liveFace.blinkDetected) {
+            livenessDetectedThisFrame = true;
+            livenessReasonDetected = "blink";
+          } else if (liveFace.smileDetected || (liveFace.smileScore && liveFace.smileScore >= 40)) {
+            livenessDetectedThisFrame = true;
+            livenessReasonDetected = "smile";
+          }
+        } else if (livenessMode === "SMILE") {
+          if (liveFace.smileDetected || (liveFace.smileScore && liveFace.smileScore >= 38)) {
+            livenessDetectedThisFrame = true;
+            livenessReasonDetected = "smile";
+          }
+        } else if (livenessMode === "STEADY_GAZE") {
+          if (liveFace.hasFace) {
+            if (!steadyGazeStartRef.current) {
+              steadyGazeStartRef.current = now;
+            }
+            const elapsed = now - steadyGazeStartRef.current;
+            const progress = Math.min(100, Math.round((elapsed / 1000) * 100));
+            setSteadyGazeProgress(progress);
+            if (progress >= 100) {
+              livenessDetectedThisFrame = true;
+              livenessReasonDetected = "steady";
             }
           } else {
-            // Bilateral natural blink: requires simultaneous eye closure and reopening
-            if (liveFace.blinkDetected && !blinkCompleted) {
-              setBlinkCompleted(true);
-              setLastBlinkTime(now);
-              playSound("blink");
-              setLivenessStage("VERIFIED");
-              playSound("success");
-            }
+            steadyGazeStartRef.current = null;
+            setSteadyGazeProgress(0);
           }
         }
 
-        // Run Periodic 1:N or 1:1 Matching Loop (throttled to every 300ms)
+        if (livenessDetectedThisFrame && !blinkCompleted) {
+          setBlinkCompleted(true);
+          setLastBlinkTime(now);
+          playSound(livenessReasonDetected === "smile" ? "smile" : "blink");
+          setLivenessStage("VERIFIED");
+          playSound("success");
+        }
+
+        // Run Periodic 1:N or 1:1 Matching Loop (throttled to every 400ms)
+        // Must NOT be blocked if user blinks or verifies liveness early!
+        const hasMatchedTarget = Boolean(
+          matchResult?.matched &&
+            (matchResult.matchedEmployee || (activeMode === "ONE_TO_ONE" && selectedTargetEmp))
+        );
+
         if (
           liveFace.hasFace &&
           !isProcessingMatch &&
-          now - lastScanTimestamp > 320 &&
-          livenessStage !== "VERIFIED"
+          now - lastScanTimestamp >= 400 &&
+          !hasMatchedTarget
         ) {
           lastScanTimestamp = now;
           setIsProcessingMatch(true);
@@ -318,30 +362,51 @@ export const RealtimeFaceRecognitionView: React.FC<RealtimeFaceRecognitionViewPr
           try {
             if (activeMode === "AUTO_KIOSK") {
               const res = await autoIdentifyLiveFaceFromAllEmployees(videoRef.current, employees);
-              setMatchResult(res);
 
               if (res.matched && res.matchedEmployee) {
-                if (livenessStage === "ALIGN") {
-                  playSound("match");
-                  resetBilateralBlinkState();
-                  steadyGazeStartRef.current = null;
-                  setSteadyGazeProgress(0);
-                  // Move to anti-spoofing verification
+                matchLockedUntilRef.current = now + 4000;
+                consecutiveMissesRef.current = 0;
+                setMatchResult(res);
+                playSound("match");
+
+                if (blinkCompleted || livenessDetectedThisFrame) {
+                  setLivenessStage("VERIFIED");
+                } else {
                   setLivenessStage("BLINK");
+                }
+              } else {
+                if (now < matchLockedUntilRef.current) {
+                  // Retain locked match to prevent flickering
+                } else {
+                  consecutiveMissesRef.current += 1;
+                  if (consecutiveMissesRef.current >= 7) {
+                    setMatchResult(res);
+                  }
                 }
               }
             } else if (activeMode === "ONE_TO_ONE") {
               const targetEmp = employees.find((e) => e.id === selected1to1EmployeeId);
               if (targetEmp) {
                 const res = await verifyLiveFaceWithEmployee(videoRef.current, targetEmp);
-                setMatchResult(res);
                 if (res.matched) {
-                  if (livenessStage === "ALIGN") {
-                    playSound("match");
-                    resetBilateralBlinkState();
-                    steadyGazeStartRef.current = null;
-                    setSteadyGazeProgress(0);
+                  matchLockedUntilRef.current = now + 4000;
+                  consecutiveMissesRef.current = 0;
+                  setMatchResult(res);
+                  playSound("match");
+
+                  if (blinkCompleted || livenessDetectedThisFrame) {
+                    setLivenessStage("VERIFIED");
+                  } else {
                     setLivenessStage("BLINK");
+                  }
+                } else {
+                  if (now < matchLockedUntilRef.current) {
+                    // Retain locked match
+                  } else {
+                    consecutiveMissesRef.current += 1;
+                    if (consecutiveMissesRef.current >= 7) {
+                      setMatchResult(res);
+                    }
                   }
                 }
               }
@@ -438,6 +503,12 @@ export const RealtimeFaceRecognitionView: React.FC<RealtimeFaceRecognitionViewPr
       ...prev.slice(0, 9),
     ]);
 
+    // Reset countdown and locks
+    setAutoClockInCountdown(null);
+    setAutoSubmitProgress(100);
+    matchLockedUntilRef.current = 0;
+    consecutiveMissesRef.current = 0;
+
     // Reset for next employee after 3.5 seconds
     setTimeout(() => {
       setJustCheckedInEmployee(null);
@@ -445,15 +516,6 @@ export const RealtimeFaceRecognitionView: React.FC<RealtimeFaceRecognitionViewPr
       setLivenessStage("ALIGN");
       setBlinkCompleted(false);
     }, 3500);
-  };
-
-  const handleResetScan = () => {
-    resetBilateralBlinkState();
-    steadyGazeStartRef.current = null;
-    setSteadyGazeProgress(0);
-    setMatchResult(null);
-    setLivenessStage("ALIGN");
-    setBlinkCompleted(false);
   };
 
   // Filtered employees for 1:1 selection
@@ -468,6 +530,58 @@ export const RealtimeFaceRecognitionView: React.FC<RealtimeFaceRecognitionViewPr
 
   const selectedTargetEmp = employees.find((e) => e.id === selected1to1EmployeeId);
 
+  const isReadyToSubmit = Boolean(
+    matchResult?.matched &&
+      (matchResult.matchedEmployee || (activeMode === "ONE_TO_ONE" && selectedTargetEmp)) &&
+      (livenessStage === "VERIFIED" || blinkCompleted) &&
+      !justCheckedInEmployee
+  );
+
+  // 3-Second Auto-Submit Countdown Loop for seamless kiosk clock-in
+  useEffect(() => {
+    if (!isReadyToSubmit) {
+      setAutoClockInCountdown(null);
+      setAutoSubmitProgress(100);
+      return;
+    }
+
+    const DURATION_MS = 3000;
+    const startMs = Date.now();
+    setAutoClockInCountdown(3);
+    setAutoSubmitProgress(100);
+
+    const timer = setInterval(() => {
+      const elapsed = Date.now() - startMs;
+      const remainingMs = Math.max(0, DURATION_MS - elapsed);
+      const remainingSec = Math.ceil(remainingMs / 1000);
+      const progress = Math.max(0, Math.round((remainingMs / DURATION_MS) * 100));
+
+      setAutoClockInCountdown(remainingSec);
+      setAutoSubmitProgress(progress);
+
+      if (remainingMs <= 0) {
+        clearInterval(timer);
+        setAutoClockInCountdown(null);
+        handleConfirmAttendance("CHECK_IN");
+      }
+    }, 100);
+
+    return () => clearInterval(timer);
+  }, [isReadyToSubmit, handleConfirmAttendance]);
+
+  const handleResetScan = () => {
+    matchLockedUntilRef.current = 0;
+    consecutiveMissesRef.current = 0;
+    setAutoClockInCountdown(null);
+    setAutoSubmitProgress(100);
+    resetBilateralBlinkState();
+    steadyGazeStartRef.current = null;
+    setSteadyGazeProgress(0);
+    setMatchResult(null);
+    setLivenessStage("ALIGN");
+    setBlinkCompleted(false);
+  };
+
   // Enrolled directory list
   const directoryList = employees.filter((e) => {
     const q = directorySearch.toLowerCase();
@@ -479,7 +593,7 @@ export const RealtimeFaceRecognitionView: React.FC<RealtimeFaceRecognitionViewPr
   });
 
   return (
-    <div className="space-y-6 pb-12">
+    <div className={`space-y-6 pb-12 transition-colors duration-300 ${screenFillLight ? "bg-white p-6 rounded-3xl shadow-[inset_0_0_150px_rgba(255,255,255,1)]" : ""}`}>
       {/* Top Banner & Mode Navigation */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl text-white">
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
@@ -508,11 +622,26 @@ export const RealtimeFaceRecognitionView: React.FC<RealtimeFaceRecognitionViewPr
 
           {/* Quick Action Controls */}
           <div className="flex items-center flex-wrap gap-2.5">
+            {/* Virtual Screen Fill-Light Toggle */}
+            <button
+              type="button"
+              onClick={() => setScreenFillLight((prev) => !prev)}
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border cursor-pointer ${
+                screenFillLight
+                  ? "bg-amber-400 text-slate-950 border-amber-300 ring-2 ring-amber-400/50 shadow-md shadow-amber-400/20"
+                  : "bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700"
+              }`}
+              title="কম আলোতে চেহারা স্পষ্ট দেখতে চারপাশ সাদা আলোতে পরিণত করুন"
+            >
+              <Sun className={`w-4 h-4 ${screenFillLight ? "text-slate-950 fill-slate-950" : "text-amber-400"}`} />
+              <span>{screenFillLight ? "💡 ফিল-লাইট অন" : "ফিল-লাইট অফ"}</span>
+            </button>
+
             {/* Audio Toggle */}
             <button
               onClick={() => setSoundEnabled(!soundEnabled)}
               title={soundEnabled ? "মিউট করুন" : "সাউন্ড অন করুন"}
-              className="p-2.5 rounded-xl border border-slate-700 bg-slate-800/80 hover:bg-slate-700 text-slate-300 transition-colors"
+              className="p-2.5 rounded-xl border border-slate-700 bg-slate-800/80 hover:bg-slate-700 text-slate-300 transition-colors cursor-pointer"
             >
               {soundEnabled ? <Volume2 className="w-4 h-4 text-teal-400" /> : <VolumeX className="w-4 h-4 text-slate-400" />}
             </button>
@@ -552,7 +681,7 @@ export const RealtimeFaceRecognitionView: React.FC<RealtimeFaceRecognitionViewPr
             {/* Camera Power Toggle */}
             <button
               onClick={() => setIsCameraActive(!isCameraActive)}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition-colors border ${
+              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition-colors border cursor-pointer ${
                 isCameraActive
                   ? "bg-teal-600/20 text-teal-300 border-teal-500/40 hover:bg-teal-600/30"
                   : "bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700"
@@ -568,7 +697,7 @@ export const RealtimeFaceRecognitionView: React.FC<RealtimeFaceRecognitionViewPr
         <div className="flex items-center gap-2 mt-5 border-t border-slate-800 pt-4 overflow-x-auto">
           <button
             onClick={() => setActiveMode("AUTO_KIOSK")}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
               activeMode === "AUTO_KIOSK"
                 ? "bg-teal-500 text-slate-950 shadow-lg shadow-teal-500/20"
                 : "bg-slate-800/80 text-slate-300 hover:bg-slate-700 border border-slate-700/60"
@@ -580,7 +709,7 @@ export const RealtimeFaceRecognitionView: React.FC<RealtimeFaceRecognitionViewPr
 
           <button
             onClick={() => setActiveMode("ONE_TO_ONE")}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
               activeMode === "ONE_TO_ONE"
                 ? "bg-teal-500 text-slate-950 shadow-lg shadow-teal-500/20"
                 : "bg-slate-800/80 text-slate-300 hover:bg-slate-700 border border-slate-700/60"
@@ -591,8 +720,23 @@ export const RealtimeFaceRecognitionView: React.FC<RealtimeFaceRecognitionViewPr
           </button>
 
           <button
+            onClick={() => setActiveMode("ATTENDANCE_LOGS")}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+              activeMode === "ATTENDANCE_LOGS"
+                ? "bg-teal-500 text-slate-950 shadow-lg shadow-teal-500/20"
+                : "bg-slate-800/80 text-slate-300 hover:bg-slate-700 border border-slate-700/60"
+            }`}
+          >
+            <Clock className="w-4 h-4" />
+            <span>{isBangla ? "হাজিরা লগ ও হিস্ট্রি" : "Attendance Logs & Reports"}</span>
+            <span className="ml-1 bg-slate-900/60 text-slate-300 px-2 py-0.5 rounded-full text-[10px]">
+              {attendanceLogs.length}
+            </span>
+          </button>
+
+          <button
             onClick={() => setActiveMode("DATABASE_DIRECTORY")}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
               activeMode === "DATABASE_DIRECTORY"
                 ? "bg-teal-500 text-slate-950 shadow-lg shadow-teal-500/20"
                 : "bg-slate-800/80 text-slate-300 hover:bg-slate-700 border border-slate-700/60"
@@ -608,7 +752,16 @@ export const RealtimeFaceRecognitionView: React.FC<RealtimeFaceRecognitionViewPr
       </div>
 
       {/* VIEW CONTENT BASED ON ACTIVE MODE */}
-      {activeMode !== "DATABASE_DIRECTORY" ? (
+      {activeMode === "ATTENDANCE_LOGS" ? (
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl">
+          <AttendanceLogsView
+            attendanceLogs={attendanceLogs}
+            branches={branches}
+            employees={employees}
+            onOpenAttendanceModal={onOpenAttendanceModal || (() => {})}
+          />
+        </div>
+      ) : activeMode !== "DATABASE_DIRECTORY" ? (
         <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
           {/* LEFT 7 COLUMNS: LIVE CAMERA FEED & REAL-TIME BIOMETRIC HUD */}
           <div className="xl:col-span-7 space-y-4">
@@ -658,9 +811,23 @@ export const RealtimeFaceRecognitionView: React.FC<RealtimeFaceRecognitionViewPr
                           ? "bg-teal-500 text-slate-950"
                           : "text-slate-400 hover:text-white"
                       }`}
-                      title={isBangla ? "উভয় চোখের যুগপৎ পলক ফেলে যাচাই" : "Bilateral natural blink verification"}
+                      title={isBangla ? "অ্যাডাপ্টিভ চোখের পলক অথবা হালকা হাসি উভয় পদ্ধতিতেই স্বয়ংক্রিয় লাইভনেস নিশ্চিত" : "Bilateral natural blink or subtle smile"}
                     >
-                      {isBangla ? "চোখের পলক" : "Bilateral Blink"}
+                      {isBangla ? "স্মার্ট / পলক" : "Smart Blink"}
+                    </button>
+                    <button
+                      onClick={() => {
+                        setLivenessMode("SMILE");
+                        setSteadyGazeProgress(0);
+                      }}
+                      className={`px-2 py-1 rounded text-[10px] font-bold transition-all ${
+                        livenessMode === "SMILE"
+                          ? "bg-teal-500 text-slate-950"
+                          : "text-slate-400 hover:text-white"
+                      }`}
+                      title={isBangla ? "ক্যামেরার দিকে তাকিয়ে মুখে হালকা হাসি দিয়ে যাচাই" : "Gentle smile verification"}
+                    >
+                      {isBangla ? "হালকা হাসি" : "Smile"}
                     </button>
                     <button
                       onClick={() => {
@@ -672,7 +839,7 @@ export const RealtimeFaceRecognitionView: React.FC<RealtimeFaceRecognitionViewPr
                           ? "bg-teal-500 text-slate-950"
                           : "text-slate-400 hover:text-white"
                       }`}
-                      title={isBangla ? "১.৩ সেকেন্ড ফ্রেমের মধ্যে স্থির দৃষ্টি রেখে যাচাই (চশমা পরা বা চোখে সমস্যা থাকলে উত্তম)" : "Steady frontal face gaze (1.3s)"}
+                      title={isBangla ? "১ সেকেন্ড ফ্রেমের মধ্যে স্থির দৃষ্টি রেখে যাচাই (চশমা পরা বা চোখে সমস্যা থাকলে উত্তম)" : "Steady frontal face gaze (1.0s)"}
                     >
                       {isBangla ? "স্থির দৃষ্টি" : "Steady Gaze"}
                     </button>
@@ -784,9 +951,13 @@ export const RealtimeFaceRecognitionView: React.FC<RealtimeFaceRecognitionViewPr
                             ? isBangla
                               ? `ক্যামেরার দিকে স্থির তাকিয়ে থাকুন... (${steadyGazeProgress}%)`
                               : `Hold steady gaze into camera... (${steadyGazeProgress}%)`
+                            : livenessMode === "SMILE"
+                            ? isBangla
+                              ? "মুখে হালকা হাসি দিন (Gentle Smile)"
+                              : "Please Smile at the Camera"
                             : isBangla
-                            ? "চোখের পলক ফেলুন (স্বাভাবিকভাবে চোখের পাতা ফেলে খুলুন)"
-                            : "Please Blink Naturally (Close & Reopen Eyes)"
+                            ? "চোখের পলক ফেলুন অথবা মুখে হালকা হাসি দিন (Smile)"
+                            : "Please Blink Naturally or Smile Gently"
                           : liveFaceAnalysis?.hasFace
                           ? isBangla
                             ? "ক্যামেরার মাঝখানে সোজা তাকিয়ে থাকুন..."
@@ -1138,19 +1309,49 @@ export const RealtimeFaceRecognitionView: React.FC<RealtimeFaceRecognitionViewPr
                         </div>
                       </div>
 
+                      {/* AUTO CLOCK-IN COUNTDOWN NOTIFIER & PROGRESS BAR */}
+                      {autoClockInCountdown !== null && (
+                        <div className="p-3.5 bg-gradient-to-r from-emerald-950/60 to-teal-950/60 border border-emerald-500/50 rounded-xl space-y-2 animate-in fade-in">
+                          <div className="flex items-center justify-between text-xs font-bold text-emerald-300">
+                            <span className="flex items-center gap-2">
+                              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
+                              <span>{isBangla ? "স্বয়ংক্রিয় ক্লক-ইন কাউন্টডাউন:" : "Auto Clock-In Countdown:"}</span>
+                            </span>
+                            <span className="font-mono text-sm px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/50 shadow-sm">
+                              {autoClockInCountdown}s
+                            </span>
+                          </div>
+                          <div className="w-full bg-slate-950 h-2 rounded-full overflow-hidden border border-emerald-500/30">
+                            <div
+                              className="h-full bg-gradient-to-r from-teal-400 via-emerald-400 to-green-300 transition-all duration-100 ease-linear rounded-full shadow-[0_0_10px_rgba(52,211,153,0.8)]"
+                              style={{ width: `${autoSubmitProgress}%` }}
+                            />
+                          </div>
+                          <p className="text-[11px] text-emerald-200/90 text-center font-medium">
+                            {isBangla
+                              ? "৩ সেকেন্ডে স্বয়ংক্রিয়ভাবে হাজিরা রেকর্ড হবে অথবা এখনই নিচের বাটনে ক্লিক করুন"
+                              : "Auto-logging attendance in 3s or click below immediately"}
+                          </p>
+                        </div>
+                      )}
+
                       {/* ATTENDANCE ACTION BUTTONS */}
                       <div className="grid grid-cols-2 gap-3 pt-2">
                         <button
                           onClick={() => handleConfirmAttendance("CHECK_IN")}
-                          className="flex items-center justify-center gap-2 py-3 px-4 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-md transition-all active:scale-[0.98]"
+                          className="flex items-center justify-center gap-2 py-3.5 px-4 bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-xs rounded-xl shadow-lg shadow-emerald-500/20 transition-all active:scale-[0.98] ring-2 ring-emerald-400/40 cursor-pointer"
                         >
                           <Check className="w-4 h-4" />
-                          <span>{isBangla ? "উপস্থিতি গ্রহণ (Check-In)" : "Confirm Check-In"}</span>
+                          <span>
+                            {isBangla
+                              ? `উপস্থিতি নিশ্চিত করুন (Check-In) ${autoClockInCountdown ? `(${autoClockInCountdown}s)` : ""}`
+                              : `Confirm Check-In ${autoClockInCountdown ? `(${autoClockInCountdown}s)` : ""}`}
+                          </span>
                         </button>
 
                         <button
                           onClick={() => handleConfirmAttendance("CHECK_OUT")}
-                          className="flex items-center justify-center gap-2 py-3 px-4 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs rounded-xl border border-slate-700 shadow-md transition-all active:scale-[0.98]"
+                          className="flex items-center justify-center gap-2 py-3 px-4 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs rounded-xl border border-slate-700 shadow-md transition-all active:scale-[0.98] cursor-pointer"
                         >
                           <Clock className="w-4 h-4" />
                           <span>{isBangla ? "প্রস্থান গ্রহণ (Check-Out)" : "Confirm Check-Out"}</span>

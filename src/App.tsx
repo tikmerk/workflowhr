@@ -650,7 +650,12 @@ function AppContent() {
     );
   };
 
-  const handleUpdateFacePhoto = async (employeeId: string, photoUrl: string, verificationScore?: number) => {
+  const handleUpdateFacePhoto = async (
+    employeeId: string,
+    photoUrl: string,
+    verificationScore?: number,
+    faceDescriptor?: number[]
+  ) => {
     // 1. Immediately compress & downscale photo (<50KB) to ensure full Firestore limit compliance
     let optimized = photoUrl;
     try {
@@ -675,6 +680,7 @@ function AppContent() {
               faceRegisteredAt: todayStr,
               faceVerifiedAt: isLiveVerified ? new Date().toISOString() : undefined,
               faceVerificationScore: isLiveVerified ? verificationScore : undefined,
+              faceDescriptor: faceDescriptor || e.faceDescriptor,
             }
           : e
       )
@@ -691,6 +697,7 @@ function AppContent() {
         faceRegisteredAt: todayStr,
         faceVerifiedAt: isLiveVerified ? new Date().toISOString() : undefined,
         faceVerificationScore: isLiveVerified ? verificationScore : undefined,
+        faceDescriptor: faceDescriptor || prev.faceDescriptor,
       }));
     }
 
@@ -707,6 +714,7 @@ function AppContent() {
               faceRegisteredAt: todayStr,
               faceVerifiedAt: isLiveVerified ? new Date().toISOString() : undefined,
               faceVerificationScore: isLiveVerified ? verificationScore : undefined,
+              faceDescriptor: faceDescriptor || prev.faceDescriptor,
             }
           : null
       );
@@ -715,6 +723,9 @@ function AppContent() {
     try {
       localStorage.setItem(`workflow_hr_cached_avatar_${employeeId}`, optimized);
       localStorage.setItem(`workflow_hr_cached_verified_${employeeId}`, isLiveVerified ? "true" : "false");
+      if (faceDescriptor) {
+        localStorage.setItem(`workflow_hr_cached_descriptor_${employeeId}`, JSON.stringify(faceDescriptor));
+      }
       if (isLiveVerified && verificationScore) {
         localStorage.setItem(`workflow_hr_cached_score_${employeeId}`, String(verificationScore));
       } else {
@@ -729,7 +740,7 @@ function AppContent() {
 
     // 2. Persist to Firestore cloud database & local fallback
     if (isLiveVerified) {
-      const result = await updateEmployeeFacePhotoInFirestore(employeeId, optimized, verificationScore);
+      const result = await updateEmployeeFacePhotoInFirestore(employeeId, optimized, verificationScore, faceDescriptor);
       if (result.success) {
         setToastMessage(`বায়োমেট্রিক ফেস সফলভাবে ভেরিফাই ও হালনাগাদ করা হয়েছে (${verificationScore}%)!`);
       } else {
@@ -1669,6 +1680,7 @@ function AppContent() {
               currentEmployee={currentEmployee}
               onLogAttendance={handleAttendanceSuccess}
               onOpenEnrollmentModal={handleOpenFaceEnrollModal}
+              onOpenAttendanceModal={() => setIsAttendanceModalOpen(true)}
             />
           )}
 
@@ -2050,8 +2062,8 @@ function AppContent() {
           onClose={() => setFaceEnrollTargetEmployee(null)}
           employee={faceEnrollTargetEmployee}
           isSuperAdmin={currentEmployee.role === "SUPER_ADMIN"}
-          onSaveFacePhoto={(empId, photoUrl, verificationScore) => {
-            handleUpdateFacePhoto(empId, photoUrl, verificationScore);
+          onSaveFacePhoto={(empId, photoUrl, verificationScore, faceDescriptor) => {
+            handleUpdateFacePhoto(empId, photoUrl, verificationScore, faceDescriptor);
             setFaceEnrollTargetEmployee(null);
           }}
         />

@@ -18,6 +18,8 @@ import {
   Smile,
   RefreshCw,
   ImageIcon,
+  Sun,
+  Zap,
 } from "lucide-react";
 import { Employee, AttendanceRecord, Branch } from "../../types";
 import {
@@ -28,6 +30,7 @@ import {
   playBiometricSound,
   FaceBoundingBox,
   FaceMatchResult,
+  loadFaceApiModels,
 } from "../../utils/faceRecognitionEngine";
 import { requestUserMediaStream } from "../../utils/faceUtils";
 import { calculateDistanceInMeters, getMockAddressFromCoords } from "../../utils/geoUtils";
@@ -45,7 +48,7 @@ interface SmartAttendanceModalProps {
   branches?: Branch[];
   onAttendanceSuccess: (record: AttendanceRecord) => void;
   onSwitchEmployee?: (employee: Employee) => void;
-  onUpdateFacePhoto?: (employeeId: string, photoUrl: string) => void;
+  onUpdateFacePhoto?: (employeeId: string, photoUrl: string, verificationScore?: number, faceDescriptor?: number[]) => void;
   existingTodayRecord?: AttendanceRecord;
 }
 
@@ -130,6 +133,17 @@ export const SmartAttendanceModal: React.FC<SmartAttendanceModalProps> = ({
   const [matchResult, setMatchResult] = useState<FaceMatchResult | null>(null);
   const [capturedSelfie, setCapturedSelfie] = useState<string | null>(null);
 
+  // Latch buffer to prevent detection flicker / jitter
+  const matchLockedUntilRef = useRef<number>(0);
+  const consecutiveMissesRef = useRef<number>(0);
+
+  // Screen Fill-Light for dark / low-light rooms (solid white backdrop)
+  const [screenFillLight, setScreenFillLight] = useState<boolean>(true);
+
+  // 3-Second Auto-Submit Countdown States
+  const [autoClockInCountdown, setAutoClockInCountdown] = useState<number | null>(null);
+  const [autoSubmitProgress, setAutoSubmitProgress] = useState<number>(100);
+
   // Real-Time Liveness Engine States (100% Automated, No Manual Clicks)
   const [livenessBlinkPassed, setLivenessBlinkPassed] = useState<boolean>(false);
   const [livenessSmilePassed, setLivenessSmilePassed] = useState<boolean>(false);
@@ -202,6 +216,8 @@ export const SmartAttendanceModal: React.FC<SmartAttendanceModalProps> = ({
     async function initCamera() {
       setCameraLoading(true);
       setCameraError(null);
+      // Warmup face-api neural networks in background
+      loadFaceApiModels().catch((e) => console.warn("Warmup models notice:", e));
       try {
         const s = await requestUserMediaStream();
         activeStream = s;
@@ -253,9 +269,11 @@ export const SmartAttendanceModal: React.FC<SmartAttendanceModalProps> = ({
           candidates,
           rejectedEmployeeIds
         );
-        setMatchResult(result);
 
         if (result.matched && result.matchedEmployee) {
+          matchLockedUntilRef.current = Date.now() + 3500; // Locked for at least 3.5s to stop flickering
+          consecutiveMissesRef.current = 0;
+          setMatchResult(result);
           setActiveEmployee(result.matchedEmployee);
           playBiometricSound("match");
 
@@ -266,20 +284,27 @@ export const SmartAttendanceModal: React.FC<SmartAttendanceModalProps> = ({
           // Advance to automated Blink check
           setActiveChallengeStep("BLINK");
         } else {
-          // If mismatch or below strict threshold, ensure no wrong person is assigned
-          if (!userIsLoggedIn) {
-            setActiveEmployee(null);
-          }
-          if (result.reason === "MISMATCH_LOW_CONFIDENCE") {
-            playBiometricSound("error");
+          // Latching: do not immediately clear matched state on momentary drop or angle change
+          consecutiveMissesRef.current++;
+          const lockExpired = Date.now() > matchLockedUntilRef.current;
+          if (lockExpired && consecutiveMissesRef.current >= 7) {
+            setMatchResult(result);
+            if (!userIsLoggedIn) {
+              setActiveEmployee(null);
+            }
+            if (result.reason === "MISMATCH_LOW_CONFIDENCE") {
+              playBiometricSound("error");
+            }
           }
         }
       } else {
         // 1:1 Targeted Profile Match against the logged-in employee's reference photo
         const result = await verifyLiveFaceWithEmployee(videoRef.current, activeEmployee);
-        setMatchResult(result);
 
         if (result.matched) {
+          matchLockedUntilRef.current = Date.now() + 3500;
+          consecutiveMissesRef.current = 0;
+          setMatchResult(result);
           playBiometricSound("match");
 
           if (videoRef.current) {
@@ -288,8 +313,15 @@ export const SmartAttendanceModal: React.FC<SmartAttendanceModalProps> = ({
 
           // Advance to automated Blink check
           setActiveChallengeStep("BLINK");
-        } else if (result.reason === "MISMATCH_LOW_CONFIDENCE") {
-          playBiometricSound("error");
+        } else {
+          consecutiveMissesRef.current++;
+          const lockExpired = Date.now() > matchLockedUntilRef.current;
+          if (lockExpired && consecutiveMissesRef.current >= 7) {
+            setMatchResult(result);
+            if (result.reason === "MISMATCH_LOW_CONFIDENCE") {
+              playBiometricSound("error");
+            }
+          }
         }
       }
     } catch (err) {
@@ -348,8 +380,8 @@ export const SmartAttendanceModal: React.FC<SmartAttendanceModalProps> = ({
         const now = Date.now();
         if (
           liveFace.hasFace &&
-          activeChallengeStep === "ALIGN" &&
-          now - lastScanTime > 120 &&
+          (activeChallengeStep === "ALIGN" || activeChallengeStep === "BLINK") &&
+          now - lastScanTime >= 450 &&
           !isProcessingMatch &&
           !matchResult?.matched
         ) {
@@ -357,23 +389,32 @@ export const SmartAttendanceModal: React.FC<SmartAttendanceModalProps> = ({
           runRealTimeFaceScan();
         }
 
-        // --- STEP 2: REAL OPTICAL BLINK CHECK (ANTI-SPOOFING) ---
-        if (activeChallengeStep === "BLINK" && liveFace.hasFace) {
+        // --- STEP 2: REAL OPTICAL BLINK / SMILE CHECK (ANTI-SPOOFING) ---
+        if ((activeChallengeStep === "BLINK" || activeChallengeStep === "ALIGN") && liveFace.hasFace) {
           if (!blinkStepStartTime) blinkStepStartTime = now;
 
-          // Strict trigger: ONLY when true natural optical blink cycle is detected
-          if (liveFace.blinkDetected && !livenessBlinkPassed) {
-            playBiometricSound("blink");
+          // Natural adaptive optical blink or gentle smile automatically confirms genuine human liveness
+          const isLivenessConfirmed = Boolean(
+            liveFace.blinkDetected ||
+            liveFace.smileDetected ||
+            liveFace.livenessPassed ||
+            (liveFace.smileScore && liveFace.smileScore >= 40)
+          );
+
+          if (isLivenessConfirmed && !livenessBlinkPassed) {
+            playBiometricSound(liveFace.smileDetected ? "smile" : "blink");
             setLivenessBlinkPassed(true);
-            setActiveChallengeStep("SMILE");
+            setLivenessSmilePassed(true);
+            setActiveChallengeStep("COMPLETED");
+            playBiometricSound("success");
           }
         }
 
-        // --- STEP 3: OPTICAL SMILE CHECK ---
+        // --- STEP 3: OPTICAL SMILE CHECK (INSTANT PASS BONUS) ---
         if (activeChallengeStep === "SMILE" && liveFace.hasFace) {
           if (!smileStepStartTime) smileStepStartTime = now;
 
-          if ((liveFace.smileDetected || liveFace.smileScore >= 45) && !livenessSmilePassed) {
+          if ((liveFace.smileDetected || liveFace.smileScore >= 40 || liveFace.livenessPassed) && !livenessSmilePassed) {
             playBiometricSound("smile");
             setLivenessSmilePassed(true);
             setActiveChallengeStep("COMPLETED");
@@ -523,11 +564,47 @@ export const SmartAttendanceModal: React.FC<SmartAttendanceModalProps> = ({
       : activeEmployee?.avatarUrl;
 
   const isAllReadyToSubmit = Boolean(
-    activeEmployee && matchResult?.matched && livenessBlinkPassed && livenessSmilePassed && isInsideGeofence
+    activeEmployee && matchResult?.matched && (livenessBlinkPassed || livenessSmilePassed) && isInsideGeofence
   );
+
+  // 3-Second Auto-Submit Countdown Loop when fully matched and liveness verified
+  useEffect(() => {
+    if (!isAllReadyToSubmit) {
+      setAutoClockInCountdown(null);
+      setAutoSubmitProgress(100);
+      return;
+    }
+
+    const DURATION_MS = 3000;
+    const startMs = Date.now();
+    setAutoClockInCountdown(3);
+    setAutoSubmitProgress(100);
+
+    const timer = setInterval(() => {
+      const elapsed = Date.now() - startMs;
+      const remainingMs = Math.max(0, DURATION_MS - elapsed);
+      const remainingSec = Math.ceil(remainingMs / 1000);
+      const progress = Math.max(0, Math.round((remainingMs / DURATION_MS) * 100));
+
+      setAutoClockInCountdown(remainingSec);
+      setAutoSubmitProgress(progress);
+
+      if (remainingMs <= 0) {
+        clearInterval(timer);
+        setAutoClockInCountdown(null);
+        handleFinalSubmitAttendance();
+      }
+    }, 100);
+
+    return () => clearInterval(timer);
+  }, [isAllReadyToSubmit, handleFinalSubmitAttendance]);
 
   // Manual Reset to re-scan
   const handleResetScan = () => {
+    matchLockedUntilRef.current = 0;
+    consecutiveMissesRef.current = 0;
+    setAutoClockInCountdown(null);
+    setAutoSubmitProgress(100);
     setMatchResult(null);
     setCapturedSelfie(null);
     setLivenessBlinkPassed(false);
@@ -540,6 +617,10 @@ export const SmartAttendanceModal: React.FC<SmartAttendanceModalProps> = ({
 
   // Reject an auto-detected candidate and ignore them for subsequent frames
   const handleRejectAutoDetectedPerson = () => {
+    matchLockedUntilRef.current = 0;
+    consecutiveMissesRef.current = 0;
+    setAutoClockInCountdown(null);
+    setAutoSubmitProgress(100);
     if (activeEmployee) {
       setRejectedEmployeeIds((prev) => new Set(prev).add(activeEmployee.id));
     }
@@ -559,11 +640,15 @@ export const SmartAttendanceModal: React.FC<SmartAttendanceModalProps> = ({
   return (
     <div
       id="smart-attendance-modal-backdrop"
-      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/85 backdrop-blur-md overflow-y-auto animate-in fade-in duration-200"
+      className={`fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto animate-in fade-in duration-300 transition-colors ${
+        screenFillLight
+          ? "bg-white shadow-[inset_0_0_200px_rgba(255,255,255,1)]"
+          : "bg-slate-950/90 backdrop-blur-md"
+      }`}
     >
       <div
         id="smart-attendance-modal-content"
-        className="relative w-full max-w-5xl bg-slate-900 border border-slate-700/80 rounded-2xl shadow-2xl overflow-hidden text-slate-100 my-auto"
+        className="relative w-full max-w-5xl bg-slate-900 border border-slate-700/80 rounded-2xl shadow-2xl overflow-hidden text-slate-100 my-auto ring-1 ring-slate-700/50"
       >
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-900/90">
@@ -581,17 +666,33 @@ export const SmartAttendanceModal: React.FC<SmartAttendanceModalProps> = ({
                 </span>
               </div>
               <p className="text-xs text-slate-400">
-                স্বয়ংক্রিয় লাইভনেস চেক (ব্লিংক + স্মাইল) • ১০০% রিয়েল-টাইম শনাক্তকরণ • নিরাপদ উপস্থিতি
+                স্বয়ংক্রিয় লাইভনেস চেক (ব্লিংক) • ১০০% রিয়েল-টাইম শনাক্তকরণ • নিরাপদ উপস্থিতি
               </p>
             </div>
           </div>
 
-          <button
-            onClick={onClose}
-            className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setScreenFillLight((prev) => !prev)}
+              className={`px-3 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all shadow-sm cursor-pointer ${
+                screenFillLight
+                  ? "bg-amber-400 text-slate-950 border border-amber-300 ring-2 ring-amber-400/50 shadow-md shadow-amber-400/20"
+                  : "bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-700"
+              }`}
+              title="কম আলো বা অন্ধকারে চেহারা উজ্জ্বল দেখতে মনিটরের চারপাশ সম্পূর্ণ সাদা আলোতে পরিণত করুন"
+            >
+              <Sun className={`w-4 h-4 ${screenFillLight ? "text-slate-950 fill-slate-950" : "text-amber-400"}`} />
+              <span>{screenFillLight ? "💡 ভার্চুয়াল ফিল-লাইট: চালু" : "ফিল-লাইট বন্ধ"}</span>
+            </button>
+
+            <button
+              onClick={onClose}
+              className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Top Control Bar: Mode Toggle & Re-Enroll Action */}
@@ -763,7 +864,7 @@ export const SmartAttendanceModal: React.FC<SmartAttendanceModalProps> = ({
                         : activeChallengeStep === "ALIGN"
                         ? "ধাপ ১: ফেস স্ক্যান ও বায়োমেট্রিক ম্যাচ"
                         : activeChallengeStep === "BLINK"
-                        ? "ধাপ ২: স্বাভাবিকভাবে চোখের পলক ফেলুন (স্বয়ংক্রিয় ডিটেকশন)"
+                        ? "ধাপ ২: চোখের পলক ফেলুন অথবা মুখে হালকা হাসি দিন (Smile)"
                         : activeChallengeStep === "SMILE"
                         ? "ধাপ ৩: ক্যামেরার দিকে তাকিয়ে একটু হাসুন (স্বয়ংক্রিয় ডিটেকশন)"
                         : `ভেরিফিকেশন সম্পন্ন (${matchResult?.matchScore}% মিল)`}
@@ -777,10 +878,10 @@ export const SmartAttendanceModal: React.FC<SmartAttendanceModalProps> = ({
                         ? "ক্যামেরার ফ্রেমের মাঝখানে সোজা তাকিয়ে স্থির থাকুন।"
                         : activeChallengeStep === "BLINK"
                         ? liveEyeOpenness < 35
-                          ? "চোখ বন্ধ শনাক্ত হয়েছে... এখন চোখ খুলুন।"
-                          : "লাইভনেস প্রমাণের জন্য চোখের স্বাভাবিক পলক ফেলুন (কোনো ক্লিক করতে হবে না)।"
+                          ? "চোখ বন্ধ শনাক্ত হয়েছে... এখন স্বাভাবিকভাবে তাকান।"
+                          : "লাইভনেস প্রমাণের জন্য চোখের পলক ফেলুন অথবা হালকা হাসুন (কোনো ক্লিক করতে হবে না)।"
                         : activeChallengeStep === "SMILE"
-                        ? liveSmileGauge >= 55
+                        ? liveSmileGauge >= 50
                           ? "হাসি সফলভাবে শনাক্ত হয়েছে! ✓"
                           : "ক্যামেরার দিকে তাকিয়ে একটু হাসুন (রিয়েল-টাইম স্মাইল গেজ দেখুন)।"
                         : "বায়োমেট্রিক চেহারা ও অ্যান্টি-স্পুফিং লাইভনেস সম্পূর্ণ সফল! ✓"}
@@ -1222,21 +1323,51 @@ export const SmartAttendanceModal: React.FC<SmartAttendanceModalProps> = ({
             {/* Action Buttons: Strict Face Scan -> Verify Identity -> Click to Confirm Attendance */}
             <div className="space-y-2.5 pt-1">
               {isAllReadyToSubmit && activeEmployee ? (
-                <div className="space-y-2.5 p-3.5 rounded-2xl bg-emerald-950/40 border border-emerald-500/40">
-                  <div className="flex items-center gap-2 text-xs font-bold text-emerald-300">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                    <span>পরিচয় ও লাইভনেস যাচাই সফল! এবার হাজিরা নিশ্চিত করুন:</span>
+                <div className="space-y-3 p-4 rounded-2xl bg-emerald-950/50 border-2 border-emerald-500/60 shadow-xl shadow-emerald-500/10">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 text-xs font-bold text-emerald-300">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                      <span>পরিচয় ও লাইভনেস যাচাই সফল!</span>
+                    </div>
+
+                    {autoClockInCountdown !== null && (
+                      <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/50 text-[11px] font-mono font-bold">
+                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                        <span>অটো ক্লক-ইন: {autoClockInCountdown}s</span>
+                      </div>
+                    )}
                   </div>
 
+                  {/* 3-Second Auto-Submit Progress Bar */}
+                  {autoClockInCountdown !== null && (
+                    <div className="space-y-1">
+                      <div className="w-full bg-slate-900 h-2 rounded-full overflow-hidden border border-emerald-500/30">
+                        <div
+                          className="h-full bg-gradient-to-r from-teal-400 via-emerald-400 to-green-300 transition-all duration-100 ease-linear rounded-full"
+                          style={{ width: `${autoSubmitProgress}%` }}
+                        />
+                      </div>
+                      <p className="text-[11px] text-emerald-300/80 text-center font-medium">
+                        ৩ সেকেন্ডের মধ্যে স্বয়ংক্রিয়ভাবে হাজিরা সাবমিট হবে অথবা সরাসরি নিচের বাটনে ক্লিক করুন
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Stable Instant Submission Button */}
                   <button
                     type="button"
                     onClick={handleFinalSubmitAttendance}
-                    className="w-full py-3.5 px-4 bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-sm rounded-xl shadow-lg shadow-emerald-500/30 flex items-center justify-center gap-2 transition-all transform active:scale-95 cursor-pointer ring-2 ring-emerald-400/50"
+                    className="w-full py-3.5 px-4 bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-sm rounded-xl shadow-lg shadow-emerald-500/30 flex items-center justify-center gap-2.5 transition-all transform active:scale-95 cursor-pointer ring-2 ring-emerald-400/60"
                   >
                     <CheckCircle2 className="w-5 h-5 text-white" />
                     <span>
-                      👉 এবার হাজিরা দিন ({attendanceType === "CHECK_IN" ? "Clock In" : "Clock Out"} - {activeEmployee.fullName})
+                      👉 এখন হাজিরা নিশ্চিত করুন ({attendanceType === "CHECK_IN" ? "Clock In" : "Clock Out"} - {activeEmployee.fullName})
                     </span>
+                    {autoClockInCountdown !== null && (
+                      <span className="ml-1 px-2 py-0.5 rounded-full bg-white/20 text-xs font-mono font-bold">
+                        {autoClockInCountdown}s
+                      </span>
+                    )}
                   </button>
 
                   <div className="flex items-center gap-2">
@@ -1374,9 +1505,9 @@ export const SmartAttendanceModal: React.FC<SmartAttendanceModalProps> = ({
             onClose={() => setShowEnrollModal(false)}
             employee={activeEmployee}
             isSuperAdmin={activeEmployee.role === "SUPER_ADMIN"}
-            onSaveFacePhoto={(empId, photoUrl, verificationScore) => {
+            onSaveFacePhoto={(empId, photoUrl, verificationScore, faceDescriptor) => {
               if (onUpdateFacePhoto) {
-                onUpdateFacePhoto(empId, photoUrl, verificationScore);
+                onUpdateFacePhoto(empId, photoUrl, verificationScore, faceDescriptor);
               }
               const isVerified = typeof verificationScore === "number" && verificationScore > 0;
               setActiveEmployee((prev) => ({
@@ -1387,6 +1518,7 @@ export const SmartAttendanceModal: React.FC<SmartAttendanceModalProps> = ({
                 faceTemplateRegistered: isVerified,
                 faceVerificationRequired: !isVerified,
                 faceVerificationScore: isVerified ? verificationScore : undefined,
+                faceDescriptor: faceDescriptor || prev?.faceDescriptor,
               }));
               handleResetScan();
             }}

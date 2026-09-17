@@ -45,7 +45,7 @@ import {
 } from "../data/mockDatabase";
 import firebaseConfig from "../../firebase-applet-config.json";
 import { compressAndOptimizeImage } from "../utils/imageCompression";
-import { invalidateEmployeeFaceCache } from "../utils/faceRecognitionEngine";
+import { invalidateEmployeeFaceCache, extract128DVector } from "../utils/faceRecognitionEngine";
 
 // Collection Names
 const COL_EMPLOYEES = "employees";
@@ -254,12 +254,26 @@ export async function deleteEmployeeFromFirestore(employeeId: string): Promise<b
 export async function updateEmployeeFacePhotoInFirestore(
   employeeId: string,
   photoUrl: string,
-  verificationScore?: number
-): Promise<{ success: boolean; optimizedUrl: string }> {
+  verificationScore?: number,
+  faceDescriptor?: number[]
+): Promise<{ success: boolean; optimizedUrl: string; faceDescriptor?: number[] }> {
   try {
     // Compress and downscale photo to max 480x480 JPEG (~30KB-50KB) to ensure it is always
     // vastly below Firestore's 1MB limit and saves instantaneously
     const optimizedPhoto = await compressAndOptimizeImage(photoUrl, 480, 480, 0.82);
+
+    // Extract 128D face descriptor vector if not already supplied
+    let finalDescriptor = faceDescriptor;
+    if (!finalDescriptor || finalDescriptor.length !== 128) {
+      try {
+        const extracted = await extract128DVector(optimizedPhoto);
+        if (extracted && extracted.length === 128) {
+          finalDescriptor = extracted;
+        }
+      } catch (descErr) {
+        console.warn("Auto face descriptor extraction fallback:", descErr);
+      }
+    }
 
     const now = new Date();
     const updateData: Record<string, any> = {
@@ -271,6 +285,10 @@ export async function updateEmployeeFacePhotoInFirestore(
       faceRegisteredAt: now.toISOString().split("T")[0],
       faceVerifiedAt: now.toISOString(),
     };
+
+    if (finalDescriptor && finalDescriptor.length === 128) {
+      updateData.faceDescriptor = finalDescriptor;
+    }
 
     if (typeof verificationScore === "number") {
       updateData.faceVerificationScore = verificationScore;
@@ -286,6 +304,9 @@ export async function updateEmployeeFacePhotoInFirestore(
     try {
       localStorage.setItem(`workflow_hr_cached_avatar_${employeeId}`, optimizedPhoto);
       localStorage.setItem(`workflow_hr_cached_verified_${employeeId}`, "true");
+      if (finalDescriptor) {
+        localStorage.setItem(`workflow_hr_cached_descriptor_${employeeId}`, JSON.stringify(finalDescriptor));
+      }
       if (typeof verificationScore === "number") {
         localStorage.setItem(`workflow_hr_cached_score_${employeeId}`, String(verificationScore));
       }
@@ -293,8 +314,7 @@ export async function updateEmployeeFacePhotoInFirestore(
       console.warn("Local storage avatar cache notice:", e);
     }
 
-    console.log(`Employee ${employeeId} face photo & verification successfully saved to Firestore.`);
-    return { success: true, optimizedUrl: optimizedPhoto };
+    return { success: true, optimizedUrl: optimizedPhoto, faceDescriptor: finalDescriptor };
   } catch (err) {
     console.error("Failed to update face photo in Firestore:", err);
     return { success: false, optimizedUrl: photoUrl };

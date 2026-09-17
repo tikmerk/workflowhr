@@ -19,6 +19,7 @@ import {
   Crown,
   Save,
   Check,
+  Sun,
 } from "lucide-react";
 import { Employee } from "../../types";
 import { requestUserMediaStream, captureFrameAsBase64 } from "../../utils/faceUtils";
@@ -27,14 +28,15 @@ import {
   verifyLiveFaceAgainstCandidatePhoto,
   detectFaceInPhoto,
   drawBiometricMeshOverlay,
-  invalidateEmployeeFaceCache
+  invalidateEmployeeFaceCache,
+  extract128DVector
 } from "../../utils/faceRecognitionEngine";
 
 interface FaceEnrollmentModalProps {
   isOpen: boolean;
   onClose: () => void;
   employee: Employee;
-  onSaveFacePhoto: (employeeId: string, photoUrl: string, verificationScore?: number) => void;
+  onSaveFacePhoto: (employeeId: string, photoUrl: string, verificationScore?: number, faceDescriptor?: number[]) => void;
   isSuperAdmin?: boolean;
   onUpdateEmployee?: (emp: Employee) => void;
 }
@@ -88,6 +90,9 @@ export const FaceEnrollmentModal: React.FC<FaceEnrollmentModalProps> = ({
   const [isAttendanceExempt, setIsAttendanceExempt] = useState<boolean>(
     Boolean(employee.isAttendanceExempt || employee.isCeoOrOwner)
   );
+
+  // Virtual Screen Fill-Light for dark / low-light rooms (solid white backdrop)
+  const [screenFillLight, setScreenFillLight] = useState<boolean>(true);
 
   const [isProcessingSave, setIsProcessingSave] = useState<boolean>(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -273,16 +278,18 @@ export const FaceEnrollmentModal: React.FC<FaceEnrollmentModalProps> = ({
 
     try {
       const finalPhoto = await compressAndOptimizeImage(candidatePhoto, 480, 480, 0.85);
+      const descriptor = await extract128DVector(finalPhoto);
       invalidateEmployeeFaceCache(employee.id);
 
       // Save with undefined verification score -> marks pending verification
-      onSaveFacePhoto(employee.id, finalPhoto, undefined);
+      onSaveFacePhoto(employee.id, finalPhoto, undefined, descriptor || undefined);
 
       if (onUpdateEmployee) {
         onUpdateEmployee({
           ...employee,
           avatarUrl: finalPhoto,
           faceRegisteredPhoto: finalPhoto,
+          faceDescriptor: descriptor || employee.faceDescriptor,
           faceVerified: false,
           faceTemplateRegistered: false,
           faceVerificationRequired: true,
@@ -315,16 +322,18 @@ export const FaceEnrollmentModal: React.FC<FaceEnrollmentModalProps> = ({
 
     try {
       const finalPhoto = await compressAndOptimizeImage(candidatePhoto, 480, 480, 0.85);
+      const descriptor = await extract128DVector(finalPhoto);
       invalidateEmployeeFaceCache(employee.id);
 
       // 100% score approval
-      onSaveFacePhoto(employee.id, finalPhoto, 100);
+      onSaveFacePhoto(employee.id, finalPhoto, 100, descriptor || undefined);
 
       if (onUpdateEmployee) {
         onUpdateEmployee({
           ...employee,
           avatarUrl: finalPhoto,
           faceRegisteredPhoto: finalPhoto,
+          faceDescriptor: descriptor || employee.faceDescriptor,
           faceVerified: true,
           faceTemplateRegistered: true,
           faceVerificationRequired: false,
@@ -360,19 +369,21 @@ export const FaceEnrollmentModal: React.FC<FaceEnrollmentModalProps> = ({
 
     try {
       const finalPhoto = await compressAndOptimizeImage(candidatePhoto, 480, 480, 0.85);
+      const descriptor = await extract128DVector(finalPhoto);
       const score = verifiedScore || verificationResult?.matchScore || 95;
 
       // Invalidate local in-memory 128D vector cache
       invalidateEmployeeFaceCache(employee.id);
 
       // Invoke parent save callback
-      onSaveFacePhoto(employee.id, finalPhoto, score);
+      onSaveFacePhoto(employee.id, finalPhoto, score, descriptor || undefined);
 
       if (onUpdateEmployee) {
         onUpdateEmployee({
           ...employee,
           avatarUrl: finalPhoto,
           faceRegisteredPhoto: finalPhoto,
+          faceDescriptor: descriptor || employee.faceDescriptor,
           faceVerified: true,
           faceTemplateRegistered: true,
           faceVerificationRequired: false,
@@ -403,11 +414,15 @@ export const FaceEnrollmentModal: React.FC<FaceEnrollmentModalProps> = ({
   return (
     <div
       id="face-enrollment-modal-backdrop"
-      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/85 backdrop-blur-md overflow-y-auto animate-in fade-in duration-200"
+      className={`fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto animate-in fade-in duration-300 transition-colors ${
+        screenFillLight
+          ? "bg-white shadow-[inset_0_0_200px_rgba(255,255,255,1)]"
+          : "bg-slate-950/85 backdrop-blur-md"
+      }`}
     >
       <div
         id="face-enrollment-modal-content"
-        className="relative w-full max-w-3xl bg-slate-900 border border-slate-700/90 rounded-3xl shadow-2xl overflow-hidden text-slate-100 my-auto"
+        className="relative w-full max-w-3xl bg-slate-900 border border-slate-700/90 rounded-3xl shadow-2xl overflow-hidden text-slate-100 my-auto ring-1 ring-slate-700/50"
       >
         {/* Header */}
         <div className="flex items-center justify-between px-5 sm:px-6 py-4 border-b border-slate-800 bg-slate-900/95">
@@ -428,12 +443,28 @@ export const FaceEnrollmentModal: React.FC<FaceEnrollmentModalProps> = ({
             </div>
           </div>
 
-          <button
-            onClick={onClose}
-            className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setScreenFillLight((prev) => !prev)}
+              className={`px-3 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all shadow-sm cursor-pointer ${
+                screenFillLight
+                  ? "bg-amber-400 text-slate-950 border border-amber-300 ring-2 ring-amber-400/50 shadow-md shadow-amber-400/20"
+                  : "bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-700"
+              }`}
+              title="কম আলোতে চেহারা স্পষ্ট করতে পুরো স্ক্রিনে সাদা ব্যাকগ্রাউন্ড আলো অন করুন"
+            >
+              <Sun className={`w-4 h-4 ${screenFillLight ? "text-slate-950 fill-slate-950" : "text-amber-400"}`} />
+              <span>{screenFillLight ? "💡 ফিল-লাইট অন" : "ফিল-লাইট অফ"}</span>
+            </button>
+
+            <button
+              onClick={onClose}
+              className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Security Rule Banner */}

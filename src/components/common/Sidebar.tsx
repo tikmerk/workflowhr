@@ -181,17 +181,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
       items: [
         {
           id: "face-recognition-kiosk",
-          labelEn: "Face Recognition Kiosk",
-          labelBn: "রিয়েল-টাইম ফেস ডিটেকশন ও রিকগনাইজেশন",
+          labelEn: "Face Attendance Kiosk",
+          labelBn: "স্মার্ট ফেস অ্যাটেনডেন্স",
           icon: ScanFace,
-          badgeEn: "Live Kiosk",
-          badgeBn: "অটো ডিটেকশন",
-        },
-        {
-          id: "attendance-logs",
-          labelEn: "Biometric Attendance",
-          labelBn: "স্মার্ট বায়োমেট্রিক উপস্থিতি",
-          icon: Clock,
+          badgeEn: "Smart Kiosk",
+          badgeBn: "স্মার্ট কিওস্ক",
         },
         {
           id: "shifts-holidays",

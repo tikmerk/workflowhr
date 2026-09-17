@@ -1833,7 +1833,7 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
           onClose={() => setEnrollingEmployee(null)}
           employee={enrollingEmployee}
           isSuperAdmin={currentUser?.role === "SUPER_ADMIN"}
-          onSaveFacePhoto={(empId, photoUrl, verificationScore) => {
+          onSaveFacePhoto={(empId, photoUrl, verificationScore, faceDescriptor) => {
             const isVerified = typeof verificationScore === "number" && verificationScore > 0;
             const updated = {
               ...enrollingEmployee,
@@ -1845,6 +1845,7 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
               faceRegisteredAt: new Date().toISOString().split("T")[0],
               faceVerifiedAt: isVerified ? new Date().toISOString() : undefined,
               faceVerificationScore: isVerified ? verificationScore : undefined,
+              faceDescriptor: faceDescriptor || enrollingEmployee.faceDescriptor,
             };
             onUpdateEmployee(updated);
             setEnrollingEmployee(null);

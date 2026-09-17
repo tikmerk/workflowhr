@@ -33,7 +33,7 @@ interface DigitalIdCardModalProps {
   allEmployees?: Employee[];
   isSuperAdmin?: boolean;
   onSelectEmployee?: (emp: Employee) => void;
-  onUpdateFacePhoto?: (employeeId: string, photoUrl: string, verificationScore?: number) => void;
+  onUpdateFacePhoto?: (employeeId: string, photoUrl: string, verificationScore?: number, faceDescriptor?: number[]) => void;
 }
 
 export const DigitalIdCardModal: React.FC<DigitalIdCardModalProps> = ({
@@ -408,9 +408,9 @@ export const DigitalIdCardModal: React.FC<DigitalIdCardModalProps> = ({
             onClose={() => setShowEnrollModal(false)}
             employee={employee}
             isSuperAdmin={isSuperAdmin}
-            onSaveFacePhoto={(empId, photoUrl, verificationScore) => {
+            onSaveFacePhoto={(empId, photoUrl, verificationScore, faceDescriptor) => {
               if (onUpdateFacePhoto) {
-                onUpdateFacePhoto(empId, photoUrl, verificationScore);
+                onUpdateFacePhoto(empId, photoUrl, verificationScore, faceDescriptor);
               }
               setPhotoUpdateSuccess(true);
               setTimeout(() => setPhotoUpdateSuccess(false), 3500);
