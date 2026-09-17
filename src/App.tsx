@@ -57,6 +57,7 @@ import {
   subscribeToDeletedEmployees,
 } from "./services/firestoreService";
 import { compressAndOptimizeImage } from "./utils/imageCompression";
+import { invalidateEmployeeFaceCache } from "./utils/faceRecognitionEngine";
 
 // Views
 import { LoginView } from "./components/views/LoginView";
@@ -722,6 +723,9 @@ function AppContent() {
     } catch (e) {
       console.warn("Local storage update notice:", e);
     }
+
+    // Invalidate face biometric recognition cache so the new photo is immediately analyzed
+    invalidateEmployeeFaceCache(employeeId);
 
     // 2. Persist to Firestore cloud database & local fallback
     if (isLiveVerified) {
