@@ -112,6 +112,7 @@ import {
   INITIAL_TREASURY_ACCOUNTS,
 } from "./data/mockDatabase";
 import { calculateMonthlyPayroll, normalizeMonthKey } from "./utils/payrollEngine";
+import { reconcileMissingPreviousClockOuts } from "./utils/attendanceReconciliation";
 import {
   NavigationTab,
   Employee,
@@ -641,11 +642,51 @@ function AppContent() {
 
   // Handlers for Attendance & Biometrics
   const handleAttendanceSuccess = (record: AttendanceRecord) => {
-    setAttendanceLogs((prev) => [record, ...prev]);
+    // 1. Auto-reconcile previous unclosed clock-outs if this is a check-in on a new day
+    if (record.checkInTime) {
+      const matchedEmp = employees.find((e) => e.id === record.employeeId);
+      reconcileMissingPreviousClockOuts(
+        record.employeeId,
+        record.date,
+        attendanceLogs,
+        shifts,
+        matchedEmp,
+        (reconciledPast) => {
+          setAttendanceLogs((prev) => {
+            const idx = prev.findIndex((a) => a.id === reconciledPast.id);
+            if (idx >= 0) {
+              const copy = [...prev];
+              copy[idx] = reconciledPast;
+              return copy;
+            }
+            return [reconciledPast, ...prev];
+          });
+          saveAttendanceRecordToFirestore(reconciledPast);
+        }
+      );
+    }
+
+    // 2. Insert or update the current record
+    setAttendanceLogs((prev) => {
+      const idx = prev.findIndex(
+        (a) => a.id === record.id || (a.employeeId === record.employeeId && a.date === record.date)
+      );
+      if (idx >= 0) {
+        const copy = [...prev];
+        copy[idx] = { ...copy[idx], ...record };
+        return copy;
+      }
+      return [record, ...prev];
+    });
+
     saveAttendanceRecordToFirestore(record);
+
+    const isCheckOut = Boolean(record.checkOutTime && !record.checkInTime);
     notifyAndLog(
       "BIOMETRIC_CLOCK_IN",
-      `Successfully clocked in with ${record.checkInFaceMatchScore}% face match at ${record.branchName}`,
+      `${record.employeeName} ${isCheckOut ? "checked out" : "checked in"} successfully (${
+        record.checkInFaceMatchScore || record.checkOutFaceMatchScore || 92
+      }% face match at ${record.branchName})`,
       "ATTENDANCE"
     );
   };
@@ -1152,6 +1193,8 @@ function AppContent() {
             currentEmployee={null}
             allEmployees={employees}
             employees={employees}
+            attendanceLogs={attendanceLogs}
+            shifts={shifts}
             selectedBranch={
               branches.find((b) => b.id === selectedBranchId) ||
               branches[0]
@@ -1678,6 +1721,7 @@ function AppContent() {
               branches={branches}
               attendanceLogs={attendanceLogs}
               currentEmployee={currentEmployee}
+              shifts={shifts}
               onLogAttendance={handleAttendanceSuccess}
               onOpenEnrollmentModal={handleOpenFaceEnrollModal}
               onOpenAttendanceModal={() => setIsAttendanceModalOpen(true)}
@@ -1998,6 +2042,8 @@ function AppContent() {
           currentEmployee={currentEmployee}
           allEmployees={employees}
           employees={employees}
+          attendanceLogs={attendanceLogs}
+          shifts={shifts}
           selectedBranch={
             branches.find((b) => b.id === selectedBranchId) ||
             branches.find((b) => b.id === currentEmployee.branchId) ||
