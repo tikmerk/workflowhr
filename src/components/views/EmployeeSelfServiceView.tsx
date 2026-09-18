@@ -147,14 +147,6 @@ export const EmployeeSelfServiceView: React.FC<EmployeeSelfServiceViewProps> = (
   const [editPresentAddress, setEditPresentAddress] = useState(currentEmployee.presentAddress || "");
   const [editBloodGroup, setEditBloodGroup] = useState(currentEmployee.bloodGroup || "O+");
   const [editAvatarUrl, setEditAvatarUrl] = useState(currentEmployee.avatarUrl);
-  const [editAdditionalDesignations, setEditAdditionalDesignations] = useState<string[]>(
-    currentEmployee.additionalDesignations || []
-  );
-  const [editAdditionalDepartments, setEditAdditionalDepartments] = useState<string[]>(
-    currentEmployee.additionalDepartments || []
-  );
-  const [newDesigInput, setNewDesigInput] = useState("");
-  const [newDeptInput, setNewDeptInput] = useState("");
 
   const isCeoOrAdmin = Boolean(
     currentEmployee.isCeoOrOwner ||
@@ -169,30 +161,6 @@ export const EmployeeSelfServiceView: React.FC<EmployeeSelfServiceViewProps> = (
     currentEmployee.designationTitle.toLowerCase().includes("manager")
   );
 
-  const handleAddAdditionalDesignation = (titleToAdd: string) => {
-    const trimmed = titleToAdd.trim();
-    if (trimmed && !editAdditionalDesignations.includes(trimmed)) {
-      setEditAdditionalDesignations([...editAdditionalDesignations, trimmed]);
-    }
-    setNewDesigInput("");
-  };
-
-  const handleRemoveAdditionalDesignation = (index: number) => {
-    setEditAdditionalDesignations(editAdditionalDesignations.filter((_, i) => i !== index));
-  };
-
-  const handleAddAdditionalDepartment = (deptToAdd: string) => {
-    const trimmed = deptToAdd.trim();
-    if (trimmed && !editAdditionalDepartments.includes(trimmed)) {
-      setEditAdditionalDepartments([...editAdditionalDepartments, trimmed]);
-    }
-    setNewDeptInput("");
-  };
-
-  const handleRemoveAdditionalDepartment = (index: number) => {
-    setEditAdditionalDepartments(editAdditionalDepartments.filter((_, i) => i !== index));
-  };
-
   const handleProfileSave = (e: React.FormEvent) => {
     e.preventDefault();
     const updated: Employee = {
@@ -205,8 +173,8 @@ export const EmployeeSelfServiceView: React.FC<EmployeeSelfServiceViewProps> = (
       presentAddress: editPresentAddress,
       bloodGroup: editBloodGroup as any,
       avatarUrl: editAvatarUrl,
-      additionalDesignations: isCeoOrAdmin ? editAdditionalDesignations : (currentEmployee.additionalDesignations || []),
-      additionalDepartments: isCeoOrAdmin ? editAdditionalDepartments : (currentEmployee.additionalDepartments || []),
+      additionalDesignations: [],
+      additionalDepartments: [],
     };
     if (onUpdateEmployee) {
       onUpdateEmployee(updated);
@@ -408,32 +376,7 @@ export const EmployeeSelfServiceView: React.FC<EmployeeSelfServiceViewProps> = (
               </span>
             </div>
 
-            {/* Multi-Role & Additional Portfolios Badges */}
-            {((currentEmployee.additionalDesignations && currentEmployee.additionalDesignations.length > 0) ||
-              (currentEmployee.additionalDepartments && currentEmployee.additionalDepartments.length > 0)) && (
-              <div className="flex flex-wrap items-center gap-1.5 pt-0.5 justify-center sm:justify-start">
-                <span className="text-[10px] text-teal-800 dark:text-teal-300 font-bold flex items-center gap-1">
-                  <Layers className="w-3 h-3 text-teal-600" />
-                  অতিরিক্ত দায়িত্ব:
-                </span>
-                {currentEmployee.additionalDesignations?.map((d) => (
-                  <span
-                    key={d}
-                    className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-teal-500/15 text-teal-800 dark:text-teal-300 border border-teal-500/30"
-                  >
-                    + {d}
-                  </span>
-                ))}
-                {currentEmployee.additionalDepartments?.map((dept) => (
-                  <span
-                    key={dept}
-                    className="px-2 py-0.5 rounded-md text-[10px] font-medium bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800"
-                  >
-                    {dept}
-                  </span>
-                ))}
-              </div>
-            )}
+
 
             <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-xs text-slate-500 dark:text-slate-400 justify-center sm:justify-start mt-1">
               <span>Employee Code: <strong className="text-slate-900 dark:text-white">{currentEmployee.employeeCode}</strong></span>
@@ -473,8 +416,6 @@ export const EmployeeSelfServiceView: React.FC<EmployeeSelfServiceViewProps> = (
                 setEditPresentAddress(currentEmployee.presentAddress || "");
                 setEditBloodGroup(currentEmployee.bloodGroup || "O+");
                 setEditAvatarUrl(currentEmployee.avatarUrl);
-                setEditAdditionalDesignations(currentEmployee.additionalDesignations || []);
-                setEditAdditionalDepartments(currentEmployee.additionalDepartments || []);
                 setShowEditProfileModal(true);
               }}
               className="px-3.5 py-2.5 bg-slate-100 hover:bg-teal-500/20 dark:bg-slate-800 dark:hover:bg-teal-500/30 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white text-xs font-bold rounded-xl shadow-xs flex items-center gap-2 transition-all cursor-pointer grow sm:grow-0 justify-center"
@@ -553,9 +494,7 @@ export const EmployeeSelfServiceView: React.FC<EmployeeSelfServiceViewProps> = (
         {[
           { id: "overview", label: "Profile & Hardware Security", icon: UserCheck },
           { id: "attendance", label: "My Attendance Logs", icon: Clock },
-          ...(!currentEmployee.hideSalaryFromSelf
-            ? [{ id: "payslips", label: "Salary & Payslips", icon: CreditCard }]
-            : []),
+          { id: "payslips", label: "বেতন ও পে-স্লিপ (Payslips)", icon: CreditCard },
           { id: "leaves", label: "Leave Requests & Balance", icon: CalendarCheck },
           ...(!currentEmployee.hideSalaryFromSelf
             ? [{ id: "loans", label: "Loans & Advance Salary", icon: Banknote }]
@@ -822,38 +761,42 @@ export const EmployeeSelfServiceView: React.FC<EmployeeSelfServiceViewProps> = (
 
       {/* Tab 3: Salary & Payslips */}
       {activeSubTab === "payslips" && (
-        currentEmployee.hideSalaryFromSelf ? (
-          <div className="p-8 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs text-center space-y-4">
-            <div className="w-14 h-14 rounded-2xl bg-amber-500/15 text-amber-600 dark:text-amber-400 flex items-center justify-center mx-auto border border-amber-500/30">
-              <Lock className="w-7 h-7" />
-            </div>
-            <div className="space-y-1.5">
-              <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                বেতন ও পে-স্লিপ তথ্য গোপন রাখা হয়েছে (Salary Details Restricted)
+        <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                মাসিক পে-স্লিপ ও বিতরণ বিবরণী (My Monthly Payslips)
               </h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto leading-relaxed">
-                প্রতিষ্ঠানের অভ্যন্তরীণ পলিসি ও সুপার অ্যাডমিন কনফিগারেশন অনুযায়ী আপনার অ্যাকাউন্টে বেতন এবং পে-স্লিপ প্রদর্শন বন্ধ রয়েছে। আপনার কোনো প্রশ্ন থাকলে সরাসরি সুপার অ্যাডমিন বা অ্যাকাউন্টস বিভাগের সাথে যোগাযোগ করুন।
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                সকল মাসের প্রাপ্ত বেতনের পে-স্লিপ দেখুন এবং সরাসরি ডাউনলোড বা প্রিন্ট করুন
               </p>
             </div>
-            <div className="pt-2">
-              <button
-                type="button"
-                onClick={() => setActiveSubTab("overview")}
-                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-bold rounded-xl cursor-pointer transition-colors"
-              >
-                প্রোফাইল ওভারভিউ-তে ফিরে যান
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-bold text-slate-900 dark:text-white">My Monthly Payslips & Breakdown</h3>
-              <span className="text-xs text-teal-600 dark:text-teal-400 font-semibold">
+            {!currentEmployee.hideSalaryFromSelf ? (
+              <span className="text-xs text-teal-600 dark:text-teal-400 font-semibold px-3 py-1.5 rounded-xl bg-teal-500/10 border border-teal-500/20">
                 Gross Monthly Salary: ৳{(currentEmployee.salary?.grossSalary ?? 0).toLocaleString()}
               </span>
-            </div>
+            ) : (
+              <span className="text-[11px] text-teal-700 dark:text-teal-400 font-semibold px-3 py-1.5 rounded-xl bg-teal-500/10 border border-teal-500/20 flex items-center gap-1.5">
+                <CheckCircle2 className="w-3.5 h-3.5 text-teal-600" />
+                <span>পে-স্লিপ ডাউনলোড সার্ভিস সক্রিয়</span>
+              </span>
+            )}
+          </div>
 
+          {currentEmployee.hideSalaryFromSelf && (
+            <div className="p-3 rounded-xl bg-slate-100 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60 text-slate-600 dark:text-slate-300 text-xs flex items-center gap-2">
+              <Shield className="w-4 h-4 text-teal-600 shrink-0" />
+              <span>
+                প্রতিষ্ঠানের পলিসি অনুযায়ী মূল বেতন কাঠামো গোপন রাখা হলেও আপনি আপনার সকল মাসের পরিশোধিত পে-স্লিপ দেখতে এবং ডাউনলোড করতে পারবেন।
+              </span>
+            </div>
+          )}
+
+          {myPayslips.length === 0 ? (
+            <div className="p-8 text-center text-slate-500 dark:text-slate-400 text-xs border border-dashed border-slate-200 dark:border-slate-800 rounded-xl">
+              এখনও কোনো পে-স্লিপ তৈরি করা হয়নি। পে-রোল প্রক্রিয়াকরণ সম্পন্ন হলে আপনার পে-স্লিপ এখানে পাওয়া যাবে।
+            </div>
+          ) : (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {myPayslips.map((slip) => (
                 <div
@@ -876,27 +819,27 @@ export const EmployeeSelfServiceView: React.FC<EmployeeSelfServiceViewProps> = (
                       <span className="font-semibold text-slate-900 dark:text-white">৳{(slip.grossEarnings ?? 0).toLocaleString()}</span>
                     </div>
                     <div className="flex justify-between text-slate-500 dark:text-slate-400">
-                      <span>Total Deductions (PF, Tax, Late):</span>
+                      <span>Total Deductions:</span>
                       <span className="text-red-500 dark:text-red-400">-৳{(slip.totalDeductions ?? 0).toLocaleString()}</span>
                     </div>
                     <div className="flex justify-between text-slate-900 dark:text-slate-200 font-bold pt-2 border-t border-slate-200 dark:border-slate-700">
-                      <span>Net Disbursed Salary:</span>
+                      <span>Net Disbursed:</span>
                       <span className="text-emerald-600 dark:text-emerald-400 text-sm">৳{(slip.netSalary ?? 0).toLocaleString()}</span>
                     </div>
                   </div>
 
                   <button
                     onClick={() => onViewPayslip(slip)}
-                    className="w-full py-2 bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-650 text-slate-800 dark:text-slate-100 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                    className="w-full py-2 bg-teal-600 hover:bg-teal-500 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-xs"
                   >
-                    <FileText className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
-                    <span>View & Print Payslip</span>
+                    <FileText className="w-3.5 h-3.5" />
+                    <span>পে-স্লিপ দেখুন ও ডাউনলোড করুন (Download)</span>
                   </button>
                 </div>
               ))}
             </div>
-          </div>
-        )
+          )}
+        </div>
       )}
 
       {/* Tab 4: Leave Requests */}
@@ -1559,9 +1502,9 @@ export const EmployeeSelfServiceView: React.FC<EmployeeSelfServiceViewProps> = (
               <div className="p-3 rounded-2xl bg-teal-50/80 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-800/80 text-xs text-teal-950 dark:text-teal-200 flex items-start gap-2.5">
                 <Shield className="w-4 h-4 text-teal-600 dark:text-teal-400 shrink-0 mt-0.5" />
                 <div>
-                  <strong className="font-bold">এক্সিকিউটিভ ও সিইও অনুমোদন সুবিধা:</strong>
+                  <strong className="font-bold">এক্সিকিউটিভ ও সিইও সুবিধা:</strong>
                   <p className="text-[11px] mt-0.5 text-teal-800 dark:text-teal-300 leading-relaxed">
-                    সংস্থার প্রধান / সিইও হিসেবে আপনি নিজের নাম, মূল পদবী এবং অতিরিক্ত একাধিক পদবী (যেমন: আইটি ম্যানেজার এবং হেড অব এইচআর) ও বিভাগসমূহ এখানে সরাসরি যুক্ত ও পরিচালনা করতে পারেন।
+                    সংস্থার প্রধান / সিইও হিসেবে আপনি নিজের নাম, মূল পদবী এবং মূল বিভাগ এখানে সরাসরি সম্পাদনা ও আপডেট করতে পারেন।
                   </p>
                 </div>
               </div>
@@ -1727,177 +1670,6 @@ export const EmployeeSelfServiceView: React.FC<EmployeeSelfServiceViewProps> = (
                   </div>
                 </div>
               </div>
-
-              {/* Multi-Role / Additional Portfolios Section (For CEO / Admins) */}
-              {isCeoOrAdmin && (
-                <div className="p-4 rounded-2xl bg-teal-50/60 dark:bg-teal-950/30 border border-teal-200 dark:border-teal-800/60 space-y-3.5">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Layers className="w-4 h-4 text-teal-600 dark:text-teal-400" />
-                      <h4 className="font-bold text-teal-950 dark:text-teal-100">
-                        একাধিক পদবী ও অতিরিক্ত দায়িত্ব (Multi-Designations & Portfolios)
-                      </h4>
-                    </div>
-                    <span className="text-[10px] px-2 py-0.5 rounded-md font-bold bg-teal-500/20 text-teal-800 dark:text-teal-200 border border-teal-500/30">
-                      ইব্রাহিম হোসেন: IT Manager + Head of HR
-                    </span>
-                  </div>
-
-                  {/* Additional Designations */}
-                  <div className="space-y-2">
-                    <label className="block text-slate-700 dark:text-slate-300 font-semibold text-[11px]">
-                      অতিরিক্ত পদবীসমূহ (Additional Designations):
-                    </label>
-
-                    {editAdditionalDesignations.length > 0 && (
-                      <div className="flex flex-wrap gap-1.5 p-2 rounded-xl bg-white dark:bg-slate-900 border border-teal-200 dark:border-teal-800/80">
-                        {editAdditionalDesignations.map((desig, idx) => (
-                          <span
-                            key={desig}
-                            className="px-2.5 py-1 rounded-lg text-xs font-bold bg-teal-500/15 text-teal-800 dark:text-teal-200 border border-teal-500/30 flex items-center gap-1.5"
-                          >
-                            <span>+ {desig}</span>
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveAdditionalDesignation(idx)}
-                              className="text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
-                              title="বাদ দিন"
-                            >
-                              <X className="w-3.5 h-3.5" />
-                            </button>
-                          </span>
-                        ))}
-                      </div>
-                    )}
-
-                    {/* Quick Add Suggestions */}
-                    <div className="flex flex-wrap items-center gap-1 text-[11px]">
-                      <span className="text-slate-400 text-[10px] font-medium mr-1">দ্রুত যোগ করুন:</span>
-                      {[
-                        "Head of HR",
-                        "IT Manager",
-                        "Project Director",
-                        "Microfinance Lead",
-                        "Program Officer",
-                        "Accounts Head",
-                        "Branch In-Charge",
-                      ].map((item) => (
-                        <button
-                          key={item}
-                          type="button"
-                          onClick={() => handleAddAdditionalDesignation(item)}
-                          className="px-2 py-0.5 rounded-md bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-teal-500 text-slate-700 dark:text-slate-300 text-[10px] transition-colors cursor-pointer font-medium"
-                        >
-                          + {item}
-                        </button>
-                      ))}
-                    </div>
-
-                    {/* Custom Input */}
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="text"
-                        value={newDesigInput}
-                        onChange={(e) => setNewDesigInput(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            e.preventDefault();
-                            handleAddAdditionalDesignation(newDesigInput);
-                          }
-                        }}
-                        placeholder="কাস্টম পদবী লিখুন এবং এন্টার চাপুন..."
-                        className="flex-1 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2 text-slate-900 dark:text-white text-xs font-medium focus:outline-none focus:border-teal-500"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => handleAddAdditionalDesignation(newDesigInput)}
-                        className="px-3.5 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer"
-                      >
-                        + যোগ করুন
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Additional Departments */}
-                  <div className="space-y-2 pt-2 border-t border-teal-200/60 dark:border-teal-800/40">
-                    <label className="block text-slate-700 dark:text-slate-300 font-semibold text-[11px]">
-                      অতিরিক্ত বিভাগসমূহ (Additional Departments):
-                    </label>
-
-                    {editAdditionalDepartments.length > 0 && (
-                      <div className="flex flex-wrap gap-1.5 p-2 rounded-xl bg-white dark:bg-slate-900 border border-teal-200 dark:border-teal-800/80">
-                        {editAdditionalDepartments.map((dept, idx) => (
-                          <span
-                            key={dept}
-                            className="px-2.5 py-1 rounded-lg text-xs font-medium bg-blue-500/15 text-blue-800 dark:text-blue-200 border border-blue-500/30 flex items-center gap-1.5"
-                          >
-                            <span>{dept}</span>
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveAdditionalDepartment(idx)}
-                              className="text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
-                              title="বাদ দিন"
-                            >
-                              <X className="w-3.5 h-3.5" />
-                            </button>
-                          </span>
-                        ))}
-                      </div>
-                    )}
-
-                    {/* Quick Add Suggestions for Dept */}
-                    <div className="flex flex-wrap items-center gap-1 text-[11px]">
-                      <span className="text-slate-400 text-[10px] font-medium mr-1">দ্রুত যোগ করুন:</span>
-                      {[
-                        "Human Resources",
-                        "IT & Technology",
-                        "Field Relief & Operations",
-                        "Accounts & Finance",
-                        "Vocational Training & Skills",
-                      ].map((item) => (
-                        <button
-                          key={item}
-                          type="button"
-                          onClick={() => handleAddAdditionalDepartment(item)}
-                          className="px-2 py-0.5 rounded-md bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-blue-500 text-slate-700 dark:text-slate-300 text-[10px] transition-colors cursor-pointer font-medium"
-                        >
-                          + {item}
-                        </button>
-                      ))}
-                    </div>
-
-                    {/* Custom Dept Input */}
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="text"
-                        value={newDeptInput}
-                        onChange={(e) => setNewDeptInput(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            e.preventDefault();
-                            handleAddAdditionalDepartment(newDeptInput);
-                          }
-                        }}
-                        placeholder="কাস্টম বিভাগ লিখুন এবং এন্টার চাপুন..."
-                        className="flex-1 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2 text-slate-900 dark:text-white text-xs font-medium focus:outline-none focus:border-teal-500"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => handleAddAdditionalDepartment(newDeptInput)}
-                        className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer"
-                      >
-                        + যোগ করুন
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Fixed Salary Explanation Banner */}
-                  <div className="p-2.5 rounded-xl bg-teal-100/70 dark:bg-teal-900/30 border border-teal-300 dark:border-teal-700/60 text-[11px] text-teal-900 dark:text-teal-200 flex items-center gap-2">
-                    <span className="font-bold">💡 ফিক্সড একক বেতন নীতি:</span>
-                    <span>একাধিক পদবী বা অতিরিক্ত বিভাগ তদারকি করলেও মূল বেতন ফিক্সড একক প্রোফাইল হিসেবে সংরক্ষিত থাকে।</span>
-                  </div>
-                </div>
-              )}
 
               {/* Form Action Buttons */}
               <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-200 dark:border-slate-800">

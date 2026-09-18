@@ -340,19 +340,43 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
   const [employeeToDelete, setEmployeeToDelete] = useState<Employee | null>(null);
 
   // Role-based permission verification
-  const isCeoOrSuperAdmin = (user?: Employee) => {
-    if (!user) return true;
-    return (
+  const isSuperAdminUser = (user?: Employee) => {
+    if (!user) return false;
+    return Boolean(
       user.role === "SUPER_ADMIN" ||
-      user.role === "COMPANY_ADMIN" ||
-      user.isCeoOrOwner ||
-      user.designationTitle.toLowerCase().includes("ceo") ||
-      user.designationTitle.toLowerCase().includes("executive officer")
+      user.isSuperAdmin ||
+      user.role === "COMPANY_ADMIN"
     );
   };
 
+  const isCeoUser = (user?: Employee) => {
+    if (!user) return false;
+    return Boolean(
+      user.role === "CEO" ||
+      user.isCeoOrOwner ||
+      user.designationTitle?.toLowerCase().includes("ceo") ||
+      user.designationTitle?.toLowerCase().includes("chief executive officer") ||
+      user.designationTitle?.toLowerCase().includes("সিইও")
+    );
+  };
+
+  const isTargetSuperAdmin = (target?: Employee) => {
+    if (!target) return false;
+    return Boolean(
+      target.isSuperAdmin ||
+      target.role === "SUPER_ADMIN" ||
+      target.designationTitle?.toLowerCase().includes("super admin")
+    );
+  };
+
+  // Only Super Admin and CEO have access to confidential employee attributes (Salary, Biometrics status, ID card download, Face enrollment, Password reset)
+  const canAccessConfidentialEmployeeData = (user?: Employee) => {
+    if (!user) return false;
+    return isSuperAdminUser(user) || isCeoUser(user);
+  };
+
   const isBranchManagerOf = (user?: Employee, targetBranchId?: string) => {
-    if (!user) return true;
+    if (!user) return false;
     const isManagerRole =
       user.role === "BRANCH_MANAGER" ||
       user.designationTitle.toLowerCase().includes("branch manager") ||
@@ -361,20 +385,43 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
     return isManagerRole && user.branchId === targetBranchId;
   };
 
+  // CRITICAL: CEO can NEVER edit Super Admin!
   const canEditEmployeeProfile = (targetEmp: Employee) => {
-    if (!currentUser) return true;
-    if (isCeoOrSuperAdmin(currentUser)) return true;
-    if (currentUser.role === "HR_MANAGER") return true;
-    if (isBranchManagerOf(currentUser, targetEmp.branchId)) return true;
-    if (currentUser.id === targetEmp.id) return true; // Self edit
+    if (!currentUser) return false;
+    if (isTargetSuperAdmin(targetEmp)) {
+      return isSuperAdminUser(currentUser);
+    }
+    if (isSuperAdminUser(currentUser) || isCeoUser(currentUser)) {
+      return true;
+    }
+    if (currentUser.role === "HR_MANAGER" && !isTargetSuperAdmin(targetEmp) && !isCeoUser(targetEmp)) {
+      return true;
+    }
+    if (isBranchManagerOf(currentUser, targetEmp.branchId) && !isTargetSuperAdmin(targetEmp) && !isCeoUser(targetEmp)) {
+      return true;
+    }
     return false;
   };
 
+  // CRITICAL: Super Admin can NEVER be deleted by anyone! CEO cannot delete Super Admin!
   const canDeleteEmployeeProfile = (targetEmp: Employee) => {
-    if (!currentUser) return true;
-    if (isCeoOrSuperAdmin(currentUser)) return true;
-    if (isBranchManagerOf(currentUser, targetEmp.branchId)) return true;
+    if (!currentUser) return false;
+    if (isTargetSuperAdmin(targetEmp)) {
+      return false;
+    }
+    if (isSuperAdminUser(currentUser) || isCeoUser(currentUser)) {
+      return true;
+    }
     return false;
+  };
+
+  const canResetEmployeeCredentials = (targetEmp: Employee) => {
+    if (!currentUser) return false;
+    if (!canAccessConfidentialEmployeeData(currentUser)) return false;
+    if (isTargetSuperAdmin(targetEmp)) {
+      return isSuperAdminUser(currentUser);
+    }
+    return true;
   };
 
   const openEditModal = (emp: Employee) => {
@@ -517,8 +564,12 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
     setEditingEmployee(null);
   };
 
-  // Quick Account Reset Handlers (Super Admin power to reset user ID & password)
+    // Quick Account Reset Handlers (Super Admin & CEO power to reset credentials; CEO cannot reset Super Admin)
   const openQuickResetModal = (emp: Employee) => {
+    if (!canResetEmployeeCredentials(emp)) {
+      alert("নিরাপত্তা সতর্কতা: আপনি এই অ্যাকাউন্টের ক্রিডেনশিয়াল রিসেট করতে পারবেন না। সিইও সুপার অ্যাডমিনের পাসওয়ার্ড রিসেট করতে পারেন না।");
+      return;
+    }
     setQuickResetEmployee(emp);
     setQuickResetUsername(emp.username || emp.email.split("@")[0] || emp.employeeCode.toLowerCase());
     setQuickResetPassword(emp.password || "123456");
@@ -532,6 +583,11 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
   const handleQuickResetSave = (e: React.FormEvent) => {
     e.preventDefault();
     if (!quickResetEmployee) return;
+
+    if (isTargetSuperAdmin(quickResetEmployee) && !isSuperAdminUser(currentUser)) {
+      alert("নিরাপত্তা নীতি লঙ্ঘন: সিইও বা অন্যান্য অ্যাডমিন সুপার অ্যাডমিনের অ্যাকাউন্ট রিসেট করতে পারবেন না।");
+      return;
+    }
 
     const updated: Employee = {
       ...quickResetEmployee,
@@ -555,14 +611,29 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
   };
 
   const handleDeleteEmployee = (emp: Employee) => {
+    if (isTargetSuperAdmin(emp)) {
+      alert("নিরাপত্তা নীতি: সুপার অ্যাডমিন অ্যাকাউন্ট কোনোভাবেই মোছা যাবে না।");
+      return;
+    }
+    if (!canDeleteEmployeeProfile(emp)) {
+      alert("অনুমতি নেই: সিইও সুপার অ্যাডমিন মুছতে পারবেন না এবং সাধারণ কর্মী কর্মী মুছতে পারবেন না।");
+      return;
+    }
     setEmployeeToDelete(emp);
   };
 
   const confirmDeleteEmployee = () => {
-    if (employeeToDelete && onDeleteEmployee) {
-      onDeleteEmployee(employeeToDelete.id);
-      if (selectedEmployee?.id === employeeToDelete.id) {
-        setSelectedEmployee(null);
+    if (employeeToDelete) {
+      if (isTargetSuperAdmin(employeeToDelete)) {
+        alert("নিরাপত্তা নীতি: সুপার অ্যাডমিন অ্যাকাউন্ট মোছা সম্পূর্ণ নিষিদ্ধ।");
+        setEmployeeToDelete(null);
+        return;
+      }
+      if (onDeleteEmployee) {
+        onDeleteEmployee(employeeToDelete.id);
+        if (selectedEmployee?.id === employeeToDelete.id) {
+          setSelectedEmployee(null);
+        }
       }
     }
     setEmployeeToDelete(null);
@@ -967,32 +1038,34 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
             </span>
           </button>
 
-          <button
-            type="button"
-            onClick={() => setActiveDirectoryTab("recycle_bin")}
-            className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
-              activeDirectoryTab === "recycle_bin"
-                ? "bg-rose-600 text-white shadow-md shadow-rose-500/20"
-                : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700"
-            }`}
-          >
-            <Archive className="w-4 h-4" />
-            <span>রিসাইকেল বিন / আর্কাইভড কর্মী</span>
-            <span
-              className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold ${
+          {canAccessConfidentialEmployeeData(currentUser) && (
+            <button
+              type="button"
+              onClick={() => setActiveDirectoryTab("recycle_bin")}
+              className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
                 activeDirectoryTab === "recycle_bin"
-                  ? "bg-white/20 text-white"
-                  : deletedEmployees.length > 0
-                  ? "bg-rose-100 dark:bg-rose-900/40 text-rose-600 dark:text-rose-400"
-                  : "bg-slate-200 dark:bg-slate-700 text-slate-500"
+                  ? "bg-rose-600 text-white shadow-md shadow-rose-500/20"
+                  : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700"
               }`}
             >
-              {deletedEmployees.length}
-            </span>
-          </button>
+              <Archive className="w-4 h-4" />
+              <span>রিসাইকেল বিন / আর্কাইভড কর্মী</span>
+              <span
+                className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold ${
+                  activeDirectoryTab === "recycle_bin"
+                    ? "bg-white/20 text-white"
+                    : deletedEmployees.length > 0
+                    ? "bg-rose-100 dark:bg-rose-900/40 text-rose-600 dark:text-rose-400"
+                    : "bg-slate-200 dark:bg-slate-700 text-slate-500"
+                }`}
+              >
+                {deletedEmployees.length}
+              </span>
+            </button>
+          )}
         </div>
 
-        {activeDirectoryTab === "active" && (
+        {activeDirectoryTab === "active" && canAccessConfidentialEmployeeData(currentUser) && (
           <div className="flex items-center gap-2.5">
             <button
               onClick={handleExportCSV}
@@ -1029,21 +1102,25 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
           </div>
 
           <div className="flex items-center gap-3">
-            <button
-              onClick={handleExportCSV}
-              className="px-3.5 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 text-xs font-bold rounded-xl shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer"
-            >
-              <Download className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
-              <span>Export CSV</span>
-            </button>
+            {canAccessConfidentialEmployeeData(currentUser) && (
+              <>
+                <button
+                  onClick={handleExportCSV}
+                  className="px-3.5 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 text-xs font-bold rounded-xl shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <Download className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
+                  <span>Export CSV</span>
+                </button>
 
-            <button
-              onClick={handleOpenAddModal}
-              className="px-4 py-2 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-teal-500/20 flex items-center gap-2 transition-all transform active:scale-95 cursor-pointer"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Add New Employee</span>
-            </button>
+                <button
+                  onClick={handleOpenAddModal}
+                  className="px-4 py-2 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-teal-500/20 flex items-center gap-2 transition-all transform active:scale-95 cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Add New Employee</span>
+                </button>
+              </>
+            )}
           </div>
         </div>
 
@@ -1144,30 +1221,20 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
                     <p className="text-[10px] text-teal-700 dark:text-teal-400 font-semibold mt-0.5">
                       {emp.designationTitle}
                     </p>
-                    {emp.additionalDesignations && emp.additionalDesignations.length > 0 && (
-                      <div className="flex flex-wrap gap-1 mt-1">
-                        {emp.additionalDesignations.map((d) => (
-                          <span
-                            key={d}
-                            className="px-1.5 py-0.2 rounded text-[8px] font-bold bg-teal-500/15 text-teal-800 dark:text-teal-300 border border-teal-500/30"
-                          >
-                            + {d}
-                          </span>
-                        ))}
-                      </div>
-                    )}
                   </div>
                 </div>
 
-                <span
-                  className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${
-                    emp.status === "ACTIVE"
-                      ? "bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 border border-emerald-500/30"
-                      : "bg-amber-500/15 text-amber-800 dark:text-amber-300 border border-amber-500/30"
-                  }`}
-                >
-                  {emp.status}
-                </span>
+                {canAccessConfidentialEmployeeData(currentUser) && (
+                  <span
+                    className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${
+                      emp.status === "ACTIVE"
+                        ? "bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 border border-emerald-500/30"
+                        : "bg-amber-500/15 text-amber-800 dark:text-amber-300 border border-amber-500/30"
+                    }`}
+                  >
+                    {emp.status}
+                  </span>
+                )}
               </div>
 
               <div className="text-[11px] text-slate-500 dark:text-slate-400 space-y-1 pt-2 border-t border-slate-200/80 dark:border-slate-700/50">
@@ -1177,102 +1244,122 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
                     {(emp.branchName || "Main Office").split("(")[0]} • {emp.departmentName || "General"}
                   </span>
                 </div>
-                <div className="flex justify-between">
-                  <span>Biometrics:</span>
-                  {emp.faceTemplateRegistered ? (
-                    <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
-                      <ScanFace className="w-3 h-3" /> Enrolled
-                    </span>
-                  ) : (
-                    <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-rose-500/15 text-rose-800 dark:text-rose-300 border border-rose-500/30 flex items-center gap-1">
-                      <ScanFace className="w-3 h-3" /> No Photo
-                    </span>
-                  )}
-                </div>
-                <div className="flex justify-between items-center">
-                  <span>{emp.isFixedSalary || emp.isFixedContractSalary ? (isBangla ? "ফিক্সড বেতন:" : "Fixed Salary:") : "Gross Salary:"}</span>
-                  <div className="text-right">
-                    <div className="flex items-center justify-end gap-1">
-                      <span className="text-slate-900 dark:text-white font-mono font-bold">
-                        ৳{(emp.salary?.grossSalary ?? 0).toLocaleString()}
-                      </span>
-                      {(emp.isFixedSalary || emp.isFixedContractSalary) && (
-                        <span className="text-[9px] font-bold px-1 py-0.2 rounded bg-blue-500/15 text-blue-700 dark:text-blue-300 border border-blue-500/30">
-                          ফিক্সড
+
+                {canAccessConfidentialEmployeeData(currentUser) && (
+                  <>
+                    <div className="flex justify-between">
+                      <span>Biometrics:</span>
+                      {emp.faceTemplateRegistered ? (
+                        <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
+                          <ScanFace className="w-3 h-3" /> Enrolled
+                        </span>
+                      ) : (
+                        <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-rose-500/15 text-rose-800 dark:text-rose-300 border border-rose-500/30 flex items-center gap-1">
+                          <ScanFace className="w-3 h-3" /> No Photo
                         </span>
                       )}
                     </div>
-                    {emp.hideSalaryFromSelf && (
-                      <span className="block text-[8px] font-bold text-amber-600 dark:text-amber-400">
-                        (কর্মী থেকে গোপন)
-                      </span>
-                    )}
-                  </div>
-                </div>
+                    <div className="flex justify-between items-center">
+                      <span>{emp.isFixedSalary || emp.isFixedContractSalary ? (isBangla ? "ফিক্সড বেতন:" : "Fixed Salary:") : "Gross Salary:"}</span>
+                      <div className="text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <span className="text-slate-900 dark:text-white font-mono font-bold">
+                            ৳{(emp.salary?.grossSalary ?? 0).toLocaleString()}
+                          </span>
+                          {(emp.isFixedSalary || emp.isFixedContractSalary) && (
+                            <span className="text-[9px] font-bold px-1 py-0.2 rounded bg-blue-500/15 text-blue-700 dark:text-blue-300 border border-blue-500/30">
+                              ফিক্সড
+                            </span>
+                          )}
+                        </div>
+                        {emp.hideSalaryFromSelf && (
+                          <span className="block text-[8px] font-bold text-amber-600 dark:text-amber-400">
+                            (কর্মী থেকে গোপন)
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
 
               <div className="flex items-center gap-1.5 pt-2 border-t border-slate-200/80 dark:border-slate-700/50">
-                {onOpenDigitalIdCard && (
-                  <button
-                    type="button"
-                    onClick={() => onOpenDigitalIdCard(emp)}
-                    className="p-2 rounded-lg bg-teal-500/15 hover:bg-teal-500/25 text-teal-800 dark:text-teal-300 border border-teal-500/30 transition-colors cursor-pointer"
-                    title="Digital ID Card (ডিজিটাল আইডি কার্ড)"
-                  >
-                    <CreditCard className="w-4 h-4" />
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={() => setEnrollingEmployee(emp)}
-                  className="flex-1 py-2 px-2.5 rounded-lg bg-teal-500/15 hover:bg-teal-500/25 text-teal-800 dark:text-teal-300 border border-teal-500/30 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
-                >
-                  <ScanFace className="w-3.5 h-3.5" />
-                  <span>{emp.faceTemplateRegistered ? "Photo" : "Face"}</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => openQuickResetModal(emp)}
-                  className="p-2 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 text-amber-700 dark:text-amber-300 border border-amber-500/30 transition-colors cursor-pointer"
-                  title="লগইন আইডি ও পাসওয়ার্ড রিসেট করুন"
-                >
-                  <KeyRound className="w-4 h-4" />
-                </button>
-                {canEditEmployeeProfile(emp) ? (
-                  <button
-                    type="button"
-                    onClick={() => openEditModal(emp)}
-                    className="p-2 rounded-lg bg-slate-100 hover:bg-teal-500/20 dark:bg-slate-800 dark:hover:bg-teal-500/30 text-slate-700 dark:text-slate-300 hover:text-teal-700 dark:hover:text-teal-300 transition-colors cursor-pointer"
-                    title="Edit Employee (তথ্য এডিট করুন)"
-                  >
-                    <Edit2 className="w-4 h-4" />
-                  </button>
+                {canAccessConfidentialEmployeeData(currentUser) ? (
+                  <>
+                    {onOpenDigitalIdCard && (
+                      <button
+                        type="button"
+                        onClick={() => onOpenDigitalIdCard(emp)}
+                        className="p-2 rounded-lg bg-teal-500/15 hover:bg-teal-500/25 text-teal-800 dark:text-teal-300 border border-teal-500/30 transition-colors cursor-pointer"
+                        title="Digital ID Card (ডিজিটাল আইডি কার্ড)"
+                      >
+                        <CreditCard className="w-4 h-4" />
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setEnrollingEmployee(emp)}
+                      className="flex-1 py-2 px-2.5 rounded-lg bg-teal-500/15 hover:bg-teal-500/25 text-teal-800 dark:text-teal-300 border border-teal-500/30 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                    >
+                      <ScanFace className="w-3.5 h-3.5" />
+                      <span>{emp.faceTemplateRegistered ? "Photo" : "Face"}</span>
+                    </button>
+                    {canResetEmployeeCredentials(emp) && (
+                      <button
+                        type="button"
+                        onClick={() => openQuickResetModal(emp)}
+                        className="p-2 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 text-amber-700 dark:text-amber-300 border border-amber-500/30 transition-colors cursor-pointer"
+                        title="লগইন আইডি ও পাসওয়ার্ড রিসেট করুন"
+                      >
+                        <KeyRound className="w-4 h-4" />
+                      </button>
+                    )}
+                    {canEditEmployeeProfile(emp) ? (
+                      <button
+                        type="button"
+                        onClick={() => openEditModal(emp)}
+                        className="p-2 rounded-lg bg-slate-100 hover:bg-teal-500/20 dark:bg-slate-800 dark:hover:bg-teal-500/30 text-slate-700 dark:text-slate-300 hover:text-teal-700 dark:hover:text-teal-300 transition-colors cursor-pointer"
+                        title="Edit Employee (তথ্য এডিট করুন)"
+                      >
+                        <Edit2 className="w-4 h-4" />
+                      </button>
+                    ) : (
+                      <span
+                        className="p-2 rounded-lg bg-slate-100 dark:bg-slate-800/40 text-slate-300 dark:text-slate-600 cursor-not-allowed opacity-50"
+                        title="সম্পাদনা করার অনুমতি নেই"
+                      >
+                        <Edit2 className="w-4 h-4" />
+                      </span>
+                    )}
+                    {onDeleteEmployee && canDeleteEmployeeProfile(emp) && (
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteEmployee(emp)}
+                        className="p-2 rounded-lg bg-slate-100 hover:bg-rose-500/20 dark:bg-slate-800 dark:hover:bg-rose-500/30 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 transition-colors cursor-pointer"
+                        title="Delete Employee (মুছে ফেলুন)"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setSelectedEmployee(emp)}
+                      className="p-2 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer"
+                      title="View Profile"
+                    >
+                      <Eye className="w-4 h-4" />
+                    </button>
+                  </>
                 ) : (
-                  <span
-                    className="p-2 rounded-lg bg-slate-100 dark:bg-slate-800/40 text-slate-300 dark:text-slate-600 cursor-not-allowed opacity-50"
-                    title="শুধুমাত্র সিইও বা ব্রাঞ্চ ম্যানেজার প্রোফাইল সম্পাদনা করতে পারেন"
-                  >
-                    <Edit2 className="w-4 h-4" />
-                  </span>
-                )}
-                {onDeleteEmployee && canDeleteEmployeeProfile(emp) && (
                   <button
                     type="button"
-                    onClick={() => handleDeleteEmployee(emp)}
-                    className="p-2 rounded-lg bg-slate-100 hover:bg-rose-500/20 dark:bg-slate-800 dark:hover:bg-rose-500/30 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 transition-colors cursor-pointer"
-                    title="Delete Employee (মুছে ফেলুন)"
+                    onClick={() => setSelectedEmployee(emp)}
+                    className="w-full py-2 px-3 rounded-xl bg-teal-600 hover:bg-teal-500 text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
                   >
-                    <Trash2 className="w-4 h-4" />
+                    <Eye className="w-4 h-4" />
+                    <span>প্রোফাইল দেখুন (View Profile)</span>
                   </button>
                 )}
-                <button
-                  type="button"
-                  onClick={() => setSelectedEmployee(emp)}
-                  className="p-2 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer"
-                  title="View Profile"
-                >
-                  <Eye className="w-4 h-4" />
-                </button>
               </div>
             </div>
           ))}
@@ -1286,9 +1373,13 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
                 <th className="p-3">Employee</th>
                 <th className="p-3">Role & Designation</th>
                 <th className="p-3">Branch & Dept</th>
-                <th className="p-3">Biometrics & Device</th>
-                <th className="p-3">Gross Salary</th>
-                <th className="p-3">Status</th>
+                {canAccessConfidentialEmployeeData(currentUser) && (
+                  <>
+                    <th className="p-3">Biometrics & Device</th>
+                    <th className="p-3">Gross Salary</th>
+                    <th className="p-3">Status</th>
+                  </>
+                )}
                 <th className="p-3 text-right">Actions</th>
               </tr>
             </thead>
@@ -1347,137 +1438,144 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
                   <td className="p-3">
                     <div className="font-medium text-slate-900 dark:text-slate-200">{(emp.branchName || "Main Office").split("(")[0]}</div>
                     <div className="text-[10px] text-slate-500 dark:text-slate-400">{emp.departmentName}</div>
-                    {emp.additionalDepartments && emp.additionalDepartments.length > 0 && (
-                      <div className="flex flex-wrap gap-1 mt-0.5">
-                        {emp.additionalDepartments.map((dept) => (
+                  </td>
+
+                  {canAccessConfidentialEmployeeData(currentUser) && (
+                    <>
+                      <td className="p-3">
+                        <div className="flex items-center gap-1.5">
+                          {emp.faceTemplateRegistered ? (
+                            <span
+                              className="px-2 py-0.5 rounded text-[10px] font-bold flex items-center gap-1 bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 border border-emerald-500/30"
+                              title="Biometric Face Enrolled"
+                            >
+                              <ScanFace className="w-3 h-3" /> Enrolled
+                            </span>
+                          ) : (
+                            <span
+                              className="px-2 py-0.5 rounded text-[10px] font-bold flex items-center gap-1 bg-rose-500/15 text-rose-800 dark:text-rose-300 border border-rose-500/30"
+                              title="No Face Photo Enrolled"
+                            >
+                              <ScanFace className="w-3 h-3" /> No Photo
+                            </span>
+                          )}
+                          {emp.boundDeviceId && (
+                            <span
+                              className="p-1 rounded bg-blue-500/15 text-blue-800 dark:text-blue-300 text-[10px] font-bold"
+                              title={`Bound to ${emp.boundDeviceId}`}
+                            >
+                              <Smartphone className="w-3 h-3" />
+                            </span>
+                          )}
+                        </div>
+                      </td>
+
+                      <td className="p-3 font-mono">
+                        <div className="flex items-center gap-1.5 font-semibold text-slate-900 dark:text-white">
+                          <span>৳{(emp.salary?.grossSalary ?? 0).toLocaleString()}</span>
+                          {(emp.isFixedSalary || emp.isFixedContractSalary) && (
+                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-700 dark:text-blue-300 border border-blue-500/30">
+                              ফিক্সড
+                            </span>
+                          )}
+                        </div>
+                        {emp.hideSalaryFromSelf && (
                           <span
-                            key={dept}
-                            className="px-1.5 py-0.2 rounded text-[9px] font-medium bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800"
+                            className="inline-flex items-center gap-1 text-[9px] font-bold text-amber-700 dark:text-amber-300 bg-amber-500/15 px-1.5 py-0.5 rounded border border-amber-500/30 mt-0.5"
+                            title="এই কর্মী তার নিজের সেলফ সার্ভিস অ্যাকাউন্টে বেতন দেখতে পারবেন না"
                           >
-                            {dept}
+                            <Shield className="w-2.5 h-2.5" /> কর্মী থেকে গোপন
                           </span>
-                        ))}
-                      </div>
-                    )}
-                  </td>
+                        )}
+                      </td>
 
-                  <td className="p-3">
-                    <div className="flex items-center gap-1.5">
-                      {emp.faceTemplateRegistered ? (
+                      <td className="p-3">
                         <span
-                          className="px-2 py-0.5 rounded text-[10px] font-bold flex items-center gap-1 bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 border border-emerald-500/30"
-                          title="Biometric Face Enrolled"
+                          className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                            emp.status === "ACTIVE"
+                              ? "bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 border border-emerald-500/30"
+                              : "bg-amber-500/15 text-amber-800 dark:text-amber-300 border border-amber-500/30"
+                          }`}
                         >
-                          <ScanFace className="w-3 h-3" /> Enrolled
+                          {emp.status}
                         </span>
-                      ) : (
-                        <span
-                          className="px-2 py-0.5 rounded text-[10px] font-bold flex items-center gap-1 bg-rose-500/15 text-rose-800 dark:text-rose-300 border border-rose-500/30"
-                          title="No Face Photo Enrolled"
-                        >
-                          <ScanFace className="w-3 h-3" /> No Photo
-                        </span>
-                      )}
-                      {emp.boundDeviceId && (
-                        <span
-                          className="p-1 rounded bg-blue-500/15 text-blue-800 dark:text-blue-300 text-[10px] font-bold"
-                          title={`Bound to ${emp.boundDeviceId}`}
-                        >
-                          <Smartphone className="w-3 h-3" />
-                        </span>
-                      )}
-                    </div>
-                  </td>
-
-                  <td className="p-3 font-mono">
-                    <div className="flex items-center gap-1.5 font-semibold text-slate-900 dark:text-white">
-                      <span>৳{(emp.salary?.grossSalary ?? 0).toLocaleString()}</span>
-                      {(emp.isFixedSalary || emp.isFixedContractSalary) && (
-                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-700 dark:text-blue-300 border border-blue-500/30">
-                          ফিক্সড
-                        </span>
-                      )}
-                    </div>
-                    {emp.hideSalaryFromSelf && (
-                      <span
-                        className="inline-flex items-center gap-1 text-[9px] font-bold text-amber-700 dark:text-amber-300 bg-amber-500/15 px-1.5 py-0.5 rounded border border-amber-500/30 mt-0.5"
-                        title="এই কর্মী তার নিজের সেলফ সার্ভিস অ্যাকাউন্টে বেতন দেখতে পারবেন না"
-                      >
-                        <Shield className="w-2.5 h-2.5" /> কর্মী থেকে গোপন
-                      </span>
-                    )}
-                  </td>
-
-                  <td className="p-3">
-                    <span
-                      className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                        emp.status === "ACTIVE"
-                          ? "bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 border border-emerald-500/30"
-                          : "bg-amber-500/15 text-amber-800 dark:text-amber-300 border border-amber-500/30"
-                      }`}
-                    >
-                      {emp.status}
-                    </span>
-                  </td>
+                      </td>
+                    </>
+                  )}
 
                   <td className="p-3 text-right">
                     <div className="flex items-center justify-end gap-1.5">
-                      {onOpenDigitalIdCard && (
-                        <button
-                          onClick={() => onOpenDigitalIdCard(emp)}
-                          className="p-1.5 rounded-lg bg-teal-500/10 hover:bg-teal-500/25 text-teal-700 dark:text-teal-400 hover:text-teal-800 dark:hover:text-teal-300 border border-teal-500/30 transition-colors cursor-pointer"
-                          title="View & Download Digital ID Card (ডিজিটাল আইডি কার্ড)"
-                        >
-                          <CreditCard className="w-4 h-4" />
-                        </button>
-                      )}
-                      <button
-                        onClick={() => setEnrollingEmployee(emp)}
-                        className="p-1.5 rounded-lg bg-teal-500/10 hover:bg-teal-500/20 text-teal-700 dark:text-teal-400 hover:text-teal-800 dark:hover:text-teal-300 border border-teal-500/30 transition-colors cursor-pointer"
-                        title="Enroll / Update Biometric Face Photo"
-                      >
-                        <ScanFace className="w-4 h-4" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => openQuickResetModal(emp)}
-                        className="p-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/25 text-amber-700 dark:text-amber-400 border border-amber-500/30 transition-colors cursor-pointer"
-                        title="আইডি ও পাসওয়ার্ড রিসেট করুন (Super Admin Reset Credentials)"
-                      >
-                        <KeyRound className="w-4 h-4" />
-                      </button>
-                      {canEditEmployeeProfile(emp) ? (
-                        <button
-                          onClick={() => openEditModal(emp)}
-                          className="p-1.5 rounded-lg bg-slate-100 hover:bg-teal-500/20 dark:bg-slate-800 dark:hover:bg-teal-500/30 text-slate-700 dark:text-slate-300 hover:text-teal-700 dark:hover:text-teal-300 transition-colors cursor-pointer"
-                          title="Edit Employee (তথ্য এডিট করুন)"
-                        >
-                          <Edit2 className="w-4 h-4" />
-                        </button>
+                      {canAccessConfidentialEmployeeData(currentUser) ? (
+                        <>
+                          {onOpenDigitalIdCard && (
+                            <button
+                              onClick={() => onOpenDigitalIdCard(emp)}
+                              className="p-1.5 rounded-lg bg-teal-500/10 hover:bg-teal-500/25 text-teal-700 dark:text-teal-400 hover:text-teal-800 dark:hover:text-teal-300 border border-teal-500/30 transition-colors cursor-pointer"
+                              title="View & Download Digital ID Card (ডিজিটাল আইডি কার্ড)"
+                            >
+                              <CreditCard className="w-4 h-4" />
+                            </button>
+                          )}
+                          <button
+                            onClick={() => setEnrollingEmployee(emp)}
+                            className="p-1.5 rounded-lg bg-teal-500/10 hover:bg-teal-500/20 text-teal-700 dark:text-teal-400 hover:text-teal-800 dark:hover:text-teal-300 border border-teal-500/30 transition-colors cursor-pointer"
+                            title="Enroll / Update Biometric Face Photo"
+                          >
+                            <ScanFace className="w-4 h-4" />
+                          </button>
+                          {canResetEmployeeCredentials(emp) && (
+                            <button
+                              type="button"
+                              onClick={() => openQuickResetModal(emp)}
+                              className="p-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/25 text-amber-700 dark:text-amber-400 border border-amber-500/30 transition-colors cursor-pointer"
+                              title="আইডি ও পাসওয়ার্ড রিসেট করুন (Reset Credentials)"
+                            >
+                              <KeyRound className="w-4 h-4" />
+                            </button>
+                          )}
+                          {canEditEmployeeProfile(emp) ? (
+                            <button
+                              onClick={() => openEditModal(emp)}
+                              className="p-1.5 rounded-lg bg-slate-100 hover:bg-teal-500/20 dark:bg-slate-800 dark:hover:bg-teal-500/30 text-slate-700 dark:text-slate-300 hover:text-teal-700 dark:hover:text-teal-300 transition-colors cursor-pointer"
+                              title="Edit Employee (তথ্য এডিট করুন)"
+                            >
+                              <Edit2 className="w-4 h-4" />
+                            </button>
+                          ) : (
+                            <span
+                              className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800/40 text-slate-300 dark:text-slate-600 cursor-not-allowed opacity-50"
+                              title="সম্পাদনা করার অনুমতি নেই"
+                            >
+                              <Edit2 className="w-4 h-4" />
+                            </span>
+                          )}
+                          {onDeleteEmployee && canDeleteEmployeeProfile(emp) && (
+                            <button
+                              onClick={() => handleDeleteEmployee(emp)}
+                              className="p-1.5 rounded-lg bg-slate-100 hover:bg-rose-500/20 dark:bg-slate-800 dark:hover:bg-rose-500/30 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 transition-colors cursor-pointer"
+                              title="Delete Employee (মুছে ফেলুন)"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
+                          <button
+                            onClick={() => setSelectedEmployee(emp)}
+                            className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer"
+                            title="View Full Profile"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </button>
+                        </>
                       ) : (
-                        <span
-                          className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800/40 text-slate-300 dark:text-slate-600 cursor-not-allowed opacity-50"
-                          title="শুধুমাত্র সিইও বা ব্রাঞ্চ ম্যানেজার প্রোফাইল সম্পাদনা করতে পারেন"
-                        >
-                          <Edit2 className="w-4 h-4" />
-                        </span>
-                      )}
-                      {onDeleteEmployee && canDeleteEmployeeProfile(emp) && (
                         <button
-                          onClick={() => handleDeleteEmployee(emp)}
-                          className="p-1.5 rounded-lg bg-slate-100 hover:bg-rose-500/20 dark:bg-slate-800 dark:hover:bg-rose-500/30 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 transition-colors cursor-pointer"
-                          title="Delete Employee (মুছে ফেলুন)"
+                          onClick={() => setSelectedEmployee(emp)}
+                          className="px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-teal-500/20 dark:bg-slate-800 dark:hover:bg-teal-500/30 text-slate-700 dark:text-slate-300 hover:text-teal-700 dark:hover:text-teal-300 font-medium text-xs flex items-center gap-1 transition-colors cursor-pointer"
+                          title="View Profile"
                         >
-                          <Trash2 className="w-4 h-4" />
+                          <Eye className="w-3.5 h-3.5" />
+                          <span>দেখুন</span>
                         </button>
                       )}
-                      <button
-                        onClick={() => setSelectedEmployee(emp)}
-                        className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer"
-                        title="View Full Profile"
-                      >
-                        <Eye className="w-4 h-4" />
-                      </button>
                     </div>
                   </td>
                 </tr>
@@ -1680,12 +1778,14 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
                     : (isBangla ? "তথ্য দেওয়া হয়নি" : "Not provided")}
                 </span>
               </div>
-              <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800">
-                <span className="text-slate-500 dark:text-slate-400 block text-[10px]">Gross Salary</span>
-                <span className="font-bold text-emerald-700 dark:text-emerald-400">
-                  ৳{(selectedEmployee.salary?.grossSalary ?? 0).toLocaleString()}
-                </span>
-              </div>
+              {canAccessConfidentialEmployeeData(currentUser) && (
+                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800">
+                  <span className="text-slate-500 dark:text-slate-400 block text-[10px]">Gross Salary</span>
+                  <span className="font-bold text-emerald-700 dark:text-emerald-400">
+                    ৳{(selectedEmployee.salary?.grossSalary ?? 0).toLocaleString()}
+                  </span>
+                </div>
+              )}
               <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800">
                 <span className="text-slate-500 dark:text-slate-400 block text-[10px]">
                   {isBangla ? "জরুরী যোগাযোগ" : "Emergency Contact"}
@@ -1708,110 +1808,77 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
               </div>
             </div>
 
-            {/* Multi-Roles & Additional Portfolios */}
-            {((selectedEmployee.additionalDesignations && selectedEmployee.additionalDesignations.length > 0) ||
-              (selectedEmployee.additionalDepartments && selectedEmployee.additionalDepartments.length > 0)) && (
-              <div className="p-3.5 rounded-xl bg-teal-50/70 dark:bg-teal-950/30 border border-teal-200 dark:border-teal-800/60 space-y-2 text-xs">
-                <h4 className="font-bold text-teal-900 dark:text-teal-200 flex items-center gap-1.5">
-                  <Layers className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
-                  <span>অতিরিক্ত দায়িত্ব ও পোর্টফোলিও (Multi-Portfolios)</span>
-                </h4>
-                {selectedEmployee.additionalDesignations && selectedEmployee.additionalDesignations.length > 0 && (
-                  <div>
-                    <span className="text-[11px] text-slate-500 dark:text-slate-400 block mb-1">অতিরিক্ত পদবীসমূহ:</span>
-                    <div className="flex flex-wrap gap-1.5">
-                      {selectedEmployee.additionalDesignations.map((d) => (
-                        <span
-                          key={d}
-                          className="px-2 py-0.5 rounded-md text-[11px] font-bold bg-teal-500/15 text-teal-800 dark:text-teal-200 border border-teal-500/30"
-                        >
-                          {d}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                {selectedEmployee.additionalDepartments && selectedEmployee.additionalDepartments.length > 0 && (
-                  <div>
-                    <span className="text-[11px] text-slate-500 dark:text-slate-400 block mb-1">অতিরিক্ত বিভাগসমূহ:</span>
-                    <div className="flex flex-wrap gap-1.5">
-                      {selectedEmployee.additionalDepartments.map((dept) => (
-                        <span
-                          key={dept}
-                          className="px-2 py-0.5 rounded-md text-[11px] font-medium bg-blue-500/15 text-blue-800 dark:text-blue-200 border border-blue-500/30"
-                        >
-                          {dept}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
+            {canAccessConfidentialEmployeeData(currentUser) && (
+              <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/60 space-y-2 text-xs">
+                <h4 className="font-bold text-slate-900 dark:text-slate-200">Biometric & Device Binding Status</h4>
+                <div className="flex items-center justify-between text-slate-700 dark:text-slate-300">
+                  <span>Face Vector Recognition:</span>
+                  <span className="text-emerald-700 dark:text-emerald-400 font-bold">
+                    {selectedEmployee.faceTemplateRegistered ? "Enrolled (98%+ Match Precision)" : "Not Enrolled"}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-slate-700 dark:text-slate-300">
+                  <span>Hardware Signature:</span>
+                  <span className="font-mono text-teal-700 dark:text-teal-300">
+                    {selectedEmployee.boundDeviceId || "DEV-NOT-BOUND"}
+                  </span>
+                </div>
               </div>
             )}
 
-            <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/60 space-y-2 text-xs">
-              <h4 className="font-bold text-slate-900 dark:text-slate-200">Biometric & Device Binding Status</h4>
-              <div className="flex items-center justify-between text-slate-700 dark:text-slate-300">
-                <span>Face Vector Recognition:</span>
-                <span className="text-emerald-700 dark:text-emerald-400 font-bold">Enrolled (98%+ Match Precision)</span>
-              </div>
-              <div className="flex items-center justify-between text-slate-700 dark:text-slate-300">
-                <span>Hardware Signature:</span>
-                <span className="font-mono text-teal-700 dark:text-teal-300">
-                  {selectedEmployee.boundDeviceId || "DEV-MAC-PRO-M3-99"}
-                </span>
-              </div>
-            </div>
-
             <div className="flex flex-wrap justify-between items-center gap-2 pt-2">
               <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEnrollingEmployee(selectedEmployee);
-                    setSelectedEmployee(null);
-                  }}
-                  className="px-3.5 py-2 bg-teal-500/10 hover:bg-teal-500/20 border border-teal-500/30 text-teal-800 dark:text-teal-300 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
-                >
-                  <ScanFace className="w-4 h-4" />
-                  <span>Re-Enroll Face</span>
-                </button>
+                {canAccessConfidentialEmployeeData(currentUser) && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEnrollingEmployee(selectedEmployee);
+                        setSelectedEmployee(null);
+                      }}
+                      className="px-3.5 py-2 bg-teal-500/10 hover:bg-teal-500/20 border border-teal-500/30 text-teal-800 dark:text-teal-300 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+                    >
+                      <ScanFace className="w-4 h-4" />
+                      <span>Re-Enroll Face</span>
+                    </button>
 
-                {onOpenDigitalIdCard && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onOpenDigitalIdCard(selectedEmployee);
-                    }}
-                    className="px-3.5 py-2 bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-800 dark:text-emerald-300 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
-                  >
-                    <CreditCard className="w-4 h-4" />
-                    <span>ডিজিটাল আইডি কার্ড (Digital ID)</span>
-                  </button>
-                )}
+                    {onOpenDigitalIdCard && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onOpenDigitalIdCard(selectedEmployee);
+                        }}
+                        className="px-3.5 py-2 bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-800 dark:text-emerald-300 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+                      >
+                        <CreditCard className="w-4 h-4" />
+                        <span>ডিজিটাল আইডি কার্ড (Digital ID)</span>
+                      </button>
+                    )}
 
-                {canEditEmployeeProfile(selectedEmployee) && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      openEditModal(selectedEmployee);
-                    }}
-                    className="px-3.5 py-2 bg-slate-100 hover:bg-teal-500/20 dark:bg-slate-800 dark:hover:bg-teal-500/30 text-slate-700 dark:text-slate-200 hover:text-teal-700 dark:hover:text-teal-300 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer border border-slate-200 dark:border-slate-700"
-                  >
-                    <Edit2 className="w-4 h-4" />
-                    <span>তথ্য এডিট করুন (Edit)</span>
-                  </button>
-                )}
+                    {canEditEmployeeProfile(selectedEmployee) && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          openEditModal(selectedEmployee);
+                        }}
+                        className="px-3.5 py-2 bg-slate-100 hover:bg-teal-500/20 dark:bg-slate-800 dark:hover:bg-teal-500/30 text-slate-700 dark:text-slate-200 hover:text-teal-700 dark:hover:text-teal-300 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer border border-slate-200 dark:border-slate-700"
+                      >
+                        <Edit2 className="w-4 h-4" />
+                        <span>তথ্য এডিট করুন (Edit)</span>
+                      </button>
+                    )}
 
-                {onDeleteEmployee && canDeleteEmployeeProfile(selectedEmployee) && (
-                  <button
-                    type="button"
-                    onClick={() => handleDeleteEmployee(selectedEmployee)}
-                    className="px-3.5 py-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer border border-rose-500/20"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                    <span>মুছে ফেলুন (Delete)</span>
-                  </button>
+                    {onDeleteEmployee && canDeleteEmployeeProfile(selectedEmployee) && (
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteEmployee(selectedEmployee)}
+                        className="px-3.5 py-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer border border-rose-500/20"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                        <span>মুছে ফেলুন (Delete)</span>
+                      </button>
+                    )}
+                  </>
                 )}
               </div>
 
@@ -1819,7 +1886,7 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
                 onClick={() => setSelectedEmployee(null)}
                 className="px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-white rounded-xl text-xs font-bold cursor-pointer transition-colors"
               >
-                Close Profile
+                বন্ধ করুন (Close)
               </button>
             </div>
           </div>

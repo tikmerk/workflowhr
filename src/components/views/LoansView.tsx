@@ -30,6 +30,7 @@ interface LoansViewProps {
   loans: EmployeeLoan[];
   employees: Employee[];
   branches: Branch[];
+  currentUser?: Employee;
   onApproveLoan: (loanId: string) => void;
   onRejectLoan: (loanId: string) => void;
   onAddLoan: (loan: EmployeeLoan) => void;
@@ -42,6 +43,7 @@ export const LoansView: React.FC<LoansViewProps> = ({
   loans,
   employees,
   branches,
+  currentUser,
   onApproveLoan,
   onRejectLoan,
   onAddLoan,
@@ -265,8 +267,68 @@ export const LoansView: React.FC<LoansViewProps> = ({
     }
   };
 
+  // RBAC Helpers & Role Scoping
+  const isSuperAdminOrCeo = (user?: Employee) => {
+    if (!user) return true;
+    return Boolean(
+      user.role === "SUPER_ADMIN" ||
+      user.isSuperAdmin ||
+      user.role === "COMPANY_ADMIN" ||
+      user.role === "CEO" ||
+      user.isCeoOrOwner ||
+      user.designationTitle?.toLowerCase().includes("ceo") ||
+      user.designationTitle?.toLowerCase().includes("chief executive officer") ||
+      user.designationTitle?.toLowerCase().includes("সিইও")
+    );
+  };
+
+  const isBranchManager = (user?: Employee) => {
+    if (!user) return false;
+    return Boolean(
+      user.role === "BRANCH_MANAGER" ||
+      user.designationTitle?.toLowerCase().includes("branch manager") ||
+      user.designationTitle?.toLowerCase().includes("শাখা প্রধান")
+    );
+  };
+
+  const isGeneralEmployee = (user?: Employee) => {
+    if (!user) return false;
+    return !isSuperAdminOrCeo(user) && !isBranchManager(user);
+  };
+
+  const canManageLoan = (loan: EmployeeLoan) => {
+    if (!currentUser) return true;
+    if (isSuperAdminOrCeo(currentUser)) return true;
+    if (isBranchManager(currentUser)) {
+      const loanBranchId = loan.branchId || employees.find((e) => e.id === loan.employeeId)?.branchId;
+      return loanBranchId === currentUser.branchId;
+    }
+    return false;
+  };
+
+  // Scope:
+  // - CEO & Super Admin: see all loans
+  // - Branch Manager: see their branch loans
+  // - General Employee: see ONLY their own loans
+  const roleScopedLoans = loans.filter((loan) => {
+    if (!currentUser) return true;
+    if (isSuperAdminOrCeo(currentUser)) return true;
+    if (isBranchManager(currentUser)) {
+      const loanBranchId = loan.branchId || employees.find((e) => e.id === loan.employeeId)?.branchId;
+      return loanBranchId === currentUser.branchId;
+    }
+    return loan.employeeId === currentUser.id;
+  });
+
+  const selectableEmployees = employees.filter((emp) => {
+    if (!currentUser) return true;
+    if (isSuperAdminOrCeo(currentUser)) return true;
+    if (isBranchManager(currentUser)) return emp.branchId === currentUser.branchId;
+    return emp.id === currentUser.id;
+  });
+
   // Filter logic
-  const filteredLoans = loans.filter((loan) => {
+  const filteredLoans = roleScopedLoans.filter((loan) => {
     const cat = loan.category || "ADVANCE_SALARY";
     const matchesCategory = selectedCategoryTab === "ALL" || cat === selectedCategoryTab;
 
@@ -284,19 +346,19 @@ export const LoansView: React.FC<LoansViewProps> = ({
   });
 
   // KPI Calculations
-  const totalAdvancesActive = loans
+  const totalAdvancesActive = roleScopedLoans
     .filter((l) => (l.category === "ADVANCE_SALARY" || !l.category) && (l.status === "ACTIVE" || l.status === "APPROVED"))
     .reduce((sum, l) => sum + (l.remainingAmount ?? 0), 0);
 
-  const totalStaffLoansActive = loans
+  const totalStaffLoansActive = roleScopedLoans
     .filter((l) => l.category === "COMPANY_LOAN" && (l.status === "ACTIVE" || l.status === "APPROVED"))
     .reduce((sum, l) => sum + (l.remainingAmount ?? 0), 0);
 
-  const totalEmployeeBorrowing = loans
+  const totalEmployeeBorrowing = roleScopedLoans
     .filter((l) => l.category === "EMPLOYEE_BORROWING" && (l.status === "ACTIVE" || l.status === "APPROVED"))
     .reduce((sum, l) => sum + (l.remainingAmount ?? 0), 0);
 
-  const totalClosedRepaid = loans
+  const totalClosedRepaid = roleScopedLoans
     .filter((l) => l.status === "CLOSED" || l.status === "COMPLETED")
     .reduce((sum, l) => sum + (l.amount ?? 0), 0);
 
@@ -347,30 +409,44 @@ export const LoansView: React.FC<LoansViewProps> = ({
               <span>লেজার এক্সপোর্ট (CSV)</span>
             </button>
 
-            <button
-              onClick={() => openAddModal("ADVANCE_SALARY")}
-              className="px-3.5 py-2 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-teal-500/20 flex items-center gap-1.5 transition-all cursor-pointer"
-            >
-              <Plus className="w-4 h-4" />
-              <span>অ্যাডভান্স বেতন প্রদান</span>
-            </button>
+            {isGeneralEmployee(currentUser) ? (
+              <button
+                onClick={() => openAddModal("ADVANCE_SALARY")}
+                className="px-3.5 py-2 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-teal-500/20 flex items-center gap-1.5 transition-all cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                <span>অ্যাডভান্স / লোনের আবেদন</span>
+              </button>
+            ) : (
+              <>
+                <button
+                  onClick={() => openAddModal("ADVANCE_SALARY")}
+                  className="px-3.5 py-2 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-teal-500/20 flex items-center gap-1.5 transition-all cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>অ্যাডভান্স বেতন প্রদান</span>
+                </button>
 
-            <button
-              onClick={() => openAddModal("COMPANY_LOAN")}
-              className="px-3.5 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-xl shadow-md flex items-center gap-1.5 transition-all cursor-pointer"
-            >
-              <Plus className="w-4 h-4" />
-              <span>কোম্পানি লোন</span>
-            </button>
+                <button
+                  onClick={() => openAddModal("COMPANY_LOAN")}
+                  className="px-3.5 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-xl shadow-md flex items-center gap-1.5 transition-all cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>কোম্পানি লোন</span>
+                </button>
 
-            <button
-              onClick={() => openAddModal("EMPLOYEE_BORROWING")}
-              className="px-3.5 py-2 bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold rounded-xl shadow-md flex items-center gap-1.5 transition-all cursor-pointer"
-              title="প্রজেক্ট বা অফিস কেনাকাটায় কর্মীর থেকে ধার নেওয়া"
-            >
-              <ArrowDownLeft className="w-4 h-4" />
-              <span>কর্মী থেকে ধার গ্রহণ</span>
-            </button>
+                {isSuperAdminOrCeo(currentUser) && (
+                  <button
+                    onClick={() => openAddModal("EMPLOYEE_BORROWING")}
+                    className="px-3.5 py-2 bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold rounded-xl shadow-md flex items-center gap-1.5 transition-all cursor-pointer"
+                    title="প্রজেক্ট বা অফিস কেনাকাটায় কর্মীর থেকে ধার নেওয়া"
+                  >
+                    <ArrowDownLeft className="w-4 h-4" />
+                    <span>কর্মী থেকে ধার গ্রহণ</span>
+                  </button>
+                )}
+              </>
+            )}
           </div>
         </div>
 
@@ -681,58 +757,66 @@ export const LoansView: React.FC<LoansViewProps> = ({
 
                       <td className="p-3 text-right">
                         <div className="flex items-center justify-end gap-1.5 flex-wrap">
-                          {loan.status === "PENDING_APPROVAL" && (
+                          {canManageLoan(loan) ? (
                             <>
+                              {loan.status === "PENDING_APPROVAL" && (
+                                <>
+                                  <button
+                                    onClick={() => onApproveLoan(loan.id)}
+                                    className="px-2 py-1 rounded-lg bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-600 hover:text-white cursor-pointer font-bold flex items-center gap-1 text-[11px]"
+                                    title="অনুমোদন করুন"
+                                  >
+                                    <CheckCircle2 className="w-3.5 h-3.5" />
+                                    <span>অনুমোদন</span>
+                                  </button>
+                                  <button
+                                    onClick={() => onRejectLoan(loan.id)}
+                                    className="px-2 py-1 rounded-lg bg-red-500/15 text-red-700 dark:text-red-300 hover:bg-red-600 hover:text-white cursor-pointer font-bold flex items-center gap-1 text-[11px]"
+                                    title="প্রত্যাখ্যান করুন"
+                                  >
+                                    <XCircle className="w-3.5 h-3.5" />
+                                    <span>বাতিল</span>
+                                  </button>
+                                </>
+                              )}
+
+                              {loan.remainingAmount > 0 && (
+                                <button
+                                  type="button"
+                                  onClick={() => openRepayModal(loan)}
+                                  className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold shadow-xs cursor-pointer flex items-center gap-1 transition-all"
+                                  title="টাকা ফেরত বা কিস্তি জমা দিন"
+                                >
+                                  <Receipt className="w-3.5 h-3.5" />
+                                  <span>ফেরত দিন</span>
+                                </button>
+                              )}
+
                               <button
-                                onClick={() => onApproveLoan(loan.id)}
-                                className="px-2 py-1 rounded-lg bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-600 hover:text-white cursor-pointer font-bold flex items-center gap-1 text-[11px]"
-                                title="অনুমোদন করুন"
+                                type="button"
+                                onClick={() => openEditModal(loan)}
+                                className="px-2.5 py-1.5 rounded-lg bg-teal-500/10 hover:bg-teal-500/20 text-teal-700 dark:text-teal-300 font-bold border border-teal-500/20 cursor-pointer flex items-center gap-1 text-xs transition-all"
+                                title="তথ্য এডিট বা সংশোধন করুন"
                               >
-                                <CheckCircle2 className="w-3.5 h-3.5" />
-                                <span>অনুমোদন</span>
+                                <Edit2 className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
+                                <span>এডিট</span>
                               </button>
+
                               <button
-                                onClick={() => onRejectLoan(loan.id)}
-                                className="px-2 py-1 rounded-lg bg-red-500/15 text-red-700 dark:text-red-300 hover:bg-red-600 hover:text-white cursor-pointer font-bold flex items-center gap-1 text-[11px]"
-                                title="প্রত্যাখ্যান করুন"
+                                type="button"
+                                onClick={() => setDeleteLoanId(loan.id)}
+                                className="px-2.5 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-700 dark:text-red-400 font-bold border border-red-500/20 cursor-pointer flex items-center gap-1 text-xs transition-all"
+                                title="রেকর্ডটি মুছে ফেলুন"
                               >
-                                <XCircle className="w-3.5 h-3.5" />
-                                <span>বাতিল</span>
+                                <Trash2 className="w-3.5 h-3.5 text-red-600 dark:text-red-400" />
+                                <span>মুছুন</span>
                               </button>
                             </>
+                          ) : (
+                            <span className="text-[11px] text-slate-400 dark:text-slate-500 italic">
+                              {loan.status === "PENDING_APPROVAL" ? "অনুমোদনের অপেক্ষায়" : "সংরক্ষিত রেকর্ড"}
+                            </span>
                           )}
-
-                          {loan.remainingAmount > 0 && (
-                            <button
-                              type="button"
-                              onClick={() => openRepayModal(loan)}
-                              className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold shadow-xs cursor-pointer flex items-center gap-1 transition-all"
-                              title="টাকা ফেরত বা কিস্তি জমা দিন"
-                            >
-                              <Receipt className="w-3.5 h-3.5" />
-                              <span>ফেরত দিন</span>
-                            </button>
-                          )}
-
-                          <button
-                            type="button"
-                            onClick={() => openEditModal(loan)}
-                            className="px-2.5 py-1.5 rounded-lg bg-teal-500/10 hover:bg-teal-500/20 text-teal-700 dark:text-teal-300 font-bold border border-teal-500/20 cursor-pointer flex items-center gap-1 text-xs transition-all"
-                            title="তথ্য এডিট বা সংশোধন করুন"
-                          >
-                            <Edit2 className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
-                            <span>এডিট</span>
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() => setDeleteLoanId(loan.id)}
-                            className="px-2.5 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-700 dark:text-red-400 font-bold border border-red-500/20 cursor-pointer flex items-center gap-1 text-xs transition-all"
-                            title="রেকর্ডটি মুছে ফেলুন"
-                          >
-                            <Trash2 className="w-3.5 h-3.5 text-red-600 dark:text-red-400" />
-                            <span>মুছুন</span>
-                          </button>
                         </div>
                       </td>
                     </tr>
@@ -842,32 +926,40 @@ export const LoansView: React.FC<LoansViewProps> = ({
                   )}
 
                   <div className="flex items-center justify-end gap-2 pt-1 flex-wrap">
-                    {loan.remainingAmount > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => openRepayModal(loan)}
-                        className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold shadow-xs cursor-pointer flex items-center gap-1"
-                      >
-                        <Receipt className="w-3.5 h-3.5" />
-                        <span>ফেরত দিন</span>
-                      </button>
+                    {canManageLoan(loan) ? (
+                      <>
+                        {loan.remainingAmount > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => openRepayModal(loan)}
+                            className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold shadow-xs cursor-pointer flex items-center gap-1"
+                          >
+                            <Receipt className="w-3.5 h-3.5" />
+                            <span>ফেরত দিন</span>
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => openEditModal(loan)}
+                          className="px-3 py-1.5 rounded-xl bg-teal-500/10 hover:bg-teal-500/20 text-teal-700 dark:text-teal-300 font-bold border border-teal-500/20 cursor-pointer flex items-center gap-1 text-xs"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                          <span>এডিট</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDeleteLoanId(loan.id)}
+                          className="px-3 py-1.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-700 dark:text-red-400 font-bold border border-red-500/20 cursor-pointer flex items-center gap-1 text-xs"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>মুছুন</span>
+                        </button>
+                      </>
+                    ) : (
+                      <span className="text-[11px] text-slate-400 dark:text-slate-500 italic">
+                        {loan.status === "PENDING_APPROVAL" ? "অনুমোদনের অপেক্ষায়" : "সংরক্ষিত রেকর্ড"}
+                      </span>
                     )}
-                    <button
-                      type="button"
-                      onClick={() => openEditModal(loan)}
-                      className="px-3 py-1.5 rounded-xl bg-teal-500/10 hover:bg-teal-500/20 text-teal-700 dark:text-teal-300 font-bold border border-teal-500/20 cursor-pointer flex items-center gap-1 text-xs"
-                    >
-                      <Edit2 className="w-3.5 h-3.5" />
-                      <span>এডিট</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setDeleteLoanId(loan.id)}
-                      className="px-3 py-1.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-700 dark:text-red-400 font-bold border border-red-500/20 cursor-pointer flex items-center gap-1 text-xs"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                      <span>মুছুন</span>
-                    </button>
                   </div>
                 </div>
               );
@@ -905,7 +997,7 @@ export const LoansView: React.FC<LoansViewProps> = ({
             </div>
 
             {/* Category Switcher in Form */}
-            <div className="grid grid-cols-3 gap-2 p-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-[11px] font-bold">
+            <div className={`grid ${isGeneralEmployee(currentUser) ? "grid-cols-2" : "grid-cols-3"} gap-2 p-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-[11px] font-bold`}>
               <button
                 type="button"
                 onClick={() => {
@@ -934,39 +1026,47 @@ export const LoansView: React.FC<LoansViewProps> = ({
               >
                 কোম্পানি লোন
               </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setNewCategory("EMPLOYEE_BORROWING");
-                  setNewRepaymentType("LUMP_SUM");
-                }}
-                className={`py-2 px-1 rounded-lg text-center transition-all cursor-pointer ${
-                  newCategory === "EMPLOYEE_BORROWING"
-                    ? "bg-amber-600 text-white shadow-xs"
-                    : "text-slate-600 dark:text-slate-300 hover:text-amber-600"
-                }`}
-              >
-                কর্মী থেকে ধার
-              </button>
+              {!isGeneralEmployee(currentUser) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNewCategory("EMPLOYEE_BORROWING");
+                    setNewRepaymentType("LUMP_SUM");
+                  }}
+                  className={`py-2 px-1 rounded-lg text-center transition-all cursor-pointer ${
+                    newCategory === "EMPLOYEE_BORROWING"
+                      ? "bg-amber-600 text-white shadow-xs"
+                      : "text-slate-600 dark:text-slate-300 hover:text-amber-600"
+                  }`}
+                >
+                  কর্মী থেকে ধার
+                </button>
+              )}
             </div>
 
             <form onSubmit={handleCreateSubmit} className="space-y-3.5 text-xs">
               <div>
                 <label className="block text-slate-600 dark:text-slate-400 mb-1 font-semibold">
-                  {newCategory === "EMPLOYEE_BORROWING" ? "যার থেকে ধার নেওয়া হচ্ছে (কর্মী) *" : "কর্মী নির্বাচন করুন *"}
+                  {newCategory === "EMPLOYEE_BORROWING" ? "যার থেকে ধার নেওয়া হচ্ছে (কর্মী) *" : "কর্মী *"}
                 </label>
-                <select
-                  value={newEmpId}
-                  onChange={(e) => setNewEmpId(e.target.value)}
-                  className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white"
-                  required
-                >
-                  {employees.map((e) => (
-                    <option key={e.id} value={e.id}>
-                      {e.fullName} ({e.employeeCode}) - {e.designationTitle}
-                    </option>
-                  ))}
-                </select>
+                {isGeneralEmployee(currentUser) && currentUser ? (
+                  <div className="w-full bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white font-medium">
+                    {currentUser.fullName} ({currentUser.employeeCode}) - {currentUser.designationTitle}
+                  </div>
+                ) : (
+                  <select
+                    value={newEmpId}
+                    onChange={(e) => setNewEmpId(e.target.value)}
+                    className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white"
+                    required
+                  >
+                    {selectableEmployees.map((e) => (
+                      <option key={e.id} value={e.id}>
+                        {e.fullName} ({e.employeeCode}) - {e.designationTitle}
+                      </option>
+                    ))}
+                  </select>
+                )}
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1101,18 +1201,20 @@ export const LoansView: React.FC<LoansViewProps> = ({
                 />
               </div>
 
-              <div className="p-3 rounded-xl bg-teal-50/60 dark:bg-teal-950/30 border border-teal-200 dark:border-teal-800/60 flex items-center justify-between">
-                <div>
-                  <span className="font-bold text-teal-900 dark:text-teal-200 block text-xs">সরাসরি কার্যকর (Active) হিসেবে যুক্ত করুন</span>
-                  <span className="text-[11px] text-teal-700 dark:text-teal-400 block">আনচেক করলে অনুমোদন অপেক্ষমাণ থাকবে</span>
+              {!isGeneralEmployee(currentUser) && (
+                <div className="p-3 rounded-xl bg-teal-50/60 dark:bg-teal-950/30 border border-teal-200 dark:border-teal-800/60 flex items-center justify-between">
+                  <div>
+                    <span className="font-bold text-teal-900 dark:text-teal-200 block text-xs">সরাসরি কার্যকর (Active) হিসেবে যুক্ত করুন</span>
+                    <span className="text-[11px] text-teal-700 dark:text-teal-400 block">আনচেক করলে অনুমোদন অপেক্ষমাণ থাকবে</span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={newDirectActive}
+                    onChange={(e) => setNewDirectActive(e.target.checked)}
+                    className="w-4 h-4 accent-teal-600 cursor-pointer"
+                  />
                 </div>
-                <input
-                  type="checkbox"
-                  checked={newDirectActive}
-                  onChange={(e) => setNewDirectActive(e.target.checked)}
-                  className="w-4 h-4 accent-teal-600 cursor-pointer"
-                />
-              </div>
+              )}
 
               <div className="flex justify-end gap-2 pt-2">
                 <button
@@ -1126,7 +1228,7 @@ export const LoansView: React.FC<LoansViewProps> = ({
                   type="submit"
                   className="px-5 py-2 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white rounded-xl font-bold cursor-pointer shadow-md shadow-teal-500/20"
                 >
-                  সংরক্ষণ করুন
+                  {isGeneralEmployee(currentUser) ? "আবেদন জমা দিন" : "সংরক্ষণ করুন"}
                 </button>
               </div>
             </form>

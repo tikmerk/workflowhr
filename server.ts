@@ -11,6 +11,30 @@ const PORT = 3000;
 
 app.use(express.json({ limit: "25mb" }));
 
+// Security & hardware access policies for deployed environments
+app.use((_req, res, next) => {
+  res.setHeader(
+    "Permissions-Policy",
+    "camera=(self *), microphone=(self *), geolocation=(self *)"
+  );
+  next();
+});
+
+// Serve biometric face-api model weights with explicit MIME types and CORS
+app.use(
+  "/models",
+  express.static(path.join(process.cwd(), "public", "models"), {
+    setHeaders: (res, filePath) => {
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      if (filePath.endsWith(".json")) {
+        res.setHeader("Content-Type", "application/json");
+      } else {
+        res.setHeader("Content-Type", "application/octet-stream");
+      }
+    },
+  })
+);
+
 // Lazy initialize Gemini AI with telemetry header
 let geminiClient: GoogleGenAI | null = null;
 function getGeminiClient(): GoogleGenAI {

@@ -383,6 +383,8 @@ export interface EmployeeLoan {
   id: string;
   employeeId: string;
   employeeName: string;
+  avatarUrl?: string;
+  branchId?: string;
   branchName?: string;
   category?: LoanAdvanceCategory; // ADVANCE_SALARY (অ্যাডভান্স বেতন), COMPANY_LOAN (কোম্পানি/বসের লোন), EMPLOYEE_BORROWING (কর্মী থেকে প্রজেক্টের জন্য ধার)
   amount: number;

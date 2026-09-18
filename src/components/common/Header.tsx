@@ -523,9 +523,9 @@ export const Header: React.FC<HeaderProps> = ({
               <ChevronDown className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400 shrink-0" />
             </button>
 
-            {/* Profile Popover Card */}
+            {/* Profile Popover Card - Scrollable without visible scrollbar */}
             {showRoleMenu && (
-              <div className="absolute right-0 mt-2 w-80 max-w-[92vw] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700/90 rounded-2xl shadow-2xl p-3 z-50 animate-in fade-in slide-in-from-top-2 duration-150 text-xs">
+              <div className="absolute right-0 mt-2 w-84 max-w-[92vw] max-h-[82vh] overflow-y-auto no-scrollbar hide-scrollbars overscroll-contain bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700/90 rounded-2xl shadow-2xl p-3 z-50 animate-in fade-in slide-in-from-top-2 duration-150 text-xs">
                 {/* User Info Header Card */}
                 <div className="flex items-center gap-3 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700/60 mb-2">
                   <img

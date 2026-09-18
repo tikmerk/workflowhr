@@ -21,6 +21,8 @@ import {
   Check,
   Sun,
   SwitchCamera,
+  Play,
+  Smartphone,
 } from "lucide-react";
 import { Employee } from "../../types";
 import { requestUserMediaStream, captureFrameAsBase64 } from "../../utils/faceUtils";
@@ -55,11 +57,15 @@ export const FaceEnrollmentModal: React.FC<FaceEnrollmentModalProps> = ({
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasOverlayRef = useRef<HTMLCanvasElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const mobileCameraInputRef = useRef<HTMLInputElement>(null);
+  const liveVerifyCameraInputRef = useRef<HTMLInputElement>(null);
 
   // Camera & Stream
+  const streamRef = useRef<MediaStream | null>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [cameraLoading, setCameraLoading] = useState<boolean>(true);
   const [cameraError, setCameraError] = useState<string | null>(null);
+  const [isAutoplayBlocked, setIsAutoplayBlocked] = useState<boolean>(false);
   const [facingMode, setFacingMode] = useState<"user" | "environment">("user");
   const [verificationProgressText, setVerificationProgressText] = useState<string | null>(null);
 
@@ -99,6 +105,14 @@ export const FaceEnrollmentModal: React.FC<FaceEnrollmentModalProps> = ({
 
   // Stop current active camera stream
   const stopCameraStream = useCallback(() => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => {
+        try {
+          track.stop();
+        } catch {}
+      });
+      streamRef.current = null;
+    }
     if (stream) {
       stream.getTracks().forEach((track) => {
         try {
@@ -116,30 +130,63 @@ export const FaceEnrollmentModal: React.FC<FaceEnrollmentModalProps> = ({
   const startCameraStream = useCallback(async (preferredFacing: "user" | "environment" = facingMode) => {
     setCameraLoading(true);
     setCameraError(null);
+    setIsAutoplayBlocked(false);
 
     // Stop current stream if running
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((t) => {
+        try {
+          t.stop();
+        } catch {}
+      });
+      streamRef.current = null;
+    }
     if (stream) {
       stream.getTracks().forEach((t) => {
         try {
           t.stop();
         } catch {}
       });
+      setStream(null);
     }
 
     try {
       const s = await requestUserMediaStream(preferredFacing);
+      streamRef.current = s;
       setStream(s);
+
       if (videoRef.current) {
         videoRef.current.srcObject = s;
         videoRef.current.setAttribute("playsinline", "true");
         videoRef.current.setAttribute("webkit-playsinline", "true");
+        videoRef.current.muted = true;
+
+        const handleReady = () => {
+          setCameraLoading(false);
+          setIsAutoplayBlocked(false);
+        };
+
+        videoRef.current.onloadedmetadata = handleReady;
+        videoRef.current.oncanplay = handleReady;
+        videoRef.current.onplay = handleReady;
+
         try {
           await videoRef.current.play();
+          handleReady();
         } catch (playErr) {
           console.warn("[Camera] Autoplay caught:", playErr);
+          setIsAutoplayBlocked(true);
+          setCameraLoading(false);
         }
       }
-      setCameraLoading(false);
+
+      // Hard safety timer: if stream has active video track, dismiss spinner within 750ms
+      setTimeout(() => {
+        if (streamRef.current?.getVideoTracks().some((t) => t.readyState === "live")) {
+          setCameraLoading(false);
+        }
+      }, 750);
+
       return s;
     } catch (err: any) {
       console.warn("Enrollment camera access notice:", err);
@@ -150,6 +197,19 @@ export const FaceEnrollmentModal: React.FC<FaceEnrollmentModalProps> = ({
       return null;
     }
   }, [facingMode, stream]);
+
+  // Manual click to unblock autoplay on mobile
+  const handleManualPlay = async () => {
+    if (videoRef.current) {
+      try {
+        await videoRef.current.play();
+        setIsAutoplayBlocked(false);
+        setCameraLoading(false);
+      } catch (e) {
+        console.warn("Manual play attempt error:", e);
+      }
+    }
+  };
 
   // Pre-warm AI Models and Pause background camera on open
   useEffect(() => {
@@ -207,7 +267,10 @@ export const FaceEnrollmentModal: React.FC<FaceEnrollmentModalProps> = ({
       videoRef.current.srcObject = stream;
       videoRef.current.setAttribute("playsinline", "true");
       videoRef.current.setAttribute("webkit-playsinline", "true");
-      videoRef.current.play().catch((err) => console.warn("Video stream play notice:", err));
+      videoRef.current.play().catch((err) => {
+        console.warn("Video stream play notice:", err);
+        setIsAutoplayBlocked(true);
+      });
     }
   }, [stream]);
 
@@ -218,18 +281,15 @@ export const FaceEnrollmentModal: React.FC<FaceEnrollmentModalProps> = ({
     await startCameraStream(nextMode);
   };
 
-  // Handle Photo File Upload (From gallery / PC)
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
+  // Process reference image file (from gallery or mobile capture)
+  const processCandidateImageFile = async (file: File) => {
     try {
       setIsVerifying(true);
       // 1. Optimize photo for fast rendering & Firestore quota (<50KB)
       const optimized = await compressAndOptimizeImage(file, 480, 480, 0.85);
       setCandidatePhoto(optimized);
 
-      // 2. CRITICAL: Reset live verification on every photo change!
+      // 2. Reset live verification on every photo change!
       setIsLiveVerified(false);
       setVerificationResult(null);
       setVerifiedScore(null);
@@ -249,13 +309,33 @@ export const FaceEnrollmentModal: React.FC<FaceEnrollmentModalProps> = ({
       console.error("Error optimizing uploaded photo:", err);
     } finally {
       setIsVerifying(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
     }
+  };
+
+  // Handle Photo File Upload (From gallery / PC)
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    await processCandidateImageFile(file);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  // Handle Native Mobile Camera Snap for Step 1 (Reference photo)
+  const handleMobileSnapCapture = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    await processCandidateImageFile(file);
+    if (mobileCameraInputRef.current) mobileCameraInputRef.current.value = "";
   };
 
   // Handle Snapshot from Live Camera as Reference Photo
   const handleCaptureSnapshotAsPhoto = async () => {
-    if (!videoRef.current) return;
+    // If live video is not ready or has zero dimensions, fallback seamlessly to native mobile camera!
+    if (!videoRef.current || videoRef.current.videoWidth === 0 || cameraError) {
+      mobileCameraInputRef.current?.click();
+      return;
+    }
+
     try {
       setIsVerifying(true);
       const snap = captureFrameAsBase64(videoRef.current);
@@ -304,11 +384,11 @@ export const FaceEnrollmentModal: React.FC<FaceEnrollmentModalProps> = ({
     try {
       // 1. Ensure camera stream is alive and video is playing
       let activeVideo = videoRef.current;
-      if (!stream || !activeVideo || activeVideo.readyState < 2 || activeVideo.videoWidth === 0) {
+      if (!streamRef.current || !activeVideo || activeVideo.readyState < 2 || activeVideo.videoWidth === 0) {
         setVerificationProgressText("ক্যামেরা পুনরায় সক্রিয় করা হচ্ছে...");
         const s = await startCameraStream(facingMode);
         if (!s) {
-          throw new Error("ক্যামেরা চালু করা যায়নি। অনুগ্রহ করে ব্রাউজারের ক্যামেরা অনুমতি দিয়ে পুনরায় চেষ্টা করুন।");
+          throw new Error("ক্যামেরা চালু করা যায়নি। অনুগ্রহ করে অনুমতি চেক করুন অথবা 'মোবাইল সেলফি' বাটনে চাপুন।");
         }
         // Brief delay for video buffer frames to arrive
         await new Promise((r) => setTimeout(r, 600));
@@ -319,10 +399,29 @@ export const FaceEnrollmentModal: React.FC<FaceEnrollmentModalProps> = ({
         throw new Error("ক্যামেরা প্রস্তুত করা সম্ভব হয়নি।");
       }
 
+      if (activeVideo.paused) {
+        try {
+          await activeVideo.play();
+        } catch {}
+      }
+
       setVerificationProgressText("128D বায়োমেট্রিক ভেক্টর বিশ্লেষণ করা হচ্ছে...");
 
+      // Convert live frame to canvas to ensure 100% stable face detection on iOS/Android
+      let inputTarget: HTMLVideoElement | HTMLCanvasElement = activeVideo;
+      if (activeVideo.videoWidth > 0 && activeVideo.videoHeight > 0) {
+        const snapCanvas = document.createElement("canvas");
+        snapCanvas.width = activeVideo.videoWidth;
+        snapCanvas.height = activeVideo.videoHeight;
+        const ctx = snapCanvas.getContext("2d");
+        if (ctx) {
+          ctx.drawImage(activeVideo, 0, 0, snapCanvas.width, snapCanvas.height);
+          inputTarget = snapCanvas;
+        }
+      }
+
       // Execute 128D AI Biometric Verification
-      const result = await verifyLiveFaceAgainstCandidatePhoto(activeVideo, candidatePhoto);
+      const result = await verifyLiveFaceAgainstCandidatePhoto(inputTarget, candidatePhoto);
       setVerificationResult(result);
 
       if (result.matched) {
@@ -356,12 +455,52 @@ export const FaceEnrollmentModal: React.FC<FaceEnrollmentModalProps> = ({
         matchScore: 0,
         reason: "NO_FACE_IN_FRAME",
         statusMessage: err?.message || "Verification failed",
-        banglaStatusMessage: err?.message || "লাইভ ফেস ভেরিফিকেশন সম্পন্ন করা যায়নি। পুনরায় 'লাইভ ভেরিফাই' বাটনে চাপুন।",
+        banglaStatusMessage: err?.message || "লাইভ ফেস ভেরিফিকেশন সম্পন্ন করা যায়নি। পুনরায় চেষ্টা করুন বা 'মোবাইল সেলফি' অপশন ব্যবহার করুন।",
         confidenceTier: "NO_FACE",
       });
     } finally {
       setIsVerifying(false);
       setVerificationProgressText(null);
+    }
+  };
+
+  // Handle direct Native Mobile Camera Live Selfie Verification (Works 100% on all mobile devices!)
+  const handleLiveMobileCameraVerification = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !candidatePhoto) return;
+
+    setIsVerifying(true);
+    setVerificationProgressText("মোবাইল ক্যামেরার লাইভ সেলফি বিশ্লেষণ করা হচ্ছে...");
+
+    try {
+      const optimizedSnapshot = await compressAndOptimizeImage(file, 640, 640, 0.9);
+      const result = await verifyLiveFaceAgainstCandidatePhoto(optimizedSnapshot, candidatePhoto);
+      setVerificationResult(result);
+
+      if (result.matched) {
+        setIsLiveVerified(true);
+        setVerifiedScore(result.matchScore);
+        setPhotoChangeNotice(null);
+      } else {
+        setIsLiveVerified(false);
+        setVerifiedScore(null);
+      }
+    } catch (err: any) {
+      console.error("Mobile live snapshot verification error:", err);
+      setVerificationResult({
+        matched: false,
+        matchScore: 0,
+        reason: "NO_FACE_IN_FRAME",
+        statusMessage: err?.message || "Verification failed",
+        banglaStatusMessage: err?.message || "মোবাইল সেলফি দিয়ে ভেরিফিকেশন সম্পন্ন করা যায়নি।",
+        confidenceTier: "NO_FACE",
+      });
+    } finally {
+      setIsVerifying(false);
+      setVerificationProgressText(null);
+      if (liveVerifyCameraInputRef.current) {
+        liveVerifyCameraInputRef.current.value = "";
+      }
     }
   };
 
@@ -669,6 +808,14 @@ export const FaceEnrollmentModal: React.FC<FaceEnrollmentModalProps> = ({
                       onChange={handleFileUpload}
                       className="hidden"
                     />
+                    <input
+                      type="file"
+                      ref={mobileCameraInputRef}
+                      accept="image/*"
+                      capture="user"
+                      onChange={handleMobileSnapCapture}
+                      className="hidden"
+                    />
 
                     <div className="grid grid-cols-2 gap-2">
                       <button
@@ -684,7 +831,7 @@ export const FaceEnrollmentModal: React.FC<FaceEnrollmentModalProps> = ({
                       <button
                         type="button"
                         onClick={handleCaptureSnapshotAsPhoto}
-                        disabled={isVerifying || Boolean(cameraError)}
+                        disabled={isVerifying}
                         className="py-2.5 px-3 rounded-xl bg-teal-500/20 hover:bg-teal-500/30 border border-teal-500/40 text-teal-300 text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
                       >
                         <Camera className="w-4 h-4 text-teal-400" />
@@ -693,7 +840,7 @@ export const FaceEnrollmentModal: React.FC<FaceEnrollmentModalProps> = ({
                     </div>
 
                     <p className="text-[10px] text-slate-500 text-center">
-                      সরাসরি কম্পিউটার/মোবাইল গ্যালারি থেকে যেকোনো স্পষ্ট পোর্ট্রেট ছবি দিন।
+                      গ্যালারি থেকে ছবি আপলোড করুন অথবা ক্যামেরা স্ন্যাপ চেপে সরাসরি ছবি তুলুন।
                     </p>
                   </div>
                 </div>
@@ -731,9 +878,18 @@ export const FaceEnrollmentModal: React.FC<FaceEnrollmentModalProps> = ({
                         muted
                         onLoadedMetadata={() => {
                           setCameraLoading(false);
+                          setIsAutoplayBlocked(false);
                           if (videoRef.current) {
                             videoRef.current.play().catch(() => {});
                           }
+                        }}
+                        onCanPlay={() => {
+                          setCameraLoading(false);
+                          setIsAutoplayBlocked(false);
+                        }}
+                        onPlay={() => {
+                          setCameraLoading(false);
+                          setIsAutoplayBlocked(false);
                         }}
                         className={`w-full h-full object-cover ${facingMode === "user" ? "scale-x-[-1]" : ""}`}
                       />
@@ -779,12 +935,36 @@ export const FaceEnrollmentModal: React.FC<FaceEnrollmentModalProps> = ({
                         </button>
                       </div>
 
+                      {/* Mobile Autoplay Blocked Overlay - 1 Tap to start */}
+                      {isAutoplayBlocked && !cameraLoading && (
+                        <div className="absolute inset-0 z-20 bg-slate-950/85 backdrop-blur-xs flex flex-col items-center justify-center p-4 text-center space-y-3">
+                          <button
+                            type="button"
+                            onClick={handleManualPlay}
+                            className="px-4 py-2.5 rounded-2xl bg-teal-500 hover:bg-teal-400 text-slate-950 text-xs font-bold flex items-center gap-2 shadow-xl shadow-teal-500/20 cursor-pointer animate-pulse"
+                          >
+                            <Play className="w-4 h-4 fill-slate-950" />
+                            <span>ক্যামেরা প্রিভিউ চালু করতে ট্যাপ করুন</span>
+                          </button>
+                          <p className="text-[11px] text-slate-400">
+                            মোবাইলে ভিডিও অটো-প্লে আটকে থাকলে ওপরের বাটনে চাপুন
+                          </p>
+                        </div>
+                      )}
+
                       {/* Camera Loading Overlay */}
                       {cameraLoading && (
                         <div className="absolute inset-0 z-10 bg-slate-950/90 backdrop-blur-xs flex flex-col items-center justify-center p-4 text-center space-y-2.5">
                           <RefreshCw className="w-8 h-8 animate-spin text-teal-400 mx-auto" />
                           <p className="text-xs font-semibold text-slate-200">ক্যামেরা প্রস্তুত হচ্ছে...</p>
                           <p className="text-[11px] text-slate-400">মোবাইল বা ব্রাউজারে অনুমতি চাইলে 'Allow' চাপুন</p>
+                          <button
+                            type="button"
+                            onClick={handleManualPlay}
+                            className="mt-1 px-3 py-1 bg-slate-800 hover:bg-slate-700 text-teal-300 text-[11px] font-medium rounded-lg border border-slate-700 cursor-pointer"
+                          >
+                            দেরি হচ্ছে? ট্যাপ করে চালু করুন
+                          </button>
                         </div>
                       )}
 
@@ -793,22 +973,30 @@ export const FaceEnrollmentModal: React.FC<FaceEnrollmentModalProps> = ({
                         <div className="absolute inset-0 z-10 bg-slate-950/95 flex flex-col items-center justify-center p-4 text-center space-y-3">
                           <AlertTriangle className="w-8 h-8 text-rose-500 mx-auto" />
                           <p className="text-xs font-medium text-rose-300 max-w-xs leading-relaxed">{cameraError}</p>
-                          <div className="flex items-center gap-2 pt-1">
+                          <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
                             <button
                               type="button"
                               onClick={() => startCameraStream(facingMode)}
-                              className="px-3.5 py-1.5 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-md transition-all"
+                              className="px-3 py-1.5 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-md transition-all"
                             >
                               <RefreshCw className="w-3.5 h-3.5" />
-                              <span>পুনরায় চালু করুন</span>
+                              <span>পুনরায় চালু</span>
                             </button>
                             <button
                               type="button"
                               onClick={handleToggleFacingMode}
-                              className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 flex items-center gap-1.5 cursor-pointer transition-all"
+                              className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 flex items-center gap-1.5 cursor-pointer transition-all"
                             >
                               <SwitchCamera className="w-3.5 h-3.5" />
                               <span>ক্যামেরা বদলান</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => liveVerifyCameraInputRef.current?.click()}
+                              className="px-3 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all"
+                            >
+                              <Smartphone className="w-3.5 h-3.5 text-amber-400" />
+                              <span>মোবাইল সেলফি</span>
                             </button>
                           </div>
                         </div>
@@ -821,38 +1009,61 @@ export const FaceEnrollmentModal: React.FC<FaceEnrollmentModalProps> = ({
                     </div>
                   </div>
 
-                  {/* Verification Trigger Button */}
+                  {/* Verification Trigger Button with Direct Mobile Selfie Support */}
                   <div className="space-y-2 pt-2 border-t border-slate-800/80">
-                    <button
-                      type="button"
-                      onClick={handleExecuteLiveVerification}
-                      disabled={isVerifying || !candidatePhoto}
-                      className={`w-full py-3 px-4 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md ${
-                        isLiveVerified
-                          ? "bg-emerald-600/30 hover:bg-emerald-600/40 text-emerald-300 border border-emerald-500/50"
-                          : "bg-teal-600 hover:bg-teal-500 text-white shadow-teal-500/20"
-                      } disabled:opacity-40`}
-                    >
-                      {isVerifying ? (
-                        <>
-                          <RefreshCw className="w-4 h-4 animate-spin" />
-                          <span>{verificationProgressText || "128D ফেস ভেক্টর তুলনা করা হচ্ছে..."}</span>
-                        </>
-                      ) : isLiveVerified ? (
-                        <>
-                          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                          <span>পুনরায় লাইভ ভেরিফাই করুন</span>
-                        </>
-                      ) : (
-                        <>
-                          <ScanFace className="w-4 h-4 text-teal-300" />
-                          <span>লাইভ ক্যামেরা দিয়ে ফেস ভেরিফাই করুন</span>
-                        </>
-                      )}
-                    </button>
+                    <input
+                      type="file"
+                      ref={liveVerifyCameraInputRef}
+                      accept="image/*"
+                      capture="user"
+                      onChange={handleLiveMobileCameraVerification}
+                      className="hidden"
+                    />
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handleExecuteLiveVerification}
+                        disabled={isVerifying || !candidatePhoto}
+                        className={`flex-1 py-3 px-3 sm:px-4 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md ${
+                          isLiveVerified
+                            ? "bg-emerald-600/30 hover:bg-emerald-600/40 text-emerald-300 border border-emerald-500/50"
+                            : "bg-teal-600 hover:bg-teal-500 text-white shadow-teal-500/20"
+                        } disabled:opacity-40`}
+                      >
+                        {isVerifying ? (
+                          <>
+                            <RefreshCw className="w-4 h-4 animate-spin shrink-0" />
+                            <span className="truncate">{verificationProgressText || "128D ফেস ভেক্টর তুলনা করা হচ্ছে..."}</span>
+                          </>
+                        ) : isLiveVerified ? (
+                          <>
+                            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                            <span>পুনরায় লাইভ ভেরিফাই করুন</span>
+                          </>
+                        ) : (
+                          <>
+                            <ScanFace className="w-4 h-4 text-teal-300 shrink-0" />
+                            <span>ক্যামেরা দিয়ে লাইভ ভেরিফাই</span>
+                          </>
+                        )}
+                      </button>
+
+                      {/* Direct Native Mobile Camera Live Selfie button */}
+                      <button
+                        type="button"
+                        onClick={() => liveVerifyCameraInputRef.current?.click()}
+                        disabled={isVerifying || !candidatePhoto}
+                        title="মোবাইল ক্যামেরা দিয়ে সরাসরি লাইভ সেলফি তুলে ভেরিফাই করুন"
+                        className="py-3 px-3 sm:px-3.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 hover:text-amber-200 border border-amber-500/40 font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-md shrink-0 disabled:opacity-40"
+                      >
+                        <Smartphone className="w-4 h-4 text-amber-400" />
+                        <span className="hidden sm:inline">মোবাইল সেলফি</span>
+                      </button>
+                    </div>
 
                     <p className="text-[10px] text-slate-400 text-center">
-                      ক্যামেরার মাঝখানে সোজা তাকিয়ে বাটনে চাপুন। এটি আপলোড করা ছবির সাথে আপনার লাইভ চেহারা মেলাবে।
+                      ক্যামেরার মাঝখানে সোজা তাকিয়ে বাটনে চাপুন অথবা 'মোবাইল সেলফি' দিয়ে সরাসরি ফোন ক্যামেরা খুলুন।
                     </p>
                   </div>
                 </div>

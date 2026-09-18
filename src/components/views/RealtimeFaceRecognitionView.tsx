@@ -46,6 +46,7 @@ import {
   resetBilateralBlinkState,
   loadFaceApiModels,
 } from "../../utils/faceRecognitionEngine";
+import { requestUserMediaStream } from "../../utils/faceUtils";
 import {
   reconcileMissingPreviousClockOuts,
   resolveEmployeeShift,
@@ -287,34 +288,43 @@ export const RealtimeFaceRecognitionView: React.FC<RealtimeFaceRecognitionViewPr
     }
 
     try {
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        throw new Error("ব্রাউজারে ক্যামেরা পারমিশন সাপোর্ট করে না");
-      }
-
-      const constraints: MediaStreamConstraints = {
-        video: selectedDeviceId
-          ? { deviceId: { exact: selectedDeviceId }, width: { ideal: 640 }, height: { ideal: 480 } }
-          : { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } },
-        audio: false,
-      };
-
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      const stream = await requestUserMediaStream("user", selectedDeviceId);
       streamRef.current = stream;
 
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
-        videoRef.current.onloadedmetadata = () => {
-          videoRef.current?.play();
+        videoRef.current.setAttribute("playsinline", "true");
+        videoRef.current.setAttribute("webkit-playsinline", "true");
+        videoRef.current.muted = true;
+
+        const markReady = () => {
           setCameraLoading(false);
           setIsCameraActive(true);
         };
+
+        videoRef.current.onloadedmetadata = markReady;
+        videoRef.current.oncanplay = markReady;
+        videoRef.current.onplay = markReady;
+
+        try {
+          await videoRef.current.play();
+          markReady();
+        } catch (playErr) {
+          console.warn("Autoplay notice:", playErr);
+          // Safety timeout for mobile autoplay policies: guarantee spinner dismisses
+          setTimeout(markReady, 700);
+        }
+      } else {
+        setCameraLoading(false);
+        setIsCameraActive(true);
       }
     } catch (err: any) {
       console.error("Camera startup error:", err);
       setCameraError(
-        err.name === "NotAllowedError"
-          ? "ক্যামেরা অ্যাক্সেস ডিনাইড। ব্রাউজারে ক্যামেরার পারমিশন অন করুন।"
-          : "ক্যামেরা লোড করা যায়নি। অন্য ক্যামেরা সিলেক্ট করুন বা পেজ রিফ্রেশ করুন।"
+        err?.message ||
+          (err.name === "NotAllowedError"
+            ? "ক্যামেরা অ্যাক্সেস ডিনাইড। ব্রাউজারে ক্যামেরার পারমিশন অন করুন।"
+            : "ক্যামেরা লোড করা যায়নি। অন্য ক্যামেরা সিলেক্ট করুন বা পেজ রিফ্রেশ করুন।")
       );
       setCameraLoading(false);
     }

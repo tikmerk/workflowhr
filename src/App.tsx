@@ -2011,6 +2011,7 @@ function AppContent() {
               loans={loans}
               employees={employees}
               branches={branches}
+              currentUser={currentEmployee}
               onApproveLoan={handleApproveLoan}
               onRejectLoan={handleRejectLoan}
               onAddLoan={handleAddLoan}

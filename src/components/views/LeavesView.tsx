@@ -25,6 +25,7 @@ interface LeavesViewProps {
   leaves: LeaveApplication[];
   branches: Branch[];
   employees?: Employee[];
+  currentUser?: Employee;
   onApproveLeave: (leaveId: string, comments?: string) => void;
   onRejectLeave: (leaveId: string, comments?: string) => void;
   onAddLeave?: (leave: LeaveApplication) => void;
@@ -36,6 +37,7 @@ export const LeavesView: React.FC<LeavesViewProps> = ({
   leaves,
   branches,
   employees = [],
+  currentUser,
   onApproveLeave,
   onRejectLeave,
   onAddLeave,
@@ -114,8 +116,17 @@ export const LeavesView: React.FC<LeavesViewProps> = ({
     setEditTotalDays(calculateDays(editStartDate, val));
   };
 
+  const selectableEmployees = employees.filter((emp) => {
+    if (!currentUser) return true;
+    if (isSuperAdminOrCeo(currentUser)) return true;
+    if (isBranchManager(currentUser)) return emp.branchId === currentUser.branchId;
+    return emp.id === currentUser.id;
+  });
+
   const openCreateModal = () => {
-    const defaultEmp = employees[0];
+    const defaultEmp = isGeneralEmployee(currentUser) && currentUser
+      ? currentUser
+      : selectableEmployees[0] || employees[0];
     if (defaultEmp) {
       setSelectedEmpId(defaultEmp.id);
     }
@@ -125,7 +136,7 @@ export const LeavesView: React.FC<LeavesViewProps> = ({
     setCreateTotalDays(1);
     setCreateLeaveType("CASUAL");
     setCreateReason("");
-    setCreateApprovedDirectly(true);
+    setCreateApprovedDirectly(!isGeneralEmployee(currentUser));
     setShowCreateModal(true);
   };
 
@@ -202,7 +213,66 @@ export const LeavesView: React.FC<LeavesViewProps> = ({
     }
   };
 
-  const filteredLeaves = leaves.filter((l) => {
+  const isSuperAdminOrCeo = (user?: Employee) => {
+    if (!user) return true;
+    return Boolean(
+      user.role === "SUPER_ADMIN" ||
+      user.isSuperAdmin ||
+      user.role === "COMPANY_ADMIN" ||
+      user.role === "CEO" ||
+      user.isCeoOrOwner ||
+      user.designationTitle?.toLowerCase().includes("ceo") ||
+      user.designationTitle?.toLowerCase().includes("chief executive officer") ||
+      user.designationTitle?.toLowerCase().includes("সিইও")
+    );
+  };
+
+  const isBranchManager = (user?: Employee) => {
+    if (!user) return false;
+    return Boolean(
+      user.role === "BRANCH_MANAGER" ||
+      user.designationTitle?.toLowerCase().includes("branch manager") ||
+      user.designationTitle?.toLowerCase().includes("শাখা প্রধান")
+    );
+  };
+
+  const isGeneralEmployee = (user?: Employee) => {
+    if (!user) return false;
+    return !isSuperAdminOrCeo(user) && !isBranchManager(user);
+  };
+
+  // Scope:
+  // - CEO & Super Admin: see all leaves
+  // - Branch Manager: see their branch leaves
+  // - General Employee: see ONLY their own leaves
+  const roleScopedLeaves = leaves.filter((l) => {
+    if (!currentUser) return true;
+    if (isSuperAdminOrCeo(currentUser)) return true;
+    if (isBranchManager(currentUser)) {
+      return l.branchId === currentUser.branchId;
+    }
+    return l.employeeId === currentUser.id;
+  });
+
+  const canApproveRejectLeave = (leave: LeaveApplication) => {
+    if (!currentUser) return true;
+    if (isSuperAdminOrCeo(currentUser)) return true;
+    if (isBranchManager(currentUser)) {
+      return leave.branchId === currentUser.branchId;
+    }
+    return false;
+  };
+
+  const canEditOrDeleteLeave = (leave: LeaveApplication) => {
+    if (!currentUser) return true;
+    if (isSuperAdminOrCeo(currentUser)) return true;
+    if (isBranchManager(currentUser)) {
+      return leave.branchId === currentUser.branchId;
+    }
+    return leave.employeeId === currentUser.id && leave.status === "PENDING";
+  };
+
+  const filteredLeaves = roleScopedLeaves.filter((l) => {
     const matchesSearch =
       (l.employeeName || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
       (l.employeeCode || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -272,21 +342,25 @@ export const LeavesView: React.FC<LeavesViewProps> = ({
               <span>এক্সপোর্ট (CSV)</span>
             </button>
 
-            {onAddLeave && employees.length > 0 && (
+            {onAddLeave && (
               <button
                 type="button"
                 onClick={openCreateModal}
                 className="px-4 py-2 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-teal-500/20 flex items-center gap-1.5 transition-all cursor-pointer"
               >
                 <Plus className="w-4 h-4" />
-                <span>কর্মীর জন্য ছুটি বরাদ্দ করুন (Assign Leave)</span>
+                <span>
+                  {isGeneralEmployee(currentUser)
+                    ? "ছুটির আবেদন করুন (Apply for Leave)"
+                    : "কর্মীর জন্য ছুটি বরাদ্দ করুন (Assign Leave)"}
+                </span>
               </button>
             )}
           </div>
         </div>
 
         {/* Filter Controls */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+        <div className={`grid grid-cols-1 ${isGeneralEmployee(currentUser) ? "sm:grid-cols-2" : "sm:grid-cols-3"} gap-3 text-xs`}>
           <div className="relative">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
             <input
@@ -298,20 +372,24 @@ export const LeavesView: React.FC<LeavesViewProps> = ({
             />
           </div>
 
-          <div>
-            <select
-              value={selectedBranch}
-              onChange={(e) => setSelectedBranch(e.target.value)}
-              className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-slate-900 dark:text-white focus:outline-none focus:border-teal-500"
-            >
-              <option value="ALL">সকল শাখা (All Branches)</option>
-              {branches.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.name}
-                </option>
-              ))}
-            </select>
-          </div>
+          {!isGeneralEmployee(currentUser) && (
+            <div>
+              <select
+                value={selectedBranch}
+                onChange={(e) => setSelectedBranch(e.target.value)}
+                className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-slate-900 dark:text-white focus:outline-none focus:border-teal-500"
+              >
+                {!isBranchManager(currentUser) && <option value="ALL">সকল শাখা (All Branches)</option>}
+                {branches
+                  .filter((b) => !isBranchManager(currentUser) || b.id === currentUser?.branchId)
+                  .map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.name}
+                    </option>
+                  ))}
+              </select>
+            </div>
+          )}
 
           <div>
             <select
@@ -417,7 +495,7 @@ export const LeavesView: React.FC<LeavesViewProps> = ({
 
                     <td className="p-3 text-right">
                       <div className="flex items-center justify-end gap-1.5">
-                        {l.status === "PENDING" && (
+                        {l.status === "PENDING" && canApproveRejectLeave(l) && (
                           <button
                             type="button"
                             onClick={() => setReviewingLeave(l)}
@@ -428,7 +506,7 @@ export const LeavesView: React.FC<LeavesViewProps> = ({
                           </button>
                         )}
 
-                        {onUpdateLeave && (
+                        {onUpdateLeave && canEditOrDeleteLeave(l) && (
                           <button
                             type="button"
                             onClick={() => openEditModal(l)}
@@ -439,12 +517,12 @@ export const LeavesView: React.FC<LeavesViewProps> = ({
                           </button>
                         )}
 
-                        {onDeleteLeave && (
+                        {onDeleteLeave && canEditOrDeleteLeave(l) && (
                           <button
                             type="button"
                             onClick={() => setDeleteLeaveId(l.id)}
                             className="p-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-700 dark:text-red-400 border border-red-500/20 cursor-pointer"
-                            title="মুছে ফেলুন"
+                            title={l.employeeId === currentUser?.id ? "আবেদন বাতিল করুন" : "মুছে ফেলুন"}
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
@@ -466,7 +544,11 @@ export const LeavesView: React.FC<LeavesViewProps> = ({
             <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
               <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
                 <CalendarCheck className="w-5 h-5 text-teal-600 dark:text-teal-400" />
-                <span>কর্মীর জন্য ছুটি বরাদ্দ করুন (Assign Leave)</span>
+                <span>
+                  {isGeneralEmployee(currentUser)
+                    ? "ছুটির আবেদন জমা দিন (Submit Leave Application)"
+                    : "কর্মীর জন্য ছুটি বরাদ্দ করুন (Assign Leave)"}
+                </span>
               </h3>
               <button
                 onClick={() => setShowCreateModal(false)}
@@ -478,19 +560,28 @@ export const LeavesView: React.FC<LeavesViewProps> = ({
 
             <form onSubmit={handleSaveCreateLeave} className="space-y-3.5 text-xs">
               <div>
-                <label className="block text-slate-600 dark:text-slate-400 mb-1 font-semibold">কর্মী নির্বাচন করুন *</label>
-                <select
-                  value={selectedEmpId}
-                  onChange={(e) => setSelectedEmpId(e.target.value)}
-                  className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white"
-                  required
-                >
-                  {employees.map((e) => (
-                    <option key={e.id} value={e.id}>
-                      {e.fullName} ({e.employeeCode}) - {e.designationTitle}
-                    </option>
-                  ))}
-                </select>
+                <label className="block text-slate-600 dark:text-slate-400 mb-1 font-semibold">
+                  {isGeneralEmployee(currentUser) ? "আবেদনকারী কর্মী" : "কর্মী নির্বাচন করুন *"}
+                </label>
+                {isGeneralEmployee(currentUser) && currentUser ? (
+                  <div className="w-full bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white font-medium flex items-center justify-between">
+                    <span>{currentUser.fullName} ({currentUser.employeeCode})</span>
+                    <span className="text-[11px] text-teal-600 dark:text-teal-400 font-semibold">{currentUser.designationTitle}</span>
+                  </div>
+                ) : (
+                  <select
+                    value={selectedEmpId}
+                    onChange={(e) => setSelectedEmpId(e.target.value)}
+                    className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white"
+                    required
+                  >
+                    {selectableEmployees.map((e) => (
+                      <option key={e.id} value={e.id}>
+                        {e.fullName} ({e.employeeCode}) - {e.designationTitle} {e.branchName ? `[${e.branchName}]` : ""}
+                      </option>
+                    ))}
+                  </select>
+                )}
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -558,18 +649,20 @@ export const LeavesView: React.FC<LeavesViewProps> = ({
                 />
               </div>
 
-              <div className="p-3 rounded-xl bg-teal-50/60 dark:bg-teal-950/30 border border-teal-200 dark:border-teal-800/60 flex items-center justify-between">
-                <div>
-                  <span className="font-bold text-teal-900 dark:text-teal-200 block text-xs">সরাসরি অনুমোদিত হিসেবে সেভ করুন</span>
-                  <span className="text-[11px] text-teal-700 dark:text-teal-400 block">সুপার অ্যাডমিন দ্বারা সাথে সাথে কার্যকর হবে</span>
+              {!isGeneralEmployee(currentUser) && (
+                <div className="p-3 rounded-xl bg-teal-50/60 dark:bg-teal-950/30 border border-teal-200 dark:border-teal-800/60 flex items-center justify-between">
+                  <div>
+                    <span className="font-bold text-teal-900 dark:text-teal-200 block text-xs">সরাসরি অনুমোদিত হিসেবে সেভ করুন</span>
+                    <span className="text-[11px] text-teal-700 dark:text-teal-400 block">সুপার অ্যাডমিন/ম্যানেজার দ্বারা সাথে সাথে কার্যকর হবে</span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={createApprovedDirectly}
+                    onChange={(e) => setCreateApprovedDirectly(e.target.checked)}
+                    className="w-4 h-4 accent-teal-600 cursor-pointer"
+                  />
                 </div>
-                <input
-                  type="checkbox"
-                  checked={createApprovedDirectly}
-                  onChange={(e) => setCreateApprovedDirectly(e.target.checked)}
-                  className="w-4 h-4 accent-teal-600 cursor-pointer"
-                />
-              </div>
+              )}
 
               <div className="flex justify-end gap-2 pt-2">
                 <button

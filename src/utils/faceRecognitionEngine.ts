@@ -175,7 +175,7 @@ async function ensureImageElement(
     });
   }
 
-  // If input is video, wait up to 1.5s for video dimensions to be established
+  // If input is video, wait up to 1.5s for video dimensions to be established, then render snapshot to offscreen canvas
   if (input instanceof HTMLVideoElement) {
     if (input.paused) {
       try {
@@ -196,6 +196,22 @@ async function ensureImageElement(
         input.addEventListener("playing", onReady, { once: true });
         setTimeout(resolve, 1500);
       });
+    }
+
+    // Convert live video frame to static canvas for rock-solid mobile WebGL/iOS compatibility
+    if (input.videoWidth > 0 && input.videoHeight > 0) {
+      try {
+        const offscreen = document.createElement("canvas");
+        offscreen.width = input.videoWidth;
+        offscreen.height = input.videoHeight;
+        const ctx = offscreen.getContext("2d");
+        if (ctx) {
+          ctx.drawImage(input, 0, 0, offscreen.width, offscreen.height);
+          return offscreen;
+        }
+      } catch (canvasErr) {
+        console.warn("[face-api] Fallback from canvas copy to raw video element:", canvasErr);
+      }
     }
   }
 
@@ -482,7 +498,7 @@ export async function verifyLiveFaceWithEmployee(
  * 1:1 Verification of live camera face against a candidate photo (during enrollment)
  */
 export async function verifyLiveFaceAgainstCandidatePhoto(
-  videoElement: HTMLVideoElement,
+  videoElement: HTMLVideoElement | HTMLCanvasElement | string,
   candidatePhotoUrl: string
 ): Promise<FaceMatchResult> {
   const modelsReady = await loadFaceApiModels();
@@ -497,8 +513,8 @@ export async function verifyLiveFaceAgainstCandidatePhoto(
     };
   }
 
-  // Ensure video is playing and active
-  if (videoElement.paused) {
+  // Ensure video is playing and active if it's a video element
+  if (videoElement instanceof HTMLVideoElement && videoElement.paused) {
     try {
       await videoElement.play();
     } catch (e) {
