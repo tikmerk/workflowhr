@@ -20,11 +20,13 @@ import {
   Save,
   Check,
   Sun,
+  SwitchCamera,
 } from "lucide-react";
 import { Employee } from "../../types";
 import { requestUserMediaStream, captureFrameAsBase64 } from "../../utils/faceUtils";
 import { compressAndOptimizeImage } from "../../utils/imageCompression";
 import {
+  loadFaceApiModels,
   verifyLiveFaceAgainstCandidatePhoto,
   detectFaceInPhoto,
   drawBiometricMeshOverlay,
@@ -58,6 +60,8 @@ export const FaceEnrollmentModal: React.FC<FaceEnrollmentModalProps> = ({
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [cameraLoading, setCameraLoading] = useState<boolean>(true);
   const [cameraError, setCameraError] = useState<string | null>(null);
+  const [facingMode, setFacingMode] = useState<"user" | "environment">("user");
+  const [verificationProgressText, setVerificationProgressText] = useState<string | null>(null);
 
   // Reference Photo under test (candidate)
   const [candidatePhoto, setCandidatePhoto] = useState<string | null>(
@@ -93,43 +97,98 @@ export const FaceEnrollmentModal: React.FC<FaceEnrollmentModalProps> = ({
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [photoChangeNotice, setPhotoChangeNotice] = useState<string | null>(null);
 
-  // Initialize Camera on Modal Open
-  useEffect(() => {
-    if (!isOpen) return;
+  // Stop current active camera stream
+  const stopCameraStream = useCallback(() => {
+    if (stream) {
+      stream.getTracks().forEach((track) => {
+        try {
+          track.stop();
+        } catch {}
+      });
+      setStream(null);
+    }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
+  }, [stream]);
 
-    let activeStream: MediaStream | null = null;
+  // Start / restart camera stream with error recovery
+  const startCameraStream = useCallback(async (preferredFacing: "user" | "environment" = facingMode) => {
     setCameraLoading(true);
     setCameraError(null);
 
-    async function initCam() {
-      try {
-        const s = await requestUserMediaStream();
-        activeStream = s;
-        setStream(s);
-        if (videoRef.current) {
-          videoRef.current.srcObject = s;
-        }
-        setCameraLoading(false);
-      } catch (err: any) {
-        console.warn("Enrollment camera access notice:", err);
-        setCameraError(
-          "ক্যামেরা অনুমতি পাওয়া যায়নি। অনুগ্রহ করে ব্রাউজারে ক্যামেরার অনুমতি (Camera Permission) দিন।"
-        );
-        setCameraLoading(false);
-      }
+    // Stop current stream if running
+    if (stream) {
+      stream.getTracks().forEach((t) => {
+        try {
+          t.stop();
+        } catch {}
+      });
     }
 
-    initCam();
+    try {
+      const s = await requestUserMediaStream(preferredFacing);
+      setStream(s);
+      if (videoRef.current) {
+        videoRef.current.srcObject = s;
+        videoRef.current.setAttribute("playsinline", "true");
+        videoRef.current.setAttribute("webkit-playsinline", "true");
+        try {
+          await videoRef.current.play();
+        } catch (playErr) {
+          console.warn("[Camera] Autoplay caught:", playErr);
+        }
+      }
+      setCameraLoading(false);
+      return s;
+    } catch (err: any) {
+      console.warn("Enrollment camera access notice:", err);
+      setCameraError(
+        err?.message || "ক্যামেরা চালু করা সম্ভব হয়নি। অনুগ্রহ করে ব্রাউজারের ক্যামেরা অনুমতি পরীক্ষা করুন।"
+      );
+      setCameraLoading(false);
+      return null;
+    }
+  }, [facingMode, stream]);
+
+  // Pre-warm AI Models and Pause background camera on open
+  useEffect(() => {
+    if (!isOpen) return;
+
+    // Pause any background kiosk camera streams to release mobile hardware locks
+    window.dispatchEvent(new CustomEvent("pause-background-camera"));
+
+    // Pre-warm neural network models in memory
+    loadFaceApiModels().catch((err) => console.warn("Model pre-warm in modal:", err));
+
+    return () => {
+      // Resume background kiosk camera when modal closes
+      window.dispatchEvent(new CustomEvent("resume-background-camera"));
+    };
+  }, [isOpen]);
+
+  // Initialize Camera on Modal Open or when facingMode changes
+  useEffect(() => {
+    if (!isOpen) return;
+
+    let mounted = true;
+    startCameraStream(facingMode).then((s) => {
+      if (!mounted && s) {
+        s.getTracks().forEach((t) => t.stop());
+      }
+    });
 
     // Check existing photo if already enrolled
     if (employee.faceTemplateRegistered && employee.faceRegisteredPhoto) {
       detectFaceInPhoto(employee.faceRegisteredPhoto)
         .then((res) => {
-          setCandidatePhotoAnalysis({
-            hasFace: res.hasFace,
-            qualityScore: res.qualityScore,
-            banglaMessage: res.banglaMessage,
-          });
+          if (mounted) {
+            setCandidatePhotoAnalysis({
+              hasFace: res.hasFace,
+              qualityScore: res.qualityScore,
+              banglaMessage: res.banglaMessage,
+            });
+          }
         })
         .catch((err) => {
           console.warn("Face analysis fallback:", err);
@@ -137,11 +196,27 @@ export const FaceEnrollmentModal: React.FC<FaceEnrollmentModalProps> = ({
     }
 
     return () => {
-      if (activeStream) {
-        activeStream.getTracks().forEach((t) => t.stop());
-      }
+      mounted = false;
+      stopCameraStream();
     };
-  }, [isOpen, employee]);
+  }, [isOpen, facingMode]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Synchronize stream attachment to videoRef whenever stream changes
+  useEffect(() => {
+    if (videoRef.current && stream) {
+      videoRef.current.srcObject = stream;
+      videoRef.current.setAttribute("playsinline", "true");
+      videoRef.current.setAttribute("webkit-playsinline", "true");
+      videoRef.current.play().catch((err) => console.warn("Video stream play notice:", err));
+    }
+  }, [stream]);
+
+  // Camera Facing toggle
+  const handleToggleFacingMode = async () => {
+    const nextMode = facingMode === "user" ? "environment" : "user";
+    setFacingMode(nextMode);
+    await startCameraStream(nextMode);
+  };
 
   // Handle Photo File Upload (From gallery / PC)
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -218,21 +293,36 @@ export const FaceEnrollmentModal: React.FC<FaceEnrollmentModalProps> = ({
 
   // Run Mandatory Live Face Verification between Candidate Photo and Live Camera
   const handleExecuteLiveVerification = async () => {
-    if (!videoRef.current) {
-      setCameraError("ক্যামেরা প্রস্তুত নয়। অনুগ্রহ করে অপেক্ষা করুন।");
-      return;
-    }
-
     if (!candidatePhoto) {
       setPhotoChangeNotice("প্রথমে একটি রেফারেন্স ছবি আপলোড বা নির্বাচন করুন।");
       return;
     }
 
     setIsVerifying(true);
+    setVerificationProgressText("ক্যামেরা ও এআই ফেস মডেল প্রস্তুত করা হচ্ছে...");
 
     try {
+      // 1. Ensure camera stream is alive and video is playing
+      let activeVideo = videoRef.current;
+      if (!stream || !activeVideo || activeVideo.readyState < 2 || activeVideo.videoWidth === 0) {
+        setVerificationProgressText("ক্যামেরা পুনরায় সক্রিয় করা হচ্ছে...");
+        const s = await startCameraStream(facingMode);
+        if (!s) {
+          throw new Error("ক্যামেরা চালু করা যায়নি। অনুগ্রহ করে ব্রাউজারের ক্যামেরা অনুমতি দিয়ে পুনরায় চেষ্টা করুন।");
+        }
+        // Brief delay for video buffer frames to arrive
+        await new Promise((r) => setTimeout(r, 600));
+        activeVideo = videoRef.current;
+      }
+
+      if (!activeVideo) {
+        throw new Error("ক্যামেরা প্রস্তুত করা সম্ভব হয়নি।");
+      }
+
+      setVerificationProgressText("128D বায়োমেট্রিক ভেক্টর বিশ্লেষণ করা হচ্ছে...");
+
       // Execute 128D AI Biometric Verification
-      const result = await verifyLiveFaceAgainstCandidatePhoto(videoRef.current, candidatePhoto);
+      const result = await verifyLiveFaceAgainstCandidatePhoto(activeVideo, candidatePhoto);
       setVerificationResult(result);
 
       if (result.matched) {
@@ -259,10 +349,19 @@ export const FaceEnrollmentModal: React.FC<FaceEnrollmentModalProps> = ({
           );
         }
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("Live verification error:", err);
+      setVerificationResult({
+        matched: false,
+        matchScore: 0,
+        reason: "NO_FACE_IN_FRAME",
+        statusMessage: err?.message || "Verification failed",
+        banglaStatusMessage: err?.message || "লাইভ ফেস ভেরিফিকেশন সম্পন্ন করা যায়নি। পুনরায় 'লাইভ ভেরিফাই' বাটনে চাপুন।",
+        confidenceTier: "NO_FACE",
+      });
     } finally {
       setIsVerifying(false);
+      setVerificationProgressText(null);
     }
   };
 
@@ -623,51 +722,101 @@ export const FaceEnrollmentModal: React.FC<FaceEnrollmentModalProps> = ({
                     </div>
 
                     {/* Live Camera Viewport */}
-                    <div className="mt-4 relative aspect-[4/3] rounded-2xl bg-black border-2 border-slate-800 overflow-hidden flex items-center justify-center shadow-inner">
-                      {cameraLoading ? (
-                        <div className="text-center space-y-2 text-xs text-slate-400">
-                          <RefreshCw className="w-6 h-6 animate-spin mx-auto text-teal-400" />
-                          <p>ক্যামেরা চালু হচ্ছে...</p>
-                        </div>
-                      ) : cameraError ? (
-                        <div className="p-4 text-center text-xs text-rose-400 space-y-2">
-                          <AlertTriangle className="w-6 h-6 mx-auto text-rose-500" />
-                          <p>{cameraError}</p>
-                        </div>
-                      ) : (
-                        <>
-                          <video
-                            ref={videoRef}
-                            autoPlay
-                            playsInline
-                            muted
-                            className="w-full h-full object-cover scale-x-[-1]"
-                          />
-                          <canvas
-                            ref={canvasOverlayRef}
-                            width={320}
-                            height={240}
-                            className="absolute inset-0 w-full h-full pointer-events-none"
-                          />
+                    <div className="mt-4 relative aspect-[4/3] rounded-2xl bg-black border-2 border-slate-800 overflow-hidden flex items-center justify-center shadow-inner group">
+                      {/* Video element is permanently rendered in DOM so videoRef is always available */}
+                      <video
+                        ref={videoRef}
+                        autoPlay
+                        playsInline
+                        muted
+                        onLoadedMetadata={() => {
+                          setCameraLoading(false);
+                          if (videoRef.current) {
+                            videoRef.current.play().catch(() => {});
+                          }
+                        }}
+                        className={`w-full h-full object-cover ${facingMode === "user" ? "scale-x-[-1]" : ""}`}
+                      />
+                      <canvas
+                        ref={canvasOverlayRef}
+                        width={320}
+                        height={240}
+                        className="absolute inset-0 w-full h-full pointer-events-none"
+                      />
 
-                          {/* Face Oval Frame Guide */}
-                          <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-                            <div
-                              className={`w-32 h-44 rounded-[50%] border-2 transition-colors ${
-                                isLiveVerified
-                                  ? "border-emerald-400 shadow-[0_0_20px_rgba(52,211,153,0.5)]"
-                                  : verificationResult?.reason === "MISMATCH_LOW_CONFIDENCE"
-                                  ? "border-rose-500 shadow-[0_0_20px_rgba(239,68,68,0.5)]"
-                                  : "border-dashed border-teal-400/80"
-                              }`}
-                            />
+                      {/* Face Oval Frame Guide */}
+                      {!cameraLoading && !cameraError && (
+                        <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
+                          <div
+                            className={`w-32 h-44 rounded-[50%] border-2 transition-colors ${
+                              isLiveVerified
+                                ? "border-emerald-400 shadow-[0_0_20px_rgba(52,211,153,0.5)]"
+                                : verificationResult?.reason === "MISMATCH_LOW_CONFIDENCE"
+                                ? "border-rose-500 shadow-[0_0_20px_rgba(239,68,68,0.5)]"
+                                : "border-dashed border-teal-400/80"
+                            }`}
+                          />
+                        </div>
+                      )}
+
+                      {/* Quick Camera Flip & Refresh Controls (Top Right Overlay) */}
+                      <div className="absolute top-2.5 right-2.5 z-20 flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={handleToggleFacingMode}
+                          title={facingMode === "user" ? "ব্যাক ক্যামেরায় পরিবর্তন করুন" : "ফ্রন্ট ক্যামেরায় পরিবর্তন করুন"}
+                          className="p-2 rounded-xl bg-slate-900/80 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700/80 shadow-md backdrop-blur-xs transition-all cursor-pointer"
+                        >
+                          <SwitchCamera className="w-4 h-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => startCameraStream(facingMode)}
+                          title="ক্যামেরা রিস্টার্ট করুন"
+                          className="p-2 rounded-xl bg-slate-900/80 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700/80 shadow-md backdrop-blur-xs transition-all cursor-pointer"
+                        >
+                          <RefreshCw className="w-4 h-4" />
+                        </button>
+                      </div>
+
+                      {/* Camera Loading Overlay */}
+                      {cameraLoading && (
+                        <div className="absolute inset-0 z-10 bg-slate-950/90 backdrop-blur-xs flex flex-col items-center justify-center p-4 text-center space-y-2.5">
+                          <RefreshCw className="w-8 h-8 animate-spin text-teal-400 mx-auto" />
+                          <p className="text-xs font-semibold text-slate-200">ক্যামেরা প্রস্তুত হচ্ছে...</p>
+                          <p className="text-[11px] text-slate-400">মোবাইল বা ব্রাউজারে অনুমতি চাইলে 'Allow' চাপুন</p>
+                        </div>
+                      )}
+
+                      {/* Camera Error Overlay with direct retry buttons */}
+                      {cameraError && !cameraLoading && (
+                        <div className="absolute inset-0 z-10 bg-slate-950/95 flex flex-col items-center justify-center p-4 text-center space-y-3">
+                          <AlertTriangle className="w-8 h-8 text-rose-500 mx-auto" />
+                          <p className="text-xs font-medium text-rose-300 max-w-xs leading-relaxed">{cameraError}</p>
+                          <div className="flex items-center gap-2 pt-1">
+                            <button
+                              type="button"
+                              onClick={() => startCameraStream(facingMode)}
+                              className="px-3.5 py-1.5 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-md transition-all"
+                            >
+                              <RefreshCw className="w-3.5 h-3.5" />
+                              <span>পুনরায় চালু করুন</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleToggleFacingMode}
+                              className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 flex items-center gap-1.5 cursor-pointer transition-all"
+                            >
+                              <SwitchCamera className="w-3.5 h-3.5" />
+                              <span>ক্যামেরা বদলান</span>
+                            </button>
                           </div>
+                        </div>
+                      )}
 
-                          {/* Scanning HUD beam during verification */}
-                          {isVerifying && (
-                            <div className="absolute inset-x-0 h-1 bg-gradient-to-r from-transparent via-teal-400 to-transparent animate-pulse top-1/2 -translate-y-1/2" />
-                          )}
-                        </>
+                      {/* Scanning HUD beam during verification */}
+                      {isVerifying && (
+                        <div className="absolute inset-x-0 h-1 bg-gradient-to-r from-transparent via-teal-400 to-transparent animate-pulse top-1/2 -translate-y-1/2 z-10" />
                       )}
                     </div>
                   </div>
@@ -677,7 +826,7 @@ export const FaceEnrollmentModal: React.FC<FaceEnrollmentModalProps> = ({
                     <button
                       type="button"
                       onClick={handleExecuteLiveVerification}
-                      disabled={isVerifying || !candidatePhoto || Boolean(cameraError)}
+                      disabled={isVerifying || !candidatePhoto}
                       className={`w-full py-3 px-4 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md ${
                         isLiveVerified
                           ? "bg-emerald-600/30 hover:bg-emerald-600/40 text-emerald-300 border border-emerald-500/50"
@@ -687,7 +836,7 @@ export const FaceEnrollmentModal: React.FC<FaceEnrollmentModalProps> = ({
                       {isVerifying ? (
                         <>
                           <RefreshCw className="w-4 h-4 animate-spin" />
-                          <span>128D ফেস ভেক্টর তুলনা করা হচ্ছে...</span>
+                          <span>{verificationProgressText || "128D ফেস ভেক্টর তুলনা করা হচ্ছে..."}</span>
                         </>
                       ) : isLiveVerified ? (
                         <>

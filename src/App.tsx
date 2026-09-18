@@ -1903,6 +1903,7 @@ function AppContent() {
               onLogAttendance={handleAttendanceSuccess}
               onOpenEnrollmentModal={handleOpenFaceEnrollModal}
               onOpenAttendanceModal={() => setIsAttendanceModalOpen(true)}
+              isPaused={Boolean(faceEnrollTargetEmployee)}
             />
           )}
 

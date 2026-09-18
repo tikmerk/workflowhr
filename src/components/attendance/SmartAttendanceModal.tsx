@@ -98,6 +98,7 @@ export const SmartAttendanceModal: React.FC<SmartAttendanceModalProps> = ({
         isModal={true}
         onClose={onClose}
         selectedBranchId={activeBranch.id}
+        isPaused={Boolean(enrollingEmployee)}
         onLogAttendance={(record) => {
           onAttendanceSuccess(record);
         }}

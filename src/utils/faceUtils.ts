@@ -34,24 +34,71 @@ export const LIVENESS_CHALLENGES: ChallengePrompt[] = [
   },
 ];
 
-export async function requestUserMediaStream(): Promise<MediaStream> {
+export async function requestUserMediaStream(
+  preferredFacingMode: "user" | "environment" = "user",
+  deviceId?: string
+): Promise<MediaStream> {
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    throw new Error("WebRTC camera access is not supported by your browser environment.");
+    throw new Error("আপনার ব্রাউজারে বা অ্যাপে ওয়েব-ক্যামেরা (WebRTC) সুবিধা সাপোর্ট করে না। অন্য আধুনিক ব্রাউজার ব্যবহার করুন।");
   }
-  return navigator.mediaDevices.getUserMedia({
-    video: {
-      width: { ideal: 640 },
-      height: { ideal: 480 },
-      facingMode: "user",
-    },
-    audio: false,
-  });
+
+  // Tier 1: Try requested deviceId or exact facingMode with ideal dimensions
+  try {
+    const constraints: MediaStreamConstraints = {
+      video: deviceId
+        ? { deviceId: { exact: deviceId } }
+        : {
+            facingMode: preferredFacingMode,
+            width: { ideal: 640 },
+            height: { ideal: 480 },
+          },
+      audio: false,
+    };
+    return await navigator.mediaDevices.getUserMedia(constraints);
+  } catch (err1) {
+    console.warn("[Camera] Tier 1 constraint failed, trying flexible facingMode fallback...", err1);
+  }
+
+  // Tier 2: Try flexible ideal facingMode without resolution lock (Crucial for mobile portrait cameras)
+  try {
+    const constraints: MediaStreamConstraints = {
+      video: {
+        facingMode: { ideal: preferredFacingMode },
+      },
+      audio: false,
+    };
+    return await navigator.mediaDevices.getUserMedia(constraints);
+  } catch (err2) {
+    console.warn("[Camera] Tier 2 fallback failed, trying generic video constraint...", err2);
+  }
+
+  // Tier 3: Universal fallback - any available video input stream
+  try {
+    return await navigator.mediaDevices.getUserMedia({
+      video: true,
+      audio: false,
+    });
+  } catch (err3: any) {
+    console.error("[Camera] All media stream attempts failed:", err3);
+    if (err3?.name === "NotAllowedError" || err3?.name === "PermissionDeniedError") {
+      throw new Error("ক্যামেরা ব্যবহারের অনুমতি বাতিল করা হয়েছে। ব্রাউজারের সেটিংস বা এড্রেস বার থেকে ক্যামেরা পারমিশন 'Allow' করুন।");
+    }
+    if (err3?.name === "NotFoundError" || err3?.name === "DevicesNotFoundError") {
+      throw new Error("আপনার ডিভাইসে কোনো সক্রিয় ক্যামেরা পাওয়া যায়নি। ক্যামেরা সংযুক্ত আছে কিনা পরীক্ষা করুন।");
+    }
+    if (err3?.name === "NotReadableError" || err3?.name === "TrackStartError") {
+      throw new Error("অন্য কোনো অ্যাপ বা উইন্ডো ক্যামেরাটি ব্যবহার করছে। অনুগ্রহ করে অন্য ক্যামেরা অ্যাপ বন্ধ করে পুনরায় চেষ্টা করুন।");
+    }
+    throw new Error("ক্যামেরা চালু করতে সমস্যা হয়েছে: " + (err3?.message || "অজ্ঞাত সমস্যা"));
+  }
 }
 
 export function captureFrameAsBase64(videoElement: HTMLVideoElement): string {
   const canvas = document.createElement("canvas");
-  canvas.width = videoElement.videoWidth || 640;
-  canvas.height = videoElement.videoHeight || 480;
+  const vw = videoElement.videoWidth || 640;
+  const vh = videoElement.videoHeight || 480;
+  canvas.width = vw;
+  canvas.height = vh;
   const ctx = canvas.getContext("2d");
   if (ctx) {
     // Mirror the selfie horizontally for natural preview capture

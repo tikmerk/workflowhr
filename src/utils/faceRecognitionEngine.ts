@@ -107,23 +107,27 @@ export async function loadFaceApiModels(): Promise<boolean> {
     const localUri = "/models";
     const cdnUri = "https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@master/weights";
 
-    const loadNets = async (baseUri: string) => {
-      await Promise.all([
+    const loadNets = async (baseUri: string, timeoutMs: number = 8000) => {
+      const loadPromise = Promise.all([
         faceapi.nets.tinyFaceDetector.loadFromUri(baseUri),
         faceapi.nets.faceLandmark68Net.loadFromUri(baseUri),
         faceapi.nets.faceRecognitionNet.loadFromUri(baseUri),
       ]);
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error(`Timeout loading weights from ${baseUri}`)), timeoutMs)
+      );
+      await Promise.race([loadPromise, timeoutPromise]);
     };
 
     try {
-      await loadNets(localUri);
+      await loadNets(localUri, 7000);
       modelsLoaded = true;
       console.log("[face-api] Models loaded successfully from /models");
       return true;
     } catch (localErr) {
-      console.warn("[face-api] Local models failed, loading from CDN fallback...", localErr);
+      console.warn("[face-api] Local models failed/timeout, loading from CDN fallback...", localErr);
       try {
-        await loadNets(cdnUri);
+        await loadNets(cdnUri, 12000);
         modelsLoaded = true;
         console.log("[face-api] Models loaded successfully from CDN");
         return true;
@@ -170,6 +174,31 @@ async function ensureImageElement(
       img.src = input;
     });
   }
+
+  // If input is video, wait up to 1.5s for video dimensions to be established
+  if (input instanceof HTMLVideoElement) {
+    if (input.paused) {
+      try {
+        await input.play();
+      } catch {}
+    }
+    if (input.readyState < 2 || input.videoWidth === 0) {
+      await new Promise<void>((resolve) => {
+        if (input.readyState >= 2 && input.videoWidth > 0) return resolve();
+        const onReady = () => {
+          input.removeEventListener("loadeddata", onReady);
+          input.removeEventListener("canplay", onReady);
+          input.removeEventListener("playing", onReady);
+          resolve();
+        };
+        input.addEventListener("loadeddata", onReady, { once: true });
+        input.addEventListener("canplay", onReady, { once: true });
+        input.addEventListener("playing", onReady, { once: true });
+        setTimeout(resolve, 1500);
+      });
+    }
+  }
+
   return input;
 }
 
@@ -456,64 +485,103 @@ export async function verifyLiveFaceAgainstCandidatePhoto(
   videoElement: HTMLVideoElement,
   candidatePhotoUrl: string
 ): Promise<FaceMatchResult> {
-  await loadFaceApiModels();
-
-  const [candidateRes, videoRes] = await Promise.all([
-    extractFaceDescriptor(candidatePhotoUrl),
-    extractFaceDescriptor(videoElement),
-  ]);
-
-  if (!candidateRes.descriptor) {
+  const modelsReady = await loadFaceApiModels();
+  if (!modelsReady) {
     return {
       matched: false,
       matchScore: 0,
       reason: "NO_PHOTO_ENROLLED",
-      statusMessage: "No face detected in candidate photo",
-      banglaStatusMessage: "আপলোড করা ছবিতে কোনো মুখ শনাক্ত হয়নি। স্পষ্ট ছবি আপলোড করুন।",
+      statusMessage: "Face recognition AI models could not be loaded",
+      banglaStatusMessage: "বায়োমেট্রিক মডেল লোড হতে সমস্যা হয়েছে। অনুগ্রহ করে ইন্টারনেট সংযোগ চেক করে পুনরায় চেষ্টা করুন।",
       confidenceTier: "NO_FACE",
     };
   }
 
-  if (!videoRes.descriptor || !videoRes.box) {
-    return {
-      matched: false,
-      matchScore: 0,
-      reason: "NO_FACE_IN_FRAME",
-      statusMessage: "No face detected in live camera",
-      banglaStatusMessage: "লাইভ ক্যামেরায় কোনো মুখ দেখা যাচ্ছে না। ক্যামেরার মাঝে আসুন।",
-      confidenceTier: "NO_FACE",
-    };
+  // Ensure video is playing and active
+  if (videoElement.paused) {
+    try {
+      await videoElement.play();
+    } catch (e) {
+      console.warn("Video play check:", e);
+    }
   }
 
-  const distance = faceapi.euclideanDistance(videoRes.descriptor, candidateRes.descriptor);
+  // 12-second execution safety guard against hung promises on mobile
+  const verifyPromise = (async () => {
+    const [candidateRes, videoRes] = await Promise.all([
+      extractFaceDescriptor(candidatePhotoUrl),
+      extractFaceDescriptor(videoElement),
+    ]);
 
-  if (distance > MAX_DESCRIPTOR_DISTANCE) {
+    if (!candidateRes.descriptor) {
+      return {
+        matched: false,
+        matchScore: 0,
+        reason: "NO_PHOTO_ENROLLED" as const,
+        statusMessage: "No face detected in candidate photo",
+        banglaStatusMessage: "আপলোড করা ছবিতে কোনো মুখ শনাক্ত হয়নি। স্পষ্ট ছবি আপলোড করুন।",
+        confidenceTier: "NO_FACE" as const,
+      };
+    }
+
+    if (!videoRes.descriptor || !videoRes.box) {
+      return {
+        matched: false,
+        matchScore: 0,
+        reason: "NO_FACE_IN_FRAME" as const,
+        statusMessage: "No face detected in live camera",
+        banglaStatusMessage: "লাইভ ক্যামেরায় কোনো মুখ দেখা যাচ্ছে না। ক্যামেরার মাঝখানে সোজা হয়ে বসুন।",
+        confidenceTier: "NO_FACE" as const,
+      };
+    }
+
+    const distance = faceapi.euclideanDistance(videoRes.descriptor, candidateRes.descriptor);
+
+    if (distance > MAX_DESCRIPTOR_DISTANCE) {
+      return {
+        matched: false,
+        matchScore: Math.max(0, Math.round((1 - distance) * 100)),
+        reason: "MISMATCH_LOW_CONFIDENCE" as const,
+        distance,
+        statusMessage: `Face mismatch: Distance ${distance.toFixed(3)} exceeds ${MAX_DESCRIPTOR_DISTANCE}`,
+        banglaStatusMessage: `মুখমণ্ডল মিলছে না (দূরত্ব: ${distance.toFixed(2)})। লাইভ চেহারার সাথে ছবির কোনো মিল নেই।`,
+        confidenceTier: "MISMATCH" as const,
+        boundingBox: videoRes.box,
+      };
+    }
+
+    const matchScore = Math.min(100, Math.max(55, Math.round((1 - distance * 0.9) * 100)));
+
     return {
-      matched: false,
-      matchScore: Math.max(0, Math.round((1 - distance) * 100)),
-      reason: "MISMATCH_LOW_CONFIDENCE",
+      matched: true,
+      matchScore,
+      reason: "SUCCESS" as const,
       distance,
-      statusMessage: `Face mismatch: Distance ${distance.toFixed(3)} exceeds ${MAX_DESCRIPTOR_DISTANCE}`,
-      banglaStatusMessage: `মুখমণ্ডল মিলছে না (দূরত্ব: ${distance.toFixed(2)})। লাইভ চেহারার সাথে ছবির কোনো মিল নেই।`,
-      confidenceTier: "MISMATCH",
+      statusMessage: `Biometric face verified (${matchScore}%)`,
+      banglaStatusMessage: `লাইভ চেহারার সাথে ছবির সফল মিল পাওয়া গেছে (${matchScore}%)!`,
+      confidenceTier: matchScore >= 80 ? ("HIGH" as const) : ("MEDIUM" as const),
       boundingBox: videoRes.box,
+      cosineSimilarity: 1 - distance,
+      featureVectorLength: 128,
     };
-  }
+  })();
 
-  const matchScore = Math.min(100, Math.max(55, Math.round((1 - distance * 0.9) * 100)));
+  const timeoutPromise = new Promise<FaceMatchResult>((resolve) =>
+    setTimeout(
+      () =>
+        resolve({
+          matched: false,
+          matchScore: 0,
+          reason: "NO_FACE_IN_FRAME",
+          statusMessage: "Verification timed out",
+          banglaStatusMessage: "ক্যামেরা ফ্রেম প্রসেসিংয়ে বিলম্ব হয়েছে। আলো পর্যাপ্ত রেখে পুনরায় 'লাইভ ভেরিফাই' বাটনে চাপুন।",
+          confidenceTier: "NO_FACE",
+        }),
+      12000
+    )
+  );
 
-  return {
-    matched: true,
-    matchScore,
-    reason: "SUCCESS",
-    distance,
-    statusMessage: `Biometric face verified (${matchScore}%)`,
-    banglaStatusMessage: `লাইভ চেহারার সাথে ছবির সফল মিল পাওয়া গেছে (${matchScore}%)!`,
-    confidenceTier: matchScore >= 80 ? "HIGH" : "MEDIUM",
-    boundingBox: videoRes.box,
-    cosineSimilarity: 1 - distance,
-    featureVectorLength: 128,
-  };
+  return Promise.race([verifyPromise, timeoutPromise]);
 }
 
 // Multi-Factor Anti-Spoofing & Adaptive Liveness State Tracking

@@ -71,6 +71,7 @@ interface RealtimeFaceRecognitionViewProps {
   onLogAttendance: (log: AttendanceRecord) => void;
   onOpenEnrollmentModal?: (employee?: Employee) => void;
   onOpenAttendanceModal?: () => void;
+  isPaused?: boolean;
 }
 
 export type KioskMode = "AUTO_KIOSK" | "ONE_TO_ONE" | "ATTENDANCE_LOGS" | "DATABASE_DIRECTORY";
@@ -90,6 +91,7 @@ export const RealtimeFaceRecognitionView: React.FC<RealtimeFaceRecognitionViewPr
   onLogAttendance,
   onOpenEnrollmentModal,
   onOpenAttendanceModal,
+  isPaused = false,
 }) => {
   const { isBangla } = useThemeLanguage();
 
@@ -330,8 +332,13 @@ export const RealtimeFaceRecognitionView: React.FC<RealtimeFaceRecognitionViewPr
     setIsCameraActive(false);
   }, []);
 
-  // Manage camera lifecycle based on active view and toggle
+  // Manage camera lifecycle based on active view, toggle, and pause state
   useEffect(() => {
+    if (isPaused) {
+      stopCamera();
+      return;
+    }
+
     if (activeMode !== "DATABASE_DIRECTORY" && isCameraActive) {
       startCamera();
     } else {
@@ -343,7 +350,27 @@ export const RealtimeFaceRecognitionView: React.FC<RealtimeFaceRecognitionViewPr
         streamRef.current.getTracks().forEach((t) => t.stop());
       }
     };
-  }, [activeMode, isCameraActive, selectedDeviceId, startCamera, stopCamera]);
+  }, [isPaused, activeMode, isCameraActive, selectedDeviceId, startCamera, stopCamera]);
+
+  // Global listener to pause camera if another modal (like FaceEnrollmentModal) needs exclusive hardware
+  useEffect(() => {
+    const handlePause = () => {
+      stopCamera();
+    };
+    const handleResume = () => {
+      if (!isPaused && activeMode !== "DATABASE_DIRECTORY" && isCameraActive) {
+        startCamera();
+      }
+    };
+
+    window.addEventListener("pause-background-camera", handlePause);
+    window.addEventListener("resume-background-camera", handleResume);
+
+    return () => {
+      window.removeEventListener("pause-background-camera", handlePause);
+      window.removeEventListener("resume-background-camera", handleResume);
+    };
+  }, [isPaused, activeMode, isCameraActive, startCamera, stopCamera]);
 
   // Reset verification state when switching modes or selecting another employee
   useEffect(() => {
