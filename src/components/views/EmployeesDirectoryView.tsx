@@ -38,6 +38,7 @@ import {
   LayoutDashboard,
   UserCheck,
   Archive,
+  Edit3,
 } from "lucide-react";
 import {
   Employee,
@@ -53,6 +54,8 @@ import { exportToCSV } from "../../utils/exportUtils";
 import { FaceEnrollmentModal } from "../attendance/FaceEnrollmentModal";
 import { useCompanyBranding } from "../../context/CompanyBrandingContext";
 import { useThemeLanguage } from "../../context/ThemeLanguageContext";
+import { ViewA4ResumeModal } from "../modals/ViewA4ResumeModal";
+import { EditEmployeeCVModal } from "../modals/EditEmployeeCVModal";
 import {
   getNextAvailableEmployeeCredentials,
   validateEmployeeIdAvailability,
@@ -269,6 +272,8 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
   const [showAddModal, setShowAddModal] = useState(false);
   const [enrollingEmployee, setEnrollingEmployee] = useState<Employee | null>(null);
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
+  const [viewingResumeEmployee, setViewingResumeEmployee] = useState<Employee | null>(null);
+  const [editingCvEmployee, setEditingCvEmployee] = useState<Employee | null>(null);
 
   // Edit Employee Form State
   const [editEmpCode, setEditEmpCode] = useState("");
@@ -994,20 +999,27 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
   };
 
   const handleExportCSV = () => {
-    const data = filteredEmployees.map((e) => ({
-      "Employee ID": e.employeeCode,
-      "Full Name": e.fullName,
-      Role: e.role,
-      Designation: e.designationTitle,
-      Department: e.departmentName,
-      Branch: e.branchName,
-      Email: e.email,
-      Phone: e.phone,
-      "Gross Salary (BDT)": e.salary?.grossSalary || 0,
-      "Face Template Enrolled": e.faceTemplateRegistered ? "Yes" : "No",
-      "Bound Device ID": e.boundDeviceId || "N/A",
-      Status: e.status,
-    }));
+    const isConfidential = canAccessConfidentialEmployeeData(currentUser);
+    const data = filteredEmployees.map((e) => {
+      const isSelf = currentUser?.id === e.id;
+      const canSeeConfidential = isConfidential || isSelf;
+
+      return {
+        "Employee ID": e.employeeCode,
+        "Full Name": e.fullName,
+        Role: e.role,
+        Designation: e.designationTitle,
+        Department: e.departmentName,
+        Branch: e.branchName,
+        Email: e.email,
+        Phone: e.phone,
+        "NID Number": canSeeConfidential ? (e.nidNumber || "N/A") : "•••• •••• •••• (Confidential)",
+        "Gross Salary (BDT)": canSeeConfidential ? (e.salary?.grossSalary || 0) : "CONFIDENTIAL",
+        "Face Template Enrolled": canSeeConfidential ? (e.faceTemplateRegistered ? "Yes" : "No") : "CONFIDENTIAL",
+        "Bound Device ID": canSeeConfidential ? (e.boundDeviceId || "N/A") : "CONFIDENTIAL",
+        Status: e.status,
+      };
+    });
     exportToCSV("Workflow_HR_Workforce_Directory", data);
   };
 
@@ -1771,11 +1783,20 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
                 <span className="font-bold text-teal-700 dark:text-teal-300">{selectedEmployee.shiftName}</span>
               </div>
               <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800">
-                <span className="text-slate-500 dark:text-slate-400 block text-[10px]">National ID (NID)</span>
-                <span className="font-bold text-slate-900 dark:text-white">
-                  {selectedEmployee.nidNumber && selectedEmployee.nidNumber.trim() !== ""
-                    ? selectedEmployee.nidNumber
-                    : (isBangla ? "তথ্য দেওয়া হয়নি" : "Not provided")}
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-500 dark:text-slate-400 block text-[10px]">National ID (NID)</span>
+                  {!(canAccessConfidentialEmployeeData(currentUser) || currentUser?.id === selectedEmployee.id) && (
+                    <span className="text-[9px] font-bold text-amber-600 dark:text-amber-400 flex items-center gap-0.5">
+                      <Lock className="w-2.5 h-2.5" /> {isBangla ? "গোপনীয়" : "Confidential"}
+                    </span>
+                  )}
+                </div>
+                <span className="font-bold text-slate-900 dark:text-white font-mono">
+                  {canAccessConfidentialEmployeeData(currentUser) || currentUser?.id === selectedEmployee.id
+                    ? selectedEmployee.nidNumber && selectedEmployee.nidNumber.trim() !== ""
+                      ? selectedEmployee.nidNumber
+                      : (isBangla ? "তথ্য দেওয়া হয়নি" : "Not provided")
+                    : "•••• •••• •••• (সুরক্ষিত)"}
                 </span>
               </div>
               {canAccessConfidentialEmployeeData(currentUser) && (
@@ -1853,6 +1874,30 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
                         <CreditCard className="w-4 h-4" />
                         <span>ডিজিটাল আইডি কার্ড (Digital ID)</span>
                       </button>
+                    )}
+
+                    {(canAccessConfidentialEmployeeData(currentUser) || currentUser?.id === selectedEmployee.id) && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => setViewingResumeEmployee(selectedEmployee)}
+                          className="px-3.5 py-2 bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/30 text-purple-800 dark:text-purple-300 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+                          title="এ ফোর সাইজ রিজিউমে ও এনআইডি ডকুমেন্ট ভিউ করুন"
+                        >
+                          <FileText className="w-4 h-4" />
+                          <span>{isBangla ? "রিজিউমে ও এনআইডি (A4 Resume)" : "A4 Resume & NID"}</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setEditingCvEmployee(selectedEmployee)}
+                          className="px-3.5 py-2 bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/30 text-indigo-800 dark:text-indigo-300 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+                          title="সিভি ও ডকুমেন্টস তথ্য এডিট করুন"
+                        >
+                          <Edit3 className="w-4 h-4" />
+                          <span>{isBangla ? "সিভি এডিট (Edit CV)" : "Edit CV"}</span>
+                        </button>
+                      </>
                     )}
 
                     {canEditEmployeeProfile(selectedEmployee) && (
@@ -3860,6 +3905,35 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
             </div>
           </div>
         </div>
+      )}
+      {/* A4 Resume Modal */}
+      {viewingResumeEmployee && (
+        <ViewA4ResumeModal
+          employee={viewingResumeEmployee}
+          isBangla={isBangla}
+          onClose={() => setViewingResumeEmployee(null)}
+          onEditCV={() => {
+            const emp = viewingResumeEmployee;
+            setViewingResumeEmployee(null);
+            setEditingCvEmployee(emp);
+          }}
+        />
+      )}
+
+      {/* Edit CV Modal */}
+      {editingCvEmployee && (
+        <EditEmployeeCVModal
+          employee={editingCvEmployee}
+          isBangla={isBangla}
+          onClose={() => setEditingCvEmployee(null)}
+          onSaveCV={(updatedEmp) => {
+            onUpdateEmployee(updatedEmp);
+            if (selectedEmployee?.id === updatedEmp.id) {
+              setSelectedEmployee(updatedEmp);
+            }
+            setEditingCvEmployee(null);
+          }}
+        />
       )}
     </div>
   );

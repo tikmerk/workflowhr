@@ -1971,6 +1971,7 @@ function AppContent() {
               payslips={payslips}
               employees={employees}
               branches={branches}
+              currentUser={currentEmployee}
               payrollPolicy={payrollPolicy}
               onUpdatePayrollPolicy={(newPolicy) => {
                 setPayrollPolicy(newPolicy);

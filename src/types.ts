@@ -153,6 +153,58 @@ export interface EmployeeDocument {
   fileSize: string;
 }
 
+export interface EducationQualification {
+  id: string;
+  degreeName: string;
+  subjectOrGroup: string;
+  institution: string;
+  boardOrUniversity: string;
+  result: string;
+  passingYear: string;
+}
+
+export interface WorkExperience {
+  id: string;
+  designation: string;
+  organizationName: string;
+  durationYears: string;
+  responsibilities?: string;
+}
+
+export interface LanguageSkill {
+  id: string;
+  language: string;
+  proficiency: "EXCELLENT" | "MEDIUM" | "NOVICE";
+}
+
+export interface EmployeeCVData {
+  summary?: string;
+  fullName?: string;
+  fatherName?: string;
+  motherName?: string;
+  mobile?: string;
+  email?: string;
+  presentAddress?: string;
+  permanentAddress?: string;
+  nidNumber?: string;
+  nidCardFrontUrl?: string;
+  nidCardBackUrl?: string;
+  bloodGroup?: string;
+  dateOfBirth?: string;
+  height?: string;
+  maritalStatus?: "SINGLE" | "MARRIED" | "DIVORCED" | "WIDOWED";
+  religion?: string;
+  joiningDate?: string;
+  currentDesignation?: string;
+  currentDepartment?: string;
+  currentOrganization?: string;
+  educations: EducationQualification[];
+  experiences: WorkExperience[];
+  computerSkills: string[];
+  languages: LanguageSkill[];
+  lastUpdatedAt?: string;
+}
+
 export interface SalaryBreakdown {
   basic: number;
   houseRent: number;
@@ -216,6 +268,11 @@ export interface Employee {
   passportNumber?: string;
   presentAddress?: string;
   permanentAddress?: string;
+  religion?: string;
+  height?: string;
+  nidCardFrontUrl?: string;
+  nidCardBackUrl?: string;
+  cvData?: EmployeeCVData;
   
   // Employment Details
   joiningDate: string;

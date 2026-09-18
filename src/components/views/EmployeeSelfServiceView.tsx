@@ -31,6 +31,7 @@ import {
   EyeOff,
   RotateCcw,
   Check,
+  Printer,
 } from "lucide-react";
 import {
   Employee,
@@ -42,6 +43,8 @@ import {
   CertificateRecord
 } from "../../types";
 import { FaceEnrollmentModal } from "../attendance/FaceEnrollmentModal";
+import { EditEmployeeCVModal } from "../modals/EditEmployeeCVModal";
+import { ViewA4ResumeModal } from "../modals/ViewA4ResumeModal";
 
 interface EmployeeSelfServiceViewProps {
   currentEmployee: Employee;
@@ -81,6 +84,8 @@ export const EmployeeSelfServiceView: React.FC<EmployeeSelfServiceViewProps> = (
   >("overview");
   const [showFaceEnrollModal, setShowFaceEnrollModal] = useState<boolean>(false);
   const [candidateUploadedPhoto, setCandidateUploadedPhoto] = useState<string | null>(null);
+  const [showEditCVModal, setShowEditCVModal] = useState<boolean>(false);
+  const [showViewA4ResumeModal, setShowViewA4ResumeModal] = useState<boolean>(false);
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
 
   // Self-service password change state
@@ -422,9 +427,33 @@ export const EmployeeSelfServiceView: React.FC<EmployeeSelfServiceViewProps> = (
               title="নিজের প্রোফাইল ও পদবী এডিট করুন"
             >
               <Edit2 className="w-4 h-4 text-teal-600 dark:text-teal-400 shrink-0" />
-              <span className="whitespace-nowrap">এডিট প্রোফাইল ও পদবী</span>
+              <span className="whitespace-nowrap">এডিট প্রোফাইল</span>
             </button>
           )}
+
+          {/* Dedicated Separate Edit CV Button */}
+          <button
+            type="button"
+            id="ess-edit-cv-btn"
+            onClick={() => setShowEditCVModal(true)}
+            className="px-3.5 py-2.5 bg-teal-50 hover:bg-teal-100 dark:bg-teal-950/40 dark:hover:bg-teal-900/60 border border-teal-500/40 text-teal-800 dark:text-teal-200 text-xs font-bold rounded-xl shadow-xs flex items-center gap-2 transition-all cursor-pointer grow sm:grow-0 justify-center"
+            title="সিভি, শিক্ষাগত যোগ্যতা, কাজের অভিজ্ঞতা ও স্কিলস এডিট করুন"
+          >
+            <FileText className="w-4 h-4 text-teal-600 dark:text-teal-400 shrink-0" />
+            <span className="whitespace-nowrap">এডিট সিভি</span>
+          </button>
+
+          {/* Dedicated View/Print A4 Resume Button */}
+          <button
+            type="button"
+            id="ess-view-a4-resume-btn"
+            onClick={() => setShowViewA4ResumeModal(true)}
+            className="px-3.5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white dark:bg-slate-800 dark:hover:bg-slate-700 border border-slate-700 text-xs font-bold rounded-xl shadow-md flex items-center gap-2 transition-all cursor-pointer grow sm:grow-0 justify-center"
+            title="প্রিন্ট-রেডি A4 সাইজের অফিসিয়াল রিজিউমে দেখুন ও প্রিন্ট করুন"
+          >
+            <Printer className="w-4 h-4 text-teal-400 shrink-0" />
+            <span className="whitespace-nowrap">সিভি দেখুন (A4)</span>
+          </button>
 
           <button
             type="button"
@@ -687,6 +716,52 @@ export const EmployeeSelfServiceView: React.FC<EmployeeSelfServiceViewProps> = (
                 </button>
               </div>
             )}
+
+            {/* Official Curriculum Vitae (CV) & NID Documents Action Banner */}
+            <div className="p-4 rounded-xl bg-gradient-to-r from-slate-50 via-teal-50/40 to-slate-50 dark:from-slate-850 dark:via-teal-950/30 dark:to-slate-900 border border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4 mt-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-xl bg-teal-500/15 text-teal-600 dark:text-teal-400 border border-teal-500/30">
+                  <FileText className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                    <span>অফিসিয়াল সিভি ও এনআইডি ডকুমেন্টেশন (Curriculum Vitae & NID)</span>
+                    <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-teal-500/20 text-teal-700 dark:text-teal-300 border border-teal-500/30">
+                      A4 RESUME
+                    </span>
+                  </h4>
+                  <p className="text-[11px] text-slate-600 dark:text-slate-400">
+                    শিক্ষাগত যোগ্যতা, কাজের অভিজ্ঞতা ও এনআইডি কপি আপডেট রাখুন। স্বয়ংক্রিয়ভাবে প্রিন্ট-রেডি A4 সাইজের রিজিউমে তৈরি হয়।
+                  </p>
+                  <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+                    <span>ডিগ্রি: <strong className="text-teal-600 dark:text-teal-300">{currentEmployee.cvData?.educations?.length || 2} টি</strong></span>
+                    <span>•</span>
+                    <span>অভিজ্ঞতা: <strong className="text-teal-600 dark:text-teal-300">{currentEmployee.cvData?.experiences?.length || 1} টি</strong></span>
+                    <span>•</span>
+                    <span>এনআইডি কপি: <strong className={currentEmployee.nidCardFrontUrl ? "text-emerald-500" : "text-amber-500"}>{currentEmployee.nidCardFrontUrl ? "যুক্ত আছে" : "যুক্ত করা হয়নি"}</strong></span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto">
+                <button
+                  type="button"
+                  onClick={() => setShowEditCVModal(true)}
+                  className="flex-1 sm:flex-initial px-3.5 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold rounded-xl border border-slate-200 dark:border-slate-700 flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                >
+                  <FileText className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
+                  <span>সিভি আপডেট করুন</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowViewA4ResumeModal(true)}
+                  className="flex-1 sm:flex-initial px-4 py-2 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white text-xs font-bold rounded-xl shadow-md shadow-teal-500/20 flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                >
+                  <Printer className="w-3.5 h-3.5" />
+                  <span>A4 রিজিউমে প্রিন্ট</span>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -1717,6 +1792,35 @@ export const EmployeeSelfServiceView: React.FC<EmployeeSelfServiceViewProps> = (
             }
             setCandidateUploadedPhoto(null);
             setShowFaceEnrollModal(false);
+          }}
+        />
+      )}
+
+      {/* Edit Employee CV & Qualifications Modal */}
+      {showEditCVModal && (
+        <EditEmployeeCVModal
+          isOpen={showEditCVModal}
+          onClose={() => setShowEditCVModal(false)}
+          employee={currentEmployee}
+          isBangla={true}
+          onSaveCV={(updated) => {
+            if (onUpdateEmployee) {
+              onUpdateEmployee(updated);
+            }
+          }}
+        />
+      )}
+
+      {/* View & Print A4 Resume Modal */}
+      {showViewA4ResumeModal && (
+        <ViewA4ResumeModal
+          isOpen={showViewA4ResumeModal}
+          onClose={() => setShowViewA4ResumeModal(false)}
+          employee={currentEmployee}
+          isBangla={true}
+          onOpenEdit={() => {
+            setShowViewA4ResumeModal(false);
+            setShowEditCVModal(true);
           }}
         />
       )}

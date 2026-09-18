@@ -35,12 +35,18 @@ import {
   Copy,
   Eye,
   EyeOff,
+  Settings2,
+  ChevronRight,
+  FileText,
 } from "lucide-react";
 import { Employee, Branch, UserRole } from "../../types";
 import { useThemeLanguage } from "../../context/ThemeLanguageContext";
 import { useCompanyBranding } from "../../context/CompanyBrandingContext";
 import { checkFirestoreConnection } from "../../services/firestoreService";
 import { ChangeCredentialsModal } from "./ChangeCredentialsModal";
+import { ProfileSettingsModal } from "../modals/ProfileSettingsModal";
+import { EditEmployeeCVModal } from "../modals/EditEmployeeCVModal";
+import { ViewA4ResumeModal } from "../modals/ViewA4ResumeModal";
 
 interface HeaderProps {
   currentEmployee: Employee;
@@ -90,6 +96,10 @@ export const Header: React.FC<HeaderProps> = ({
   const [showDbStatusModal, setShowDbStatusModal] = useState(false);
   const [showChangeCredsModal, setShowChangeCredsModal] = useState(false);
   const [showProfilePassword, setShowProfilePassword] = useState(false);
+  const [showProfileSettingsModal, setShowProfileSettingsModal] = useState(false);
+  const [profileSettingsTab, setProfileSettingsTab] = useState<"profile" | "cv" | "password" | "photo">("profile");
+  const [showEditCVModal, setShowEditCVModal] = useState(false);
+  const [showViewA4ResumeModal, setShowViewA4ResumeModal] = useState(false);
   const [copySuccess, setCopySuccess] = useState<string | null>(null);
   const [dbStatus, setDbStatus] = useState<{
     checking: boolean;
@@ -599,6 +609,61 @@ export const Header: React.FC<HeaderProps> = ({
                   )}
                 </div>
 
+                {/* Unified Profile Settings Hub Section */}
+                <div className="mb-2.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowRoleMenu(false);
+                      setProfileSettingsTab("profile");
+                      setShowProfileSettingsModal(true);
+                    }}
+                    className="w-full flex items-center justify-between p-3 rounded-2xl bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white font-bold text-xs shadow-md shadow-teal-500/20 cursor-pointer transition-all group"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <div className="p-1.5 rounded-xl bg-white/20 text-white">
+                        <Settings2 className="w-4 h-4" />
+                      </div>
+                      <div className="text-left">
+                        <div className="text-xs font-black">
+                          {t("প্রোফাইল সেটিংস", "Profile Settings")}
+                        </div>
+                        <div className="text-[10px] text-teal-100 font-normal">
+                          {t("এডিট প্রোফাইল, সিভি, ছবি ও পাসওয়ার্ড", "Edit profile, CV, photo & password")}
+                        </div>
+                      </div>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-white/80 group-hover:translate-x-1 transition-transform" />
+                  </button>
+
+                  {/* 2 Dedicated Distinct Action Pills: Edit Profile & Edit CV */}
+                  <div className="grid grid-cols-2 gap-1.5 mt-1.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowRoleMenu(false);
+                        setProfileSettingsTab("profile");
+                        setShowProfileSettingsModal(true);
+                      }}
+                      className="py-1.5 px-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-[11px] font-bold flex items-center justify-center gap-1 transition-colors cursor-pointer"
+                    >
+                      <User className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
+                      <span>{t("এডিট প্রোফাইল", "Edit Profile")}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowRoleMenu(false);
+                        setShowEditCVModal(true);
+                      }}
+                      className="py-1.5 px-2 rounded-xl bg-teal-50 dark:bg-teal-950/40 hover:bg-teal-100 dark:hover:bg-teal-900/60 text-teal-700 dark:text-teal-300 border border-teal-500/30 text-[11px] font-bold flex items-center justify-center gap-1 transition-colors cursor-pointer"
+                    >
+                      <FileText className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
+                      <span>{t("এডিট সিভি", "Edit CV")}</span>
+                    </button>
+                  </div>
+                </div>
+
                 {/* User Credentials & Password Change Access Card */}
                 <div className="p-3 rounded-2xl bg-gradient-to-br from-teal-500/10 via-slate-50 to-teal-500/5 dark:from-teal-950/40 dark:via-slate-800/80 dark:to-teal-950/20 border border-teal-500/30 space-y-2.5 mb-2.5">
                   <div className="flex items-center justify-between">
@@ -1013,6 +1078,64 @@ export const Header: React.FC<HeaderProps> = ({
             if (setCurrentEmployee) {
               setCurrentEmployee(updated);
             }
+          }}
+        />
+      )}
+
+      {/* Unified Profile Settings Modal */}
+      {showProfileSettingsModal && (
+        <ProfileSettingsModal
+          isOpen={showProfileSettingsModal}
+          onClose={() => setShowProfileSettingsModal(false)}
+          employee={currentEmployee}
+          isBangla={isBangla}
+          initialTab={profileSettingsTab}
+          onUpdateEmployee={(updated) => {
+            if (onUpdateEmployee) {
+              onUpdateEmployee(updated);
+            }
+            if (setCurrentEmployee) {
+              setCurrentEmployee(updated);
+            }
+          }}
+          onOpenEditCV={() => setShowEditCVModal(true)}
+          onOpenViewA4Resume={() => setShowViewA4ResumeModal(true)}
+          onOpenFaceEnrollModal={() => {
+            if (onOpenFaceEnrollModal) {
+              onOpenFaceEnrollModal(currentEmployee);
+            }
+          }}
+        />
+      )}
+
+      {/* Edit Employee CV Modal */}
+      {showEditCVModal && (
+        <EditEmployeeCVModal
+          isOpen={showEditCVModal}
+          onClose={() => setShowEditCVModal(false)}
+          employee={currentEmployee}
+          isBangla={isBangla}
+          onSaveCV={(updated) => {
+            if (onUpdateEmployee) {
+              onUpdateEmployee(updated);
+            }
+            if (setCurrentEmployee) {
+              setCurrentEmployee(updated);
+            }
+          }}
+        />
+      )}
+
+      {/* View & Print A4 Resume Modal */}
+      {showViewA4ResumeModal && (
+        <ViewA4ResumeModal
+          isOpen={showViewA4ResumeModal}
+          onClose={() => setShowViewA4ResumeModal(false)}
+          employee={currentEmployee}
+          isBangla={isBangla}
+          onOpenEdit={() => {
+            setShowViewA4ResumeModal(false);
+            setShowEditCVModal(true);
           }}
         />
       )}

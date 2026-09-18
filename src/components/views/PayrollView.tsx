@@ -57,6 +57,7 @@ interface PayrollViewProps {
   payslips: Payslip[];
   employees: Employee[];
   branches: Branch[];
+  currentUser?: Employee;
   payrollPolicy?: PayrollPolicyConfig;
   onUpdatePayrollPolicy?: (newPolicy: PayrollPolicyConfig) => void;
   customBonuses?: CustomBonusConfig[];
@@ -154,6 +155,7 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
   payslips,
   employees,
   branches,
+  currentUser,
   payrollPolicy = DEFAULT_POLICY,
   onUpdatePayrollPolicy,
   customBonuses = [],
@@ -167,8 +169,67 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
 }) => {
   const { branding } = useCompanyBranding();
 
+  // Role-Based Access Control (RBAC) Determination for Payroll Management
+  const isPayrollAdmin = useMemo(() => {
+    if (!currentUser) return false;
+    const role = String(currentUser.role || "").toUpperCase();
+    const desig = String(currentUser.designationTitle || "").toLowerCase();
+    const dept = String(currentUser.departmentName || "").toLowerCase();
+
+    if (
+      role === "SUPER_ADMIN" ||
+      role === "COMPANY_ADMIN" ||
+      role === "CEO" ||
+      role === "HR_MANAGER" ||
+      role === "ACCOUNTS_MANAGER" ||
+      role === "ACCOUNT_PAYROLL" ||
+      role === "GRAND_ADMIN" ||
+      currentUser.isSuperAdmin ||
+      currentUser.isCeoOrOwner
+    ) {
+      return true;
+    }
+
+    if (
+      desig.includes("ceo") ||
+      desig.includes("director") ||
+      desig.includes("managing director") ||
+      desig.includes("accountant") ||
+      desig.includes("accounts") ||
+      desig.includes("finance") ||
+      desig.includes("hr manager") ||
+      desig.includes("payroll")
+    ) {
+      return true;
+    }
+
+    if (dept.includes("account") || dept.includes("finance") || dept.includes("human resources")) {
+      return true;
+    }
+
+    return false;
+  }, [currentUser]);
+
+  // General employees can ONLY see their own payslips (Strict Privacy & Separation of Duties)
+  const accessiblePayslips = useMemo(() => {
+    if (isPayrollAdmin) {
+      return payslips;
+    }
+    if (!currentUser) {
+      return [];
+    }
+    return payslips.filter((slip) => slip.employeeId === currentUser.id);
+  }, [payslips, isPayrollAdmin, currentUser]);
+
   // Active Main Sub-Tab
   const [activeMainTab, setActiveMainTab] = useState<"REGISTER" | "POLICY" | "BONUSES" | "HISTORY">("REGISTER");
+
+  // Enforce tab access: If non-admin attempts to view POLICY or BONUSES tabs, redirect to REGISTER
+  useEffect(() => {
+    if (!isPayrollAdmin && (activeMainTab === "POLICY" || activeMainTab === "BONUSES")) {
+      setActiveMainTab("REGISTER");
+    }
+  }, [isPayrollAdmin, activeMainTab]);
 
   // Hierarchical Year and Month Selection
   const [selectedYear, setSelectedYear] = useState<number>(2026);
@@ -234,9 +295,9 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
     );
   }, [customBonuses, currentMonthKey]);
 
-  // Filtered Payslips with robust month & branch matching
+  // Filtered Payslips with robust month & branch matching scoped to accessiblePayslips
   const filteredSlips = useMemo(() => {
-    return payslips.filter((slip) => {
+    return accessiblePayslips.filter((slip) => {
       const slipMonthKey = normalizeMonthKey(slip.payrollMonth);
       const matchesMonth = selectedMonth === "ALL" || slipMonthKey === currentMonthKey;
       const matchesBranch = selectedBranch === "ALL" || slip.branchId === selectedBranch;
@@ -249,7 +310,7 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
 
       return matchesMonth && matchesBranch && matchesStatus && matchesSearch;
     });
-  }, [payslips, selectedMonth, currentMonthKey, selectedBranch, selectedStatus, searchQuery]);
+  }, [accessiblePayslips, selectedMonth, currentMonthKey, selectedBranch, selectedStatus, searchQuery]);
 
   // Summary Metrics
   const totalGross = filteredSlips.reduce((sum, s) => sum + (s.grossEarnings || 0), 0);
@@ -438,56 +499,70 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
 
           {/* Top Quick Actions */}
           <div className="flex flex-wrap items-center gap-2.5">
-            <button
-              id="payroll-run-button"
-              onClick={() => onGeneratePayroll(selectedMonth)}
-              className="px-4 py-2 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white text-xs font-bold rounded-xl shadow-md shadow-teal-500/20 flex items-center gap-1.5 transition-all cursor-pointer"
-              title="এই মাসের সকল উপস্থিত, লেট, বোনাস ও পলিসি অনুযায়ী নতুন পে-রোল ক্যালকুলেট করুন"
-            >
-              <Sparkles className="w-4 h-4" />
-              <span>পে-রোল রান ({selectedMonth})</span>
-            </button>
+            {isPayrollAdmin ? (
+              <>
+                <button
+                  id="payroll-run-button"
+                  onClick={() => onGeneratePayroll(selectedMonth)}
+                  className="px-4 py-2 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white text-xs font-bold rounded-xl shadow-md shadow-teal-500/20 flex items-center gap-1.5 transition-all cursor-pointer"
+                  title="এই মাসের সকল উপস্থিত, লেট, বোনাস ও পলিসি অনুযায়ী নতুন পে-রোল ক্যালকুলেট করুন"
+                >
+                  <Sparkles className="w-4 h-4" />
+                  <span>পে-রোল রান ({selectedMonth})</span>
+                </button>
 
-            {onApproveAll && (
+                {onApproveAll && (
+                  <button
+                    id="payroll-approve-all-button"
+                    onClick={() => onApproveAll(selectedMonth)}
+                    disabled={countPending === 0}
+                    className={`px-3.5 py-2 text-xs font-bold rounded-xl border flex items-center gap-1.5 transition-colors cursor-pointer ${
+                      countPending > 0
+                        ? "bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/40 dark:hover:bg-blue-900/40 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800"
+                        : "bg-slate-50 text-slate-400 border-slate-200 dark:bg-slate-800/40 dark:border-slate-800 cursor-not-allowed opacity-60"
+                    }`}
+                    title="পেন্ডিং পে-স্লিপগুলো এক ক্লিকে অনুমোদন (Approve) করুন"
+                  >
+                    <CheckCircle2 className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                    <span>সকল অনুমোদন করুন ({countPending})</span>
+                  </button>
+                )}
+
+                <button
+                  id="payroll-disburse-all-button"
+                  onClick={() => onDisburseAll(selectedMonth)}
+                  className="px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 text-xs font-bold rounded-xl shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                  title="অনুমোদিত স্যালারি এক ক্লিকে পেইড/ডিসবার্স করুন"
+                >
+                  <Banknote className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                  <span>সকল পরিশোধ (Disburse All)</span>
+                </button>
+
+                <button
+                  id="payroll-bank-advice-button"
+                  onClick={handleExportBankAdvice}
+                  className="px-3 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 text-xs font-bold rounded-xl shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                  title="ব্যাংক ট্রান্সফারের জন্য অফিশিয়াল শিট ডাউনলোড করুন"
+                >
+                  <Download className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
+                  <span>ব্যাংক শিট (CSV)</span>
+                </button>
+              </>
+            ) : (
               <button
-                id="payroll-approve-all-button"
-                onClick={() => onApproveAll(selectedMonth)}
-                disabled={countPending === 0}
-                className={`px-3.5 py-2 text-xs font-bold rounded-xl border flex items-center gap-1.5 transition-colors cursor-pointer ${
-                  countPending > 0
-                    ? "bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/40 dark:hover:bg-blue-900/40 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800"
-                    : "bg-slate-50 text-slate-400 border-slate-200 dark:bg-slate-800/40 dark:border-slate-800 cursor-not-allowed opacity-60"
-                }`}
-                title="পেন্ডিং পে-স্লিপগুলো এক ক্লিকে অনুমোদন (Approve) করুন"
+                id="payroll-my-slips-export-button"
+                onClick={handleExportBankAdvice}
+                className="px-3.5 py-2 bg-teal-50 hover:bg-teal-100 dark:bg-teal-950/40 dark:hover:bg-teal-900/40 border border-teal-200 dark:border-teal-800 text-teal-800 dark:text-teal-200 text-xs font-bold rounded-xl shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                title="আপনার বেতন বিবরণী ডাউনলোড করুন"
               >
-                <CheckCircle2 className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-                <span>সকল অনুমোদন করুন ({countPending})</span>
+                <Download className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
+                <span>আমার পে-স্লিপ ডাউনলোড (CSV)</span>
               </button>
             )}
-
-            <button
-              id="payroll-disburse-all-button"
-              onClick={() => onDisburseAll(selectedMonth)}
-              className="px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 text-xs font-bold rounded-xl shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer"
-              title="অনুমোদিত স্যালারি এক ক্লিকে পেইড/ডিসবার্স করুন"
-            >
-              <Banknote className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-              <span>সকল পরিশোধ (Disburse All)</span>
-            </button>
-
-            <button
-              id="payroll-bank-advice-button"
-              onClick={handleExportBankAdvice}
-              className="px-3 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 text-xs font-bold rounded-xl shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer"
-              title="ব্যাংক ট্রান্সফারের জন্য অফিশিয়াল শিট ডাউনলোড করুন"
-            >
-              <Download className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
-              <span>ব্যাংক শিট (CSV)</span>
-            </button>
           </div>
         </div>
 
-        {/* Navigation Tabs (4 Core Functional Pillars) */}
+        {/* Navigation Tabs (4 Core Functional Pillars for Admin, 2 for General Employees) */}
         <div className="flex items-center gap-2 border-b border-slate-200 dark:border-slate-800 pt-2 overflow-x-auto">
           <button
             id="payroll-tab-register"
@@ -499,40 +574,44 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
             }`}
           >
             <Layers className="w-4 h-4" />
-            <span>পে-রোল রেজিস্টার ও অনুমোদন (Payroll Register)</span>
+            <span>{isPayrollAdmin ? "পে-রোল রেজিস্টার ও অনুমোদন (Payroll Register)" : "আমার পে-স্লিপ সমূহ (My Payslips)"}</span>
             <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-100 dark:bg-slate-800 font-mono">
               {filteredSlips.length}
             </span>
           </button>
 
-          <button
-            id="payroll-tab-policy"
-            onClick={() => setActiveMainTab("POLICY")}
-            className={`pb-2.5 px-3 text-xs font-bold flex items-center gap-2 border-b-2 transition-colors cursor-pointer whitespace-nowrap ${
-              activeMainTab === "POLICY"
-                ? "border-teal-600 text-teal-600 dark:text-teal-400"
-                : "border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
-            }`}
-          >
-            <Sliders className="w-4 h-4" />
-            <span>জরিমানা ও কর্তন নীতিমালা (Late & Deductions Policy)</span>
-          </button>
+          {isPayrollAdmin && (
+            <>
+              <button
+                id="payroll-tab-policy"
+                onClick={() => setActiveMainTab("POLICY")}
+                className={`pb-2.5 px-3 text-xs font-bold flex items-center gap-2 border-b-2 transition-colors cursor-pointer whitespace-nowrap ${
+                  activeMainTab === "POLICY"
+                    ? "border-teal-600 text-teal-600 dark:text-teal-400"
+                    : "border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
+                }`}
+              >
+                <Sliders className="w-4 h-4" />
+                <span>জরিমানা ও কর্তন নীতিমালা (Late & Deductions Policy)</span>
+              </button>
 
-          <button
-            id="payroll-tab-bonuses"
-            onClick={() => setActiveMainTab("BONUSES")}
-            className={`pb-2.5 px-3 text-xs font-bold flex items-center gap-2 border-b-2 transition-colors cursor-pointer whitespace-nowrap ${
-              activeMainTab === "BONUSES"
-                ? "border-teal-600 text-teal-600 dark:text-teal-400"
-                : "border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
-            }`}
-          >
-            <Award className="w-4 h-4" />
-            <span>বোনাস, ভাতা ও কমিশন (Bonuses & Allowances)</span>
-            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-amber-500/20 text-amber-800 dark:text-amber-300 font-bold">
-              {customBonuses.length}
-            </span>
-          </button>
+              <button
+                id="payroll-tab-bonuses"
+                onClick={() => setActiveMainTab("BONUSES")}
+                className={`pb-2.5 px-3 text-xs font-bold flex items-center gap-2 border-b-2 transition-colors cursor-pointer whitespace-nowrap ${
+                  activeMainTab === "BONUSES"
+                    ? "border-teal-600 text-teal-600 dark:text-teal-400"
+                    : "border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
+                }`}
+              >
+                <Award className="w-4 h-4" />
+                <span>বোনাস, ভাতা ও কমিশন (Bonuses & Allowances)</span>
+                <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-amber-500/20 text-amber-800 dark:text-amber-300 font-bold">
+                  {customBonuses.length}
+                </span>
+              </button>
+            </>
+          )}
 
           <button
             id="payroll-tab-history"
@@ -544,29 +623,46 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
             }`}
           >
             <History className="w-4 h-4" />
-            <span>বিগত মাসের রেকর্ড ও বকেয়া (Historical Records & Audit)</span>
+            <span>{isPayrollAdmin ? "বিগত মাসের রেকর্ড ও বকেয়া (Historical Records & Audit)" : "আমার বেতন ইতিহাস (My Salary History)"}</span>
           </button>
         </div>
 
-        {/* Informative Explanation Banner on "Pending Approval" */}
-        <div className="p-3.5 rounded-xl bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-blue-950 dark:text-blue-200">
-          <div className="flex items-start gap-2.5">
-            <Info className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
-            <div>
-              <span className="font-bold">পেন্ডিং অ্যাপ্রুভাল (Pending Approval) কেন দেখায়? </span>
-              <span className="text-slate-600 dark:text-slate-300">
-                পে-রোল গণনার পর সরাসরি ব্যাংক ট্রান্সফারের আগে এইচআর বা ফাইন্যান্স হেড কর্তৃক অডিট ও অনুমোদনের জন্য স্যালারির স্ট্যাটাস ডিফল্টভাবে "পেন্ডিং অ্যাপ্রুভাল" থাকে। অনুমোদন করতে ডানপাশের নীল <strong>"অনুমোদন (Approve)"</strong> বাটনে বা উপরের <strong>"সকল অনুমোদন করুন"</strong> বাটনে ক্লিক করুন।
-              </span>
+        {/* Informative Explanation Banner */}
+        {isPayrollAdmin ? (
+          <div className="p-3.5 rounded-xl bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-blue-950 dark:text-blue-200">
+            <div className="flex items-start gap-2.5">
+              <Info className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
+              <div>
+                <span className="font-bold">পেন্ডিং অ্যাপ্রুভাল (Pending Approval) কেন দেখায়? </span>
+                <span className="text-slate-600 dark:text-slate-300">
+                  পে-রোল গণনার পর সরাসরি ব্যাংক ট্রান্সফারের আগে এইচআর বা ফাইন্যান্স হেড কর্তৃক অডিট ও অনুমোদনের জন্য স্যালারির স্ট্যাটাস ডিফল্টভাবে "পেন্ডিং অ্যাপ্রুভাল" থাকে। অনুমোদন করতে ডানপাশের নীল <strong>"অনুমোদন (Approve)"</strong> বাটনে বা উপরের <strong>"সকল অনুমোদন করুন"</strong> বাটনে ক্লিক করুন।
+                </span>
+              </div>
             </div>
+            <button
+              onClick={() => setShowWorkflowExplainer(true)}
+              className="text-xs font-bold text-blue-700 dark:text-blue-400 hover:underline flex items-center gap-1 shrink-0 cursor-pointer self-start sm:self-auto"
+            >
+              <span>সম্পূর্ণ কাজের ধাপ দেখুন</span>
+              <ArrowRight className="w-3 h-3" />
+            </button>
           </div>
-          <button
-            onClick={() => setShowWorkflowExplainer(true)}
-            className="text-xs font-bold text-blue-700 dark:text-blue-400 hover:underline flex items-center gap-1 shrink-0 cursor-pointer self-start sm:self-auto"
-          >
-            <span>সম্পূর্ণ কাজের ধাপ দেখুন</span>
-            <ArrowRight className="w-3 h-3" />
-          </button>
-        </div>
+        ) : (
+          <div className="p-3.5 rounded-xl bg-teal-500/10 border border-teal-500/30 flex items-center justify-between gap-3 text-xs text-teal-950 dark:text-teal-200">
+            <div className="flex items-center gap-2.5">
+              <ShieldCheck className="w-5 h-5 text-teal-600 dark:text-teal-400 shrink-0" />
+              <div>
+                <span className="font-bold">🔒 সুরক্ষিত কর্মী এক্সেস মোড: </span>
+                <span className="text-slate-600 dark:text-slate-300">
+                  কোম্পানি পলিসি ও গোপনীয়তা বিধি অনুযায়ী আপনি শুধুমাত্র আপনার নিজের বেতনের পে-স্লিপ ও হিসাব দেখতে পাচ্ছেন।
+                </span>
+              </div>
+            </div>
+            <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-teal-600 text-white shrink-0">
+              ব্যক্তিগত প্রোফাইল
+            </span>
+          </div>
+        )}
       </div>
 
       {/* ========================================================================= */}
@@ -614,7 +710,7 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
               {BENGALI_MONTHS.map((m) => {
                 const monthStr = `${m.nameEn} ${selectedYear}`;
                 const isSelected = selectedMonth === monthStr;
-                const slipsInThisMonth = payslips.filter(
+                const slipsInThisMonth = accessiblePayslips.filter(
                   (s) => normalizeMonthKey(s.payrollMonth) === `${selectedYear}-${m.key}`
                 );
 
@@ -710,7 +806,7 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
                 onChange={(e) => setSelectedStatus(e.target.value as any)}
                 className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white font-medium"
               >
-                <option value="ALL">সকল স্ট্যাটাস ({payslips.length})</option>
+                <option value="ALL">সকল স্ট্যাটাস ({accessiblePayslips.length})</option>
                 <option value="PENDING_APPROVAL">অপেক্ষমাণ খসড়া (Pending Approval)</option>
                 <option value="APPROVED">অনুমোদিত (Approved / Ready to Pay)</option>
                 <option value="PAID">পরিশোধিত (Paid / Disbursed)</option>
@@ -957,7 +1053,7 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
                           {/* Action Buttons: Change Status or View Slip */}
                           <td className="p-3 text-right">
                             <div className="flex items-center justify-end gap-1.5">
-                              {isPending && onApprovePayslip && (
+                              {isPayrollAdmin && isPending && onApprovePayslip && (
                                 <button
                                   onClick={() => onApprovePayslip(slip.id)}
                                   className="px-2.5 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/40 dark:hover:bg-blue-900/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 text-[11px] font-bold cursor-pointer transition-colors"
@@ -967,7 +1063,7 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
                                 </button>
                               )}
 
-                              {isApproved && onDisbursePayslip && (
+                              {isPayrollAdmin && isApproved && onDisbursePayslip && (
                                 <button
                                   onClick={() => onDisbursePayslip(slip.id)}
                                   className="px-2.5 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-[11px] font-bold cursor-pointer transition-colors"
@@ -2143,7 +2239,7 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => {
-                    const allData = payslips.map((s) => ({
+                    const allData = accessiblePayslips.map((s) => ({
                       Month: s.payrollMonth,
                       "Employee ID": s.employeeCode,
                       Name: s.employeeName,
@@ -2167,7 +2263,7 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
               {MONTH_OPTIONS.map((m) => {
                 const mKey = normalizeMonthKey(m);
-                const slipsInMonth = payslips.filter((s) => normalizeMonthKey(s.payrollMonth) === mKey);
+                const slipsInMonth = accessiblePayslips.filter((s) => normalizeMonthKey(s.payrollMonth) === mKey);
                 const totalMonthPaid = slipsInMonth
                   .filter((s) => s.paymentStatus === "PAID")
                   .reduce((sum, s) => sum + (s.netSalary || 0), 0);
@@ -2439,7 +2535,7 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
             {/* Modal Bottom Actions */}
             <div className="flex items-center justify-between pt-2">
               <div className="flex items-center gap-2">
-                {activeSlip.paymentStatus === "PENDING_APPROVAL" && onApprovePayslip && (
+                {isPayrollAdmin && activeSlip.paymentStatus === "PENDING_APPROVAL" && onApprovePayslip && (
                   <button
                     onClick={() => {
                       onApprovePayslip(activeSlip.id);
@@ -2452,7 +2548,7 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
                   </button>
                 )}
 
-                {activeSlip.paymentStatus === "APPROVED" && onDisbursePayslip && (
+                {isPayrollAdmin && activeSlip.paymentStatus === "APPROVED" && onDisbursePayslip && (
                   <button
                     onClick={() => {
                       onDisbursePayslip(activeSlip.id);
