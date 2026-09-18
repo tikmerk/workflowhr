@@ -57,6 +57,7 @@ export interface LiveFaceAnalysis {
     hasGlasses: boolean;
     description: string;
   };
+  glassesDetected?: boolean;
   ambientLuminance?: number; // 0 to 255
   isLowLight?: boolean;
 }

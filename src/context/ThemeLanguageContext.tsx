@@ -12,6 +12,7 @@ interface ThemeLanguageContextType {
   toggleTheme: () => void;
   t: (bnText: string, enText: string) => string;
   isBangla: boolean;
+  toBanglaDigits: (num: number | string) => string;
 }
 
 const ThemeLanguageContext = createContext<ThemeLanguageContextType | undefined>(undefined);
@@ -73,6 +74,11 @@ export const ThemeLanguageProvider: React.FC<{ children: React.ReactNode }> = ({
     return language === "bn" ? bnText : enText;
   };
 
+  const toBanglaDigits = (num: number | string): string => {
+    const bnDigits = ["০", "১", "২", "৩", "৪", "৫", "৬", "৭", "৮", "৯"];
+    return String(num).replace(/[0-9]/g, (w) => bnDigits[+w]);
+  };
+
   return (
     <ThemeLanguageContext.Provider
       value={{
@@ -84,6 +90,7 @@ export const ThemeLanguageProvider: React.FC<{ children: React.ReactNode }> = ({
         toggleTheme,
         t,
         isBangla,
+        toBanglaDigits,
       }}
     >
       {children}

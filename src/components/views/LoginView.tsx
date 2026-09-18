@@ -109,9 +109,9 @@ export const LoginView: React.FC<LoginViewProps> = ({
       // Dedicated presets for convenient access
       if (!matched) {
         if (searchKey === "admin" || searchKey === "superadmin" || searchKey === "ibrahim") {
-          matched = employees.find((e) => e.role === "SUPER_ADMIN") || employees[0];
+          matched = employees.find((e) => e.role === "SUPER_ADMIN" || e.isSuperAdmin);
         } else if (searchKey === "ceo" || searchKey === "owner") {
-          matched = employees.find((e) => e.isCeoOrOwner || e.role === "CEO") || employees[1];
+          matched = employees.find((e) => e.isCeoOrOwner || e.role === "CEO");
         }
       }
 
@@ -146,8 +146,16 @@ export const LoginView: React.FC<LoginViewProps> = ({
   };
 
   const handleQuickDemoLogin = (empId: string) => {
-    const target = employees.find((e) => e.id === empId) || employees[0];
-    onLoginSuccess(target);
+    const target = employees.find((e) => e.id === empId);
+    if (target) {
+      onLoginSuccess(target);
+    } else {
+      setErrorMessage(
+        isBangla
+          ? "উক্ত অ্যাকাউন্টের তথ্য লোড হতে বিলম্ব হচ্ছে। অনুগ্রহ করে কিছুক্ষণ পর চেষ্টা করুন।"
+          : "Account profile is still syncing. Please retry shortly."
+      );
+    }
   };
 
   return (
@@ -327,7 +335,8 @@ export const LoginView: React.FC<LoginViewProps> = ({
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
               {demoRolePresets.map((preset) => {
-                const emp = employees.find((e) => e.id === preset.empId) || employees[0];
+                const emp = employees.find((e) => e.id === preset.empId);
+                if (!emp) return null;
                 return (
                   <button
                     key={preset.empId}

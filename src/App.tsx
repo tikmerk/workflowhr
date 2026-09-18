@@ -346,7 +346,8 @@ function AppContent() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
     try {
       const savedAuth = localStorage.getItem("workflow_hr_auth_status");
-      return savedAuth === "true";
+      const savedEmpId = localStorage.getItem("workflow_hr_logged_user_id");
+      return savedAuth === "true" && Boolean(savedEmpId);
     } catch {
       return false;
     }
@@ -354,46 +355,133 @@ function AppContent() {
 
   const [currentEmployee, setCurrentEmployee] = useState<Employee>(() => {
     try {
+      const savedAuth = localStorage.getItem("workflow_hr_auth_status") === "true";
       const savedEmpId = localStorage.getItem("workflow_hr_logged_user_id");
-      const targetEmp = (savedEmpId && mockEmployees.find((e) => e.id === savedEmpId)) || mockEmployees[0];
-      const cachedAvatar = localStorage.getItem(`workflow_hr_cached_avatar_${targetEmp.id}`);
-      const cachedScore = localStorage.getItem(`workflow_hr_cached_score_${targetEmp.id}`);
-      const cachedVerified = localStorage.getItem(`workflow_hr_cached_verified_${targetEmp.id}`);
-      const isVerified =
-        targetEmp.id === "emp-01"
-          ? true
-          : Boolean(
-              cachedVerified !== "false" &&
-              targetEmp.faceVerified &&
-              targetEmp.faceTemplateRegistered &&
-              typeof targetEmp.faceVerificationScore === "number" &&
-              targetEmp.faceVerificationScore > 0
-            );
-      const score = (typeof targetEmp.faceVerificationScore === "number" && targetEmp.faceVerificationScore > 0)
-        ? targetEmp.faceVerificationScore
-        : (cachedScore ? Number(cachedScore) : undefined);
+      const savedUserStr = localStorage.getItem("workflow_hr_current_user");
 
-      if (cachedAvatar) {
+      // 1. If we have a cached user object and the session is authenticated, restore that exact user
+      if (savedAuth && savedUserStr) {
+        try {
+          const parsed: Employee = JSON.parse(savedUserStr);
+          if (parsed && parsed.id && (!savedEmpId || parsed.id === savedEmpId)) {
+            const cachedAvatar = localStorage.getItem(`workflow_hr_cached_avatar_${parsed.id}`);
+            const cachedScore = localStorage.getItem(`workflow_hr_cached_score_${parsed.id}`);
+            const cachedVerified = localStorage.getItem(`workflow_hr_cached_verified_${parsed.id}`);
+            const isVerified =
+              parsed.id === "emp-01"
+                ? true
+                : Boolean(
+                    cachedVerified !== "false" &&
+                    parsed.faceVerified &&
+                    parsed.faceTemplateRegistered &&
+                    typeof parsed.faceVerificationScore === "number" &&
+                    parsed.faceVerificationScore > 0
+                  );
+            const score =
+              typeof parsed.faceVerificationScore === "number" && parsed.faceVerificationScore > 0
+                ? parsed.faceVerificationScore
+                : cachedScore
+                ? Number(cachedScore)
+                : undefined;
+
+            return {
+              ...parsed,
+              avatarUrl: cachedAvatar || parsed.avatarUrl,
+              faceRegisteredPhoto: cachedAvatar || parsed.faceRegisteredPhoto,
+              faceTemplateRegistered: isVerified,
+              faceVerified: isVerified,
+              faceVerificationRequired: !isVerified,
+              faceVerificationScore: isVerified ? score : undefined,
+            };
+          }
+        } catch (e) {
+          console.warn("Failed to parse cached user:", e);
+        }
+      }
+
+      // 2. If savedEmpId exists, check in mockEmployees
+      if (savedAuth && savedEmpId) {
+        const found = mockEmployees.find((e) => e.id === savedEmpId);
+        if (found) {
+          return found;
+        }
+        // If savedEmpId is a Firestore employee not in mockEmployees, preserve the exact ID
+        // so that Firestore's subscribeToEmployees will immediately match and hydrate it
         return {
-          ...targetEmp,
-          avatarUrl: cachedAvatar,
-          faceRegisteredPhoto: cachedAvatar,
-          faceTemplateRegistered: isVerified,
-          faceVerified: isVerified,
-          faceVerificationRequired: !isVerified,
-          faceVerificationScore: isVerified ? score : undefined,
+          id: savedEmpId,
+          employeeCode: savedEmpId,
+          username: savedEmpId.toLowerCase(),
+          companyId: "comp-01",
+          branchId: "branch-01",
+          branchName: "Corporate Office",
+          departmentId: "dept-01",
+          departmentName: "General Operations",
+          designationId: "desig-04",
+          designationTitle: "Staff Member",
+          role: "EMPLOYEE",
+          fullName: "Loading User Account...",
+          email: "employee@workflow.org",
+          phone: "+880 1700-000000",
+          emergencyPhone: "+880 1700-000001",
+          avatarUrl: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&h=200&fit=crop&crop=face",
+          isCeoOrOwner: false,
+          isSuperAdmin: false,
+          gender: "OTHER",
+          employmentType: "FULL_TIME",
+          joiningDate: "2024-01-01",
+          status: "ACTIVE",
+          salary: {
+            basic: 0,
+            houseRent: 0,
+            medicalAllowance: 0,
+            transportAllowance: 0,
+            specialAllowance: 0,
+            providentFundPercentage: 0,
+            taxDeductionPercentage: 0,
+            grossSalary: 0,
+          },
         };
       }
+
+      // 3. Fallback when NOT authenticated (or invalid session):
+      // Return a safe unprivileged placeholder employee. (LoginView will be displayed because isAuthenticated is false).
       return {
-        ...targetEmp,
-        faceTemplateRegistered: isVerified,
-        faceVerified: isVerified,
-        faceVerificationRequired: !isVerified,
-        faceVerificationScore: isVerified ? score : undefined,
+        id: "emp-guest",
+        employeeCode: "GUEST",
+        username: "guest",
+        companyId: "comp-01",
+        branchId: "branch-01",
+        branchName: "Corporate Office",
+        departmentId: "dept-01",
+        departmentName: "General Operations",
+        designationId: "desig-04",
+        designationTitle: "Guest Staff",
+        role: "EMPLOYEE",
+        fullName: "Guest User",
+        email: "guest@workflow.org",
+        phone: "+880 1700-000000",
+        emergencyPhone: "+880 1700-000001",
+        avatarUrl: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&h=200&fit=crop&crop=face",
+        isCeoOrOwner: false,
+        isSuperAdmin: false,
+        gender: "OTHER",
+        employmentType: "FULL_TIME",
+        joiningDate: "2024-01-01",
+        status: "ACTIVE",
+        salary: {
+          basic: 0,
+          houseRent: 0,
+          medicalAllowance: 0,
+          transportAllowance: 0,
+          specialAllowance: 0,
+          providentFundPercentage: 0,
+          taxDeductionPercentage: 0,
+          grossSalary: 0,
+        },
       };
     } catch (e) {
-      console.warn(e);
-      return mockEmployees[0];
+      console.warn("Auth initialization error:", e);
+      return mockEmployees[1] || mockEmployees[0];
     }
   });
 
@@ -470,9 +558,38 @@ function AppContent() {
       });
 
       setEmployees(hydrated);
+
+      // ALWAYS respect the verified authenticated session from localStorage
+      const savedLoggedId = localStorage.getItem("workflow_hr_logged_user_id");
+      const isUserAuthed = localStorage.getItem("workflow_hr_auth_status") === "true";
+
+      if (isUserAuthed && savedLoggedId) {
+        const matchingSaved = hydrated.find((e) => e.id === savedLoggedId);
+        if (matchingSaved) {
+          setCurrentEmployee(matchingSaved);
+          try {
+            localStorage.setItem("workflow_hr_current_user", JSON.stringify(matchingSaved));
+          } catch (e) {
+            console.warn(e);
+          }
+          return;
+        }
+      }
+
+      // If already authenticated and has a currentEmployee, keep them updated with latest data
       setCurrentEmployee((prev) => {
+        if (!prev || prev.id === "emp-guest") return prev;
         const matching = hydrated.find((e) => e.id === prev.id);
-        return matching || prev;
+        if (matching) {
+          try {
+            localStorage.setItem("workflow_hr_current_user", JSON.stringify(matching));
+            localStorage.setItem("workflow_hr_logged_user_id", matching.id);
+          } catch (e) {
+            console.warn(e);
+          }
+          return matching;
+        }
+        return prev;
       });
     });
 
@@ -575,6 +692,7 @@ function AppContent() {
     try {
       localStorage.setItem("workflow_hr_auth_status", "true");
       localStorage.setItem("workflow_hr_logged_user_id", emp.id);
+      localStorage.setItem("workflow_hr_current_user", JSON.stringify(emp));
     } catch (e) {
       console.warn(e);
     }
@@ -585,6 +703,7 @@ function AppContent() {
     try {
       localStorage.removeItem("workflow_hr_auth_status");
       localStorage.removeItem("workflow_hr_logged_user_id");
+      localStorage.removeItem("workflow_hr_current_user");
     } catch (e) {
       console.warn(e);
     }
@@ -758,18 +877,26 @@ function AppContent() {
     );
 
     if (currentEmployee.id === employeeId) {
-      setCurrentEmployee((prev) => ({
-        ...prev,
-        faceRegisteredPhoto: optimized,
-        avatarUrl: optimized,
-        faceTemplateRegistered: isLiveVerified,
-        faceVerified: isLiveVerified,
-        faceVerificationRequired: !isLiveVerified,
-        faceRegisteredAt: todayStr,
-        faceVerifiedAt: isLiveVerified ? new Date().toISOString() : undefined,
-        faceVerificationScore: isLiveVerified ? verificationScore : undefined,
-        faceDescriptor: faceDescriptor || prev.faceDescriptor,
-      }));
+      setCurrentEmployee((prev) => {
+        const updated = {
+          ...prev,
+          faceRegisteredPhoto: optimized,
+          avatarUrl: optimized,
+          faceTemplateRegistered: isLiveVerified,
+          faceVerified: isLiveVerified,
+          faceVerificationRequired: !isLiveVerified,
+          faceRegisteredAt: todayStr,
+          faceVerifiedAt: isLiveVerified ? new Date().toISOString() : undefined,
+          faceVerificationScore: isLiveVerified ? verificationScore : undefined,
+          faceDescriptor: faceDescriptor || prev.faceDescriptor,
+        };
+        try {
+          localStorage.setItem("workflow_hr_current_user", JSON.stringify(updated));
+        } catch (e) {
+          console.warn(e);
+        }
+        return updated;
+      });
     }
 
     if (selectedIdCardEmployee && selectedIdCardEmployee.id === employeeId) {
@@ -1402,6 +1529,11 @@ function AppContent() {
                 );
                 if (currentEmployee.id === updatedEmp.id) {
                   setCurrentEmployee(updatedEmp);
+                  try {
+                    localStorage.setItem("workflow_hr_current_user", JSON.stringify(updatedEmp));
+                  } catch (e) {
+                    console.warn(e);
+                  }
                 }
                 saveEmployeeToFirestore(updatedEmp);
                 setToastMessage("আপনার প্রোফাইল ও পদবী সফলভাবে হালনাগাদ করা হয়েছে!");
@@ -1439,6 +1571,11 @@ function AppContent() {
                 );
                 if (currentEmployee.id === updatedEmp.id) {
                   setCurrentEmployee(updatedEmp);
+                  try {
+                    localStorage.setItem("workflow_hr_current_user", JSON.stringify(updatedEmp));
+                  } catch (e) {
+                    console.warn(e);
+                  }
                 }
                 saveEmployeeToFirestore(updatedEmp);
               }}
@@ -1654,6 +1791,11 @@ function AppContent() {
                 );
                 if (currentEmployee.id === updatedEmp.id) {
                   setCurrentEmployee(updatedEmp);
+                  try {
+                    localStorage.setItem("workflow_hr_current_user", JSON.stringify(updatedEmp));
+                  } catch (e) {
+                    console.warn(e);
+                  }
                 }
                 saveEmployeeToFirestore(updatedEmp);
               }}

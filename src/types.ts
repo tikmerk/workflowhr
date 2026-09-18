@@ -16,9 +16,11 @@ export type UserRole =
 export type NavigationTab =
   | "dashboard"
   | "self-service"
+  | "my-portal"
   | "employees"
   | "departments-designations"
   | "branches-geofence"
+  | "branches"
   | "ngo-programs-training"
   | "meetings-conferences"
   | "roles-permissions"
@@ -253,6 +255,7 @@ export interface Employee {
 
   // Account Visibility & Access Control
   allowedTabs?: string[]; // Specific tab IDs visible to this employee's account
+  permissions?: string[];
   accountPermissions?: {
     canViewSalary?: boolean;
     canApplyLeaves?: boolean;
@@ -305,6 +308,9 @@ export interface AttendanceRecord {
   checkInFaceMatchScore?: number;
   checkInAntiSpoofingPassed?: boolean;
   checkInSelfieUrl?: string;
+  checkInSnapshotUrl?: string;
+  checkInLat?: number;
+  checkInLng?: number;
   checkInDeviceId?: string;
   
   // Check Out
@@ -316,6 +322,7 @@ export interface AttendanceRecord {
   checkOutGeofencePassed?: boolean;
   checkOutFaceMatchScore?: number;
   checkOutSelfieUrl?: string;
+  checkOutSnapshotUrl?: string;
   
   // Calculated Work Times
   totalWorkMinutes: number;
@@ -436,7 +443,7 @@ export interface Payslip {
   
   // Final
   netSalary: number;
-  paymentStatus: "DRAFT" | "PENDING_APPROVAL" | "PAID";
+  paymentStatus: "DRAFT" | "PENDING_APPROVAL" | "APPROVED" | "PAID";
   paymentDate?: string;
   paymentMethod?: "BANK_TRANSFER" | "BKASH" | "NAGAD" | "CASH";
   transactionReference?: string;
@@ -558,7 +565,7 @@ export interface Candidate {
   convertedToEmployeeId?: string;
   
   // Screening Status & Feedback
-  screeningStatus?: "QUALIFIED" | "DISQUALIFIED" | "PENDING";
+  screeningStatus?: "QUALIFIED" | "DISQUALIFIED" | "PENDING" | "PASSED" | "FAILED";
   screeningFailedReasons?: string[];
   screeningPassedReasons?: string[];
   importedFromSheet?: boolean;
@@ -665,6 +672,7 @@ export interface Notice {
   
   // Official Letterhead & Signatory Clearance
   issuerName?: string; // স্বাক্ষরকারীর নাম
+  issuerEmployeeId?: string;
   issuerDesignation?: string; // পদবী
   issuerDepartment?: string; // বিভাগ
   issuerBranch?: string; // শাখা

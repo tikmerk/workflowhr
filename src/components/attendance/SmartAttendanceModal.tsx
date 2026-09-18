@@ -113,9 +113,9 @@ export const SmartAttendanceModal: React.FC<SmartAttendanceModalProps> = ({
           isOpen={Boolean(enrollingEmployee)}
           onClose={() => setEnrollingEmployee(null)}
           employee={enrollingEmployee}
-          onEnrollmentSuccess={(photoUrl, score, descriptor) => {
+          onSaveFacePhoto={(empId, photoUrl, score, descriptor) => {
             if (onUpdateFacePhoto) {
-              onUpdateFacePhoto(enrollingEmployee.id, photoUrl, score, descriptor);
+              onUpdateFacePhoto(empId, photoUrl, score, descriptor);
             }
             setEnrollingEmployee(null);
           }}

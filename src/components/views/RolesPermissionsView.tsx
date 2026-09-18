@@ -911,7 +911,7 @@ export const RolesPermissionsView: React.FC<RolesPermissionsViewProps> = ({
                     if (bonus.category === "POHELA_BOISHAKH") categoryBadgeColor = "bg-orange-500/15 text-orange-700 dark:text-orange-300 border border-orange-500/30";
                     else if (bonus.category === "EID_UL_FITR" || bonus.category === "EID_UL_ADHA") categoryBadgeColor = "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30";
                     else if (bonus.category === "DURGA_PUJA") categoryBadgeColor = "bg-rose-500/15 text-rose-700 dark:text-rose-300 border border-rose-500/30";
-                    else if (bonus.category === "PERFORMANCE_BONUS") categoryBadgeColor = "bg-purple-500/15 text-purple-700 dark:text-purple-300 border border-purple-500/30";
+                    else if ((bonus.category as string) === "PERFORMANCE_BONUS" || (bonus.category as string) === "PERFORMANCE") categoryBadgeColor = "bg-purple-500/15 text-purple-700 dark:text-purple-300 border border-purple-500/30";
 
                     return (
                       <div

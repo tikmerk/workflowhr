@@ -29,7 +29,8 @@ import {
   detectFaceInPhoto,
   drawBiometricMeshOverlay,
   invalidateEmployeeFaceCache,
-  extract128DVector
+  extract128DVector,
+  FaceMatchResult
 } from "../../utils/faceRecognitionEngine";
 
 interface FaceEnrollmentModalProps {
@@ -70,13 +71,7 @@ export const FaceEnrollmentModal: React.FC<FaceEnrollmentModalProps> = ({
 
   // Verification states
   const [isVerifying, setIsVerifying] = useState<boolean>(false);
-  const [verificationResult, setVerificationResult] = useState<{
-    matched: boolean;
-    matchScore: number;
-    cosineSimilarity: number;
-    reason: string;
-    banglaStatusMessage: string;
-  } | null>(null);
+  const [verificationResult, setVerificationResult] = useState<FaceMatchResult | null>(null);
 
   // Is verified live
   const [isLiveVerified, setIsLiveVerified] = useState<boolean>(
