@@ -31,6 +31,26 @@ import_dotenv.default.config();
 var app = (0, import_express.default)();
 var PORT = 3e3;
 app.use(import_express.default.json({ limit: "25mb" }));
+app.use((_req, res, next) => {
+  res.setHeader(
+    "Permissions-Policy",
+    "camera=(self *), microphone=(self *), geolocation=(self *)"
+  );
+  next();
+});
+app.use(
+  "/models",
+  import_express.default.static(import_path.default.join(process.cwd(), "public", "models"), {
+    setHeaders: (res, filePath) => {
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      if (filePath.endsWith(".json")) {
+        res.setHeader("Content-Type", "application/json");
+      } else {
+        res.setHeader("Content-Type", "application/octet-stream");
+      }
+    }
+  })
+);
 var geminiClient = null;
 function getGeminiClient() {
   if (!geminiClient) {
