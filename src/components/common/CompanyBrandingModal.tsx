@@ -57,6 +57,9 @@ export const CompanyBrandingModal: React.FC<CompanyBrandingModalProps> = ({ curr
   const [website, setWebsite] = useState(branding.website);
   const [regNo, setRegNo] = useState(branding.registrationNumber || "");
   const [employeeIdPrefix, setEmployeeIdPrefix] = useState(branding.employeeIdPrefix || "MWO");
+  const [salaryDisbursementPolicy, setSalaryDisbursementPolicy] = useState<"BOTH" | "BANK_ONLY" | "CASH_ONLY">(
+    branding.salaryDisbursementPolicy || "BOTH"
+  );
   const [savedSuccess, setSavedSuccess] = useState(false);
 
   // Role check: Only core Platform Super Admin can toggle Demo Mode
@@ -87,6 +90,7 @@ export const CompanyBrandingModal: React.FC<CompanyBrandingModalProps> = ({ curr
       setWebsite(branding.website);
       setRegNo(branding.registrationNumber || "");
       setEmployeeIdPrefix(branding.employeeIdPrefix || "MWO");
+      setSalaryDisbursementPolicy(branding.salaryDisbursementPolicy || "BOTH");
       setSavedSuccess(false);
     }
   }, [isBrandingModalOpen, branding]);
@@ -133,6 +137,7 @@ export const CompanyBrandingModal: React.FC<CompanyBrandingModalProps> = ({ curr
       website,
       registrationNumber: regNo,
       employeeIdPrefix: employeeIdPrefix.trim().toUpperCase() || "MWO",
+      salaryDisbursementPolicy,
     });
     setSavedSuccess(true);
     setTimeout(() => {
@@ -439,7 +444,114 @@ export const CompanyBrandingModal: React.FC<CompanyBrandingModalProps> = ({ curr
             </div>
           </div>
 
-          {/* 5. Interactive Demo Mode Toggle (Super Admin Control Only) */}
+          {/* 5. Global Salary Disbursement Method Policy (Super Admin Control) */}
+          <div className="p-3.5 rounded-xl bg-gradient-to-r from-teal-50/70 to-emerald-50/70 dark:from-teal-950/30 dark:to-emerald-950/30 border border-teal-200 dark:border-teal-800/60 space-y-2.5">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-lg bg-teal-600 text-white shadow-xs">
+                  <ShieldCheck className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-bold text-slate-900 dark:text-white">
+                    {t("গ্লোবাল বেতন পরিশোধ মাধ্যম পলিসি", "Global Salary Disbursement Method Policy")}
+                  </h4>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    {t(
+                      "সুপার অ্যাডমিন কর্তৃক নির্ধারিত: কর্মীরা তাদের প্রোফাইলে কোন মাধ্যমে বেতন প্রাপ্তির অপশন পাবেন",
+                      "Super Admin setting: controls which payment methods employees can select in their profile"
+                    )}
+                  </p>
+                </div>
+              </div>
+
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-teal-100 dark:bg-teal-900/60 text-teal-800 dark:text-teal-300 border border-teal-200 dark:border-teal-700">
+                {salaryDisbursementPolicy === "BOTH"
+                  ? t("ব্যাংক ও ক্যাশ উভয়ই", "Both Bank & Cash")
+                  : salaryDisbursementPolicy === "BANK_ONLY"
+                  ? t("শুধুমাত্র ব্যাংক", "Bank Only")
+                  : t("শুধুমাত্র ক্যাশ", "Cash Only")}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
+              <button
+                type="button"
+                onClick={() => setSalaryDisbursementPolicy("BOTH")}
+                className={`p-2.5 rounded-xl text-left border transition-all cursor-pointer ${
+                  salaryDisbursementPolicy === "BOTH"
+                    ? "bg-white dark:bg-slate-900 border-teal-600 dark:border-teal-400 ring-2 ring-teal-500/20 shadow-xs"
+                    : "bg-white/60 dark:bg-slate-900/40 border-slate-200 dark:border-slate-800 hover:border-teal-300"
+                }`}
+              >
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs font-bold text-slate-900 dark:text-white">
+                    {t("উভয়ই (Both)", "Both Bank & Cash")}
+                  </span>
+                  {salaryDisbursementPolicy === "BOTH" && (
+                    <CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" />
+                  )}
+                </div>
+                <p className="text-[10.5px] text-slate-500 dark:text-slate-400 leading-tight">
+                  {t(
+                    "কর্মী প্রোফাইলে ব্যাংক ট্রান্সফার অথবা ক্যাশ যেকোনো একটি বেছে নিতে পারবেন।",
+                    "Employees can choose either Bank Transfer or Cash in profile."
+                  )}
+                </p>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSalaryDisbursementPolicy("BANK_ONLY")}
+                className={`p-2.5 rounded-xl text-left border transition-all cursor-pointer ${
+                  salaryDisbursementPolicy === "BANK_ONLY"
+                    ? "bg-white dark:bg-slate-900 border-teal-600 dark:border-teal-400 ring-2 ring-teal-500/20 shadow-xs"
+                    : "bg-white/60 dark:bg-slate-900/40 border-slate-200 dark:border-slate-800 hover:border-teal-300"
+                }`}
+              >
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs font-bold text-slate-900 dark:text-white">
+                    {t("শুধুমাত্র ব্যাংক (Bank Only)", "Bank Transfer Only")}
+                  </span>
+                  {salaryDisbursementPolicy === "BANK_ONLY" && (
+                    <CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" />
+                  )}
+                </div>
+                <p className="text-[10.5px] text-slate-500 dark:text-slate-400 leading-tight">
+                  {t(
+                    "সকল বেতন ব্যাংক ট্রান্সফারে হবে। কর্মীদের ব্যাংক একাউন্ট তথ্য দেওয়া বাধ্যতামূলক।",
+                    "Mandatory bank transfer. Bank account details required."
+                  )}
+                </p>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSalaryDisbursementPolicy("CASH_ONLY")}
+                className={`p-2.5 rounded-xl text-left border transition-all cursor-pointer ${
+                  salaryDisbursementPolicy === "CASH_ONLY"
+                    ? "bg-white dark:bg-slate-900 border-teal-600 dark:border-teal-400 ring-2 ring-teal-500/20 shadow-xs"
+                    : "bg-white/60 dark:bg-slate-900/40 border-slate-200 dark:border-slate-800 hover:border-teal-300"
+                }`}
+              >
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs font-bold text-slate-900 dark:text-white">
+                    {t("শুধুমাত্র ক্যাশ (Cash Only)", "Cash Only")}
+                  </span>
+                  {salaryDisbursementPolicy === "CASH_ONLY" && (
+                    <CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" />
+                  )}
+                </div>
+                <p className="text-[10.5px] text-slate-500 dark:text-slate-400 leading-tight">
+                  {t(
+                    "সকল কর্মীকে নগদে বেতন দেওয়া হবে। ব্যাংক তথ্য দেওয়ার প্রয়োজন নেই।",
+                    "Disbursed in cash. No bank account details required."
+                  )}
+                </p>
+              </button>
+            </div>
+          </div>
+
+          {/* 6. Interactive Demo Mode Toggle (Super Admin Control Only) */}
           <div className="p-3.5 rounded-xl bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-start gap-3">
               <div className={`p-2 rounded-xl mt-0.5 ${isDemoModeEnabled ? "bg-teal-500/20 text-teal-400" : "bg-slate-200 dark:bg-slate-800 text-slate-500"}`}>

@@ -1,25 +1,30 @@
-import React, { useRef } from "react";
+import React, { useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   X,
   Printer,
   Download,
+  Loader2,
+  CheckCircle2,
   Mail,
   Phone,
-  MapPin,
-  Calendar,
   Briefcase,
   GraduationCap,
   Award,
   Globe,
   User,
-  Shield,
   FileText,
-  Heart,
-  CheckCircle2,
   Building,
+  CreditCard,
+  Droplet,
+  ExternalLink,
 } from "lucide-react";
+import { toJpeg } from "html-to-image";
+import jsPDF from "jspdf";
 import { Employee, EmployeeCVData } from "../../types";
 import { useCompanyBranding } from "../../context/CompanyBrandingContext";
+import { getDefaultCareerObjective } from "../../utils/cvDefaults";
+import { ViewNidCardModal } from "./ViewNidCardModal";
 
 interface ViewA4ResumeModalProps {
   employee: Employee;
@@ -41,9 +46,13 @@ export const ViewA4ResumeModal: React.FC<ViewA4ResumeModalProps> = ({
   const { branding } = useCompanyBranding();
   const printContentRef = useRef<HTMLDivElement>(null);
   const handleEdit = onEditCV || onOpenEdit;
+  const [showNidModal, setShowNidModal] = useState(false);
+  const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
+  const [downloadSuccess, setDownloadSuccess] = useState(false);
 
   if (isOpen === false) return null;
 
+  // Fallback or existing CV data
   const cv: EmployeeCVData = employee.cvData || {
     fullName: employee.fullName,
     fatherName: employee.fatherName || "",
@@ -52,484 +61,613 @@ export const ViewA4ResumeModal: React.FC<ViewA4ResumeModalProps> = ({
     email: employee.email,
     presentAddress: employee.presentAddress || "",
     permanentAddress: employee.permanentAddress || "",
+    socialLink: employee.socialLink || (employee as any).linkedinUrl || "",
+    linkedinUrl: employee.socialLink || (employee as any).linkedinUrl || "",
     nidNumber: employee.nidNumber || "",
     bloodGroup: employee.bloodGroup || "O+",
     dateOfBirth: employee.dateOfBirth || "",
     height: employee.height || "",
+    gender: employee.gender || "MALE",
+    nationality: employee.nationality || "Bangladeshi",
     maritalStatus: employee.maritalStatus || "SINGLE",
     religion: employee.religion || "Islam",
     joiningDate: employee.joiningDate,
     currentDesignation: employee.designationTitle,
     currentDepartment: employee.departmentName,
     currentOrganization: branding.companyName || "Organization",
-    educations: [
-      {
-        id: "edu-1",
-        degreeName: "Bachelor of Science (B.Sc)",
-        subjectOrGroup: "Computer Science & Engineering",
-        institution: "University of Dhaka",
-        boardOrUniversity: "Dhaka University",
-        result: "3.75 / 4.00",
-        passingYear: "2020",
-      },
-      {
-        id: "edu-2",
-        degreeName: "Higher Secondary Certificate (HSC)",
-        subjectOrGroup: "Science",
-        institution: "Dhaka City College",
-        boardOrUniversity: "Dhaka Board",
-        result: "GPA 5.00",
-        passingYear: "2016",
-      },
+    educations: [],
+    experiences: [],
+    computerSkills: [],
+    professionalSkills: [
+      "Team Leadership & Management",
+      "Time Management & Punctuality",
+      "Problem Solving & Adaptability",
+      "Work Ethics & Patience",
+      "Effective Communication"
     ],
-    experiences: [
-      {
-        id: "exp-1",
-        designation: employee.designationTitle,
-        organizationName: branding.companyName || "Organization",
-        durationYears: `${employee.joiningDate} - Present`,
-        responsibilities: "Responsible for operations, workflow coordination and department objectives.",
-      },
-    ],
-    computerSkills: [
-      "MS Word & Excel",
-      "PowerPoint",
-      "Google Workspace",
-      "Data Entry & Reporting",
-      "Email & Web Communication",
-    ],
-    languages: [
-      { id: "lang-1", language: "Bengali (বাংলা)", proficiency: "EXCELLENT" },
-      { id: "lang-2", language: "English (ইংরেজি)", proficiency: "MEDIUM" },
-    ],
-    summary: `${employee.fullName} is a dedicated professional currently serving as ${employee.designationTitle} at ${branding.companyName || employee.branchName || "Organization"}. Known for strong work ethics, dependability, and structured approach towards organizational excellence.`,
+    languages: [],
+    summary: getDefaultCareerObjective(false),
+    signatureUrl: employee.savedSignatureUrl || employee.signatureUrl,
   };
 
+  // Ensure summary always has high-quality professional text
+  const careerObjective = cv.summary && cv.summary.trim().length > 10
+    ? cv.summary
+    : getDefaultCareerObjective(false);
+
   const handlePrint = () => {
-    window.print();
+    try {
+      window.print();
+    } catch (e) {
+      console.warn("window.print failed, downloading PDF directly:", e);
+      handleDownloadPDF();
+    }
+  };
+
+  const handleDownloadPDF = async () => {
+    if (!printContentRef.current) return;
+    try {
+      setIsDownloadingPdf(true);
+      setDownloadSuccess(false);
+
+      // Brief delay to ensure fonts and layout settle
+      await new Promise((resolve) => setTimeout(resolve, 150));
+
+      const element = printContentRef.current;
+
+      const imgData = await toJpeg(element, {
+        quality: 0.96,
+        pixelRatio: 2.5,
+        backgroundColor: "#ffffff",
+        cacheBust: true,
+      });
+
+      const pdf = new jsPDF({
+        orientation: "portrait",
+        unit: "mm",
+        format: "a4",
+      });
+
+      const pdfWidth = 210;
+      const pdfHeight = 297;
+
+      const elWidth = element.offsetWidth || 794;
+      const elHeight = element.offsetHeight || 1123;
+      const ratio = elHeight / elWidth;
+      const calculatedHeight = pdfWidth * ratio;
+
+      if (calculatedHeight <= pdfHeight) {
+        pdf.addImage(imgData, "JPEG", 0, 0, pdfWidth, calculatedHeight, undefined, "FAST");
+      } else {
+        const scale = pdfHeight / calculatedHeight;
+        if (scale > 0.82) {
+          const fittedWidth = pdfWidth * scale;
+          const xOffset = (pdfWidth - fittedWidth) / 2;
+          pdf.addImage(imgData, "JPEG", xOffset, 0, fittedWidth, pdfHeight, undefined, "FAST");
+        } else {
+          let heightLeft = calculatedHeight;
+          let position = 0;
+          pdf.addImage(imgData, "JPEG", 0, position, pdfWidth, calculatedHeight, undefined, "FAST");
+          heightLeft -= pdfHeight;
+
+          while (heightLeft > 0) {
+            position = heightLeft - calculatedHeight;
+            pdf.addPage();
+            pdf.addImage(imgData, "JPEG", 0, position, pdfWidth, calculatedHeight, undefined, "FAST");
+            heightLeft -= pdfHeight;
+          }
+        }
+      }
+
+      const rawName = cv.fullName || employee.fullName || "Candidate";
+      const cleanName = rawName.trim().replace(/[^a-zA-Z0-9_\u0980-\u09FF]/g, "_");
+      const filename = `CV_${cleanName}_${employee.employeeCode || "A4"}.pdf`;
+      pdf.save(filename);
+
+      setDownloadSuccess(true);
+      setTimeout(() => setDownloadSuccess(false), 3500);
+    } catch (err) {
+      console.error("PDF generation failed:", err);
+      try {
+        window.print();
+      } catch (printErr) {
+        console.error("Print fallback also failed:", printErr);
+      }
+    } finally {
+      setIsDownloadingPdf(false);
+    }
   };
 
   const getProficiencyLabel = (level: string) => {
     switch (level) {
       case "EXCELLENT":
-        return isBangla ? "চমৎকার (Excellent)" : "Excellent";
+        return "Fluent";
       case "MEDIUM":
-        return isBangla ? "মধ্যম (Medium)" : "Medium";
+        return "Working";
       case "NOVICE":
-        return isBangla ? "প্রাথমিক (Novice)" : "Novice";
+        return "Basic";
       default:
         return level;
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-950/80 backdrop-blur-xs overflow-y-auto animate-in fade-in duration-200">
-      {/* Container with print styles */}
-      <div className="relative w-full max-w-4xl bg-slate-100 dark:bg-slate-900 rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[96vh] my-auto border border-slate-300 dark:border-slate-800">
-        {/* Top Control Bar (Hidden when printing) */}
-        <div className="print:hidden flex items-center justify-between px-5 py-3.5 bg-white dark:bg-slate-850 border-b border-slate-200 dark:border-slate-750 shrink-0">
-          <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-xl bg-teal-500/10 text-teal-600 dark:text-teal-400">
-              <FileText className="w-5 h-5" />
-            </div>
-            <div>
-              <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white">
-                {isBangla ? "অফিসিয়াল রিজিউমে / সিভি (A4 ফরম্যাট)" : "Official Resume / CV (A4 Format)"}
-              </h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                {employee.fullName} • {employee.employeeCode}
-              </p>
-            </div>
-          </div>
+  if (typeof document === "undefined") return null;
 
-          <div className="flex items-center gap-2">
-            {handleEdit && (
-              <button
-                type="button"
-                onClick={handleEdit}
-                className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold transition-all cursor-pointer"
-              >
-                {isBangla ? "সিভি এডিট করুন" : "Edit CV"}
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={handlePrint}
-              className="px-4 py-1.5 rounded-xl bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white text-xs font-bold shadow-md shadow-teal-500/20 flex items-center gap-1.5 transition-all cursor-pointer"
-            >
-              <Printer className="w-4 h-4" />
-              <span>{isBangla ? "প্রিন্ট / PDF ডাউনলোড" : "Print / Download PDF"}</span>
-            </button>
-            <button
-              type="button"
-              onClick={onClose}
-              className="p-1.5 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-        </div>
-
-        {/* Scrollable Preview Area with A4 paper frame */}
-        <div className="flex-1 overflow-y-auto p-3 sm:p-6 flex justify-center bg-slate-200/80 dark:bg-slate-950/70">
-          <div
-            id="printable-a4-resume"
-            ref={printContentRef}
-            className="w-full max-w-[210mm] bg-white text-slate-900 shadow-2xl rounded-sm p-6 sm:p-10 font-sans leading-normal border border-slate-300 print:border-0 print:shadow-none print:m-0 print:p-8 print:w-full"
-            style={{ minHeight: "297mm" }}
-          >
-            {/* Header: Organization & Identity */}
-            <div className="flex items-start justify-between border-b-2 border-teal-700 pb-5 mb-5 gap-4">
-              <div className="flex-1 min-w-0">
-                <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight uppercase">
-                  {cv.fullName || employee.fullName}
-                </h1>
-                <div className="text-sm sm:text-base font-bold text-teal-800 mt-0.5">
-                  {cv.currentDesignation || employee.designationTitle}
-                </div>
-                <div className="text-xs font-semibold text-slate-600 flex items-center gap-1.5 mt-0.5">
-                  <Building className="w-3.5 h-3.5 text-teal-700 shrink-0" />
-                  <span>
-                    {cv.currentDepartment || employee.departmentName} — {cv.currentOrganization || branding.companyName}
-                  </span>
-                </div>
-
-                {/* Quick Contacts */}
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-slate-600 mt-2.5">
-                  <div className="flex items-center gap-1">
-                    <Phone className="w-3.5 h-3.5 text-teal-700 shrink-0" />
-                    <span>{cv.mobile || employee.phone}</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <Mail className="w-3.5 h-3.5 text-teal-700 shrink-0" />
-                    <span>{cv.email || employee.email}</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <MapPin className="w-3.5 h-3.5 text-teal-700 shrink-0" />
-                    <span>{cv.presentAddress || employee.presentAddress || "Dhaka, Bangladesh"}</span>
-                  </div>
-                </div>
+  return createPortal(
+    <>
+      <div className="fixed inset-0 z-[9999] flex items-center justify-center p-2 sm:p-4 bg-slate-950/80 backdrop-blur-xs overflow-y-auto animate-in fade-in duration-200">
+        {/* Container with print styles */}
+        <div className="relative w-full max-w-4xl bg-slate-100 dark:bg-slate-900 rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[96vh] my-auto border border-slate-300 dark:border-slate-800">
+          
+          {/* Top Control Bar (Hidden when printing) */}
+          <div className="print:hidden flex items-center justify-between px-5 py-3.5 bg-white dark:bg-slate-850 border-b border-slate-200 dark:border-slate-750 shrink-0">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 rounded-xl bg-teal-500/10 text-teal-600 dark:text-teal-400">
+                <FileText className="w-5 h-5" />
               </div>
-
-              {/* Photo & ID Badge */}
-              <div className="flex flex-col items-center shrink-0">
-                <div className="w-24 h-28 sm:w-28 sm:h-32 rounded-lg border-2 border-teal-700 overflow-hidden shadow-xs bg-slate-100">
-                  <img
-                    src={employee.avatarUrl}
-                    alt={employee.fullName}
-                    className="w-full h-full object-cover"
-                  />
-                </div>
-                <span className="text-[10px] font-mono font-bold text-slate-500 mt-1">
-                  ID: {employee.employeeCode}
-                </span>
-              </div>
-            </div>
-
-            {/* Profile Summary */}
-            {cv.summary && (
-              <div className="mb-5">
-                <h2 className="text-xs font-black uppercase tracking-wider text-teal-900 border-b border-teal-200 pb-1 mb-1.5 flex items-center gap-1.5">
-                  <User className="w-3.5 h-3.5 text-teal-700" />
-                  <span>{isBangla ? "ক্যারিয়ার সারসংক্ষেপ (Summary)" : "Career Summary"}</span>
-                </h2>
-                <p className="text-xs text-slate-700 leading-relaxed text-justify">
-                  {cv.summary}
+              <div>
+                <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white">
+                  {isBangla ? "অফিসিয়াল রিজিউমে / সিভি (A4 ফরম্যাট)" : "Official Resume / CV (A4 Format)"}
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  {employee.fullName} • {employee.employeeCode}
                 </p>
               </div>
-            )}
+            </div>
 
-            {/* Two-Column Structured Section: Left (Personal Info) / Right (Professional) */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-5">
-              {/* Left Column: Personal Information */}
-              <div className="md:col-span-1 space-y-4 bg-slate-50 p-4 rounded-xl border border-slate-200">
-                <div>
-                  <h3 className="text-xs font-black uppercase tracking-wider text-teal-900 border-b border-teal-300 pb-1 mb-2.5 flex items-center gap-1.5">
-                    <User className="w-3.5 h-3.5 text-teal-700" />
-                    <span>{isBangla ? "ব্যক্তিগত বিবরণী" : "Personal Details"}</span>
-                  </h3>
-                  <div className="space-y-1.5 text-xs">
-                    <div>
-                      <span className="text-slate-500 block text-[10px] font-bold">
-                        {isBangla ? "পিতার নাম:" : "Father's Name:"}
-                      </span>
-                      <span className="font-semibold text-slate-900">
-                        {cv.fatherName || employee.fatherName || "—"}
-                      </span>
+            <div className="flex items-center gap-2">
+              {/* Separate NID Document View Button */}
+              <button
+                type="button"
+                onClick={() => setShowNidModal(true)}
+                className="px-3 py-1.5 rounded-xl bg-teal-50 hover:bg-teal-100 dark:bg-teal-950/60 dark:hover:bg-teal-900/60 text-teal-700 dark:text-teal-300 text-xs font-bold border border-teal-200 dark:border-teal-800 flex items-center gap-1.5 transition-all cursor-pointer"
+                title={isBangla ? "এনআইডি কার্ড আলাদা দেখুন ও ডাউনলোড করুন" : "View & Download NID separately"}
+              >
+                <CreditCard className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">{isBangla ? "এনআইডি কার্ড দেখুন / ডাউনলোড" : "View NID Card"}</span>
+              </button>
+
+              {handleEdit && (
+                <button
+                  type="button"
+                  onClick={handleEdit}
+                  className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold transition-all cursor-pointer"
+                >
+                  {isBangla ? "সিভি এডিট করুন" : "Edit CV"}
+                </button>
+              )}
+
+              {/* High-Resolution A4 PDF Download Button */}
+              <button
+                type="button"
+                onClick={handleDownloadPDF}
+                disabled={isDownloadingPdf}
+                className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 disabled:opacity-75 text-white text-xs font-bold shadow-md shadow-teal-500/20 flex items-center gap-1.5 transition-all cursor-pointer"
+                title={isBangla ? "এ৪ সাইজের পিডিএফ ফাইল সরাসরি ডাউনলোড করুন" : "Download high-quality A4 PDF"}
+              >
+                {isDownloadingPdf ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>{isBangla ? "পিডিএফ হচ্ছে..." : "Generating..."}</span>
+                  </>
+                ) : downloadSuccess ? (
+                  <>
+                    <CheckCircle2 className="w-3.5 h-3.5 text-white" />
+                    <span>{isBangla ? "ডাউনলোড সম্পন্ন!" : "Downloaded!"}</span>
+                  </>
+                ) : (
+                  <>
+                    <Download className="w-3.5 h-3.5" />
+                    <span>{isBangla ? "PDF ডাউনলোড" : "Download PDF"}</span>
+                  </>
+                )}
+              </button>
+
+              {/* Direct Print Button */}
+              <button
+                type="button"
+                onClick={handlePrint}
+                className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+                title={isBangla ? "প্রিন্ট করুন" : "Print directly"}
+              >
+                <Printer className="w-3.5 h-3.5" />
+                <span>{isBangla ? "প্রিন্ট" : "Print"}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={onClose}
+                className="p-1.5 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+
+          {/* Scrollable Preview Area with A4 paper frame */}
+          <div className="flex-1 overflow-y-auto p-2 sm:p-5 flex justify-center bg-slate-200/80 dark:bg-slate-950/70">
+            <div
+              id="printable-a4-resume"
+              ref={printContentRef}
+              className="w-full max-w-[210mm] bg-white text-slate-900 shadow-xl rounded-sm p-6 sm:p-8 font-sans border border-slate-300 print:border-0 print:shadow-none print:m-0 print:p-6 print:w-full"
+              style={{ minHeight: "297mm", boxSizing: "border-box" }}
+            >
+              
+              {/* 1. Header: Organization, Candidate & Passport Photo */}
+              <div className="flex items-start justify-between border-b-2 border-teal-700 pb-3 mb-3 gap-4">
+                <div className="flex-1 min-w-0">
+                  <div className="text-[10px] font-bold tracking-widest text-teal-700 uppercase mb-0.5">
+                    CURRICULUM VITAE
+                  </div>
+                  <h1 className="text-2xl font-black text-slate-900 tracking-tight uppercase leading-tight">
+                    {cv.fullName || employee.fullName}
+                  </h1>
+                  <div className="text-sm font-bold text-teal-800 mt-0.5 flex items-center gap-1.5 flex-wrap">
+                    <span>{cv.currentDesignation || employee.designationTitle}</span>
+                    <span className="text-slate-400">•</span>
+                    <span className="text-slate-700 font-semibold">{cv.currentDepartment || employee.departmentName}</span>
+                    <span className="text-slate-400">•</span>
+                    <span className="text-slate-600">{cv.currentOrganization || branding.companyName}</span>
+                  </div>
+
+                  {/* Horizontal Compact Contact Bar (Top present address removed as requested) */}
+                  <div className="flex flex-wrap items-center gap-x-3.5 gap-y-1 text-[11px] text-slate-600 mt-2 font-medium">
+                    <div className="flex items-center gap-1">
+                      <Phone className="w-3 h-3 text-teal-700 shrink-0" />
+                      <span>{cv.mobile || employee.phone}</span>
                     </div>
-                    <div>
-                      <span className="text-slate-500 block text-[10px] font-bold">
-                        {isBangla ? "মাতার নাম:" : "Mother's Name:"}
-                      </span>
-                      <span className="font-semibold text-slate-900">
-                        {cv.motherName || employee.motherName || "—"}
-                      </span>
+                    <div className="flex items-center gap-1">
+                      <Mail className="w-3 h-3 text-teal-700 shrink-0" />
+                      <span>{cv.email || employee.email}</span>
                     </div>
-                    <div>
-                      <span className="text-slate-500 block text-[10px] font-bold">
-                        {isBangla ? "জন্ম তারিখ:" : "Date of Birth:"}
-                      </span>
-                      <span className="font-semibold text-slate-900">
-                        {cv.dateOfBirth || employee.dateOfBirth || "—"}
-                      </span>
+                    <div className="flex items-center gap-1">
+                      <CreditCard className="w-3 h-3 text-teal-700 shrink-0" />
+                      <span>NID: <strong className="text-slate-800">{cv.nidNumber || employee.nidNumber || "—"}</strong></span>
                     </div>
-                    <div>
-                      <span className="text-slate-500 block text-[10px] font-bold">
-                        {isBangla ? "উচ্চতা:" : "Height:"}
-                      </span>
-                      <span className="font-semibold text-slate-900">
-                        {cv.height || employee.height || "—"}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-slate-500 block text-[10px] font-bold">
-                        {isBangla ? "রক্তের গ্রুপ:" : "Blood Group:"}
-                      </span>
-                      <span className="font-bold text-rose-700">
-                        {cv.bloodGroup || employee.bloodGroup || "—"}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-slate-500 block text-[10px] font-bold">
-                        {isBangla ? "ধর্ম:" : "Religion:"}
-                      </span>
-                      <span className="font-semibold text-slate-900">
-                        {cv.religion || employee.religion || "Islam"}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-slate-500 block text-[10px] font-bold">
-                        {isBangla ? "বৈবাহিক অবস্থা:" : "Marital Status:"}
-                      </span>
-                      <span className="font-semibold text-slate-900">
-                        {cv.maritalStatus || employee.maritalStatus || "SINGLE"}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-slate-500 block text-[10px] font-bold">
-                        {isBangla ? "এনআইডি নাম্বার:" : "National ID (NID):"}
-                      </span>
-                      <span className="font-mono font-bold text-slate-900">
-                        {cv.nidNumber || employee.nidNumber || "—"}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-slate-500 block text-[10px] font-bold">
-                        {isBangla ? "যোগদানের তারিখ:" : "Joining Date:"}
-                      </span>
-                      <span className="font-semibold text-slate-900">
-                        {cv.joiningDate || employee.joiningDate}
-                      </span>
-                    </div>
-                    <div className="pt-1 border-t border-slate-200">
-                      <span className="text-slate-500 block text-[10px] font-bold">
-                        {isBangla ? "বর্তমান ঠিকানা:" : "Present Address:"}
-                      </span>
-                      <span className="font-normal text-slate-800 leading-tight">
-                        {cv.presentAddress || employee.presentAddress || "—"}
-                      </span>
-                    </div>
-                    <div className="pt-1 border-t border-slate-200">
-                      <span className="text-slate-500 block text-[10px] font-bold">
-                        {isBangla ? "স্থায়ী ঠিকানা:" : "Permanent Address:"}
-                      </span>
-                      <span className="font-normal text-slate-800 leading-tight">
-                        {cv.permanentAddress || employee.permanentAddress || "—"}
-                      </span>
+                    <div className="flex items-center gap-1">
+                      <Droplet className="w-3 h-3 text-rose-600 shrink-0" />
+                      <span>Blood: <strong className="text-slate-800">{cv.bloodGroup || employee.bloodGroup || "—"}</strong></span>
                     </div>
                   </div>
                 </div>
 
-                {/* NID Card Document Status */}
-                {(employee.nidCardFrontUrl || cv.nidCardFrontUrl) && (
-                  <div className="pt-2 border-t border-slate-200">
-                    <span className="text-[10px] font-bold text-teal-800 flex items-center gap-1 mb-1">
-                      <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                      <span>{isBangla ? "এনআইডি কপি সংযুক্ত" : "NID Card Attached"}</span>
-                    </span>
-                    <div className="w-full h-14 rounded border border-slate-300 overflow-hidden bg-white">
-                      <img
-                        src={cv.nidCardFrontUrl || employee.nidCardFrontUrl}
-                        alt="NID Front"
-                        className="w-full h-full object-cover"
-                      />
-                    </div>
+                {/* Candidate Photo */}
+                <div className="flex flex-col items-center shrink-0">
+                  <div className="w-20 h-24 rounded border-2 border-teal-700 overflow-hidden shadow-xs bg-slate-100">
+                    <img
+                      src={employee.avatarUrl}
+                      alt={employee.fullName}
+                      className="w-full h-full object-cover"
+                    />
                   </div>
-                )}
+                  <span className="text-[9.5px] font-mono font-bold text-slate-500 mt-1">
+                    ID: {employee.employeeCode}
+                  </span>
+                </div>
               </div>
 
-              {/* Right Column: Work Experience & Education */}
-              <div className="md:col-span-2 space-y-5">
-                {/* Work Experience */}
-                <div>
-                  <h3 className="text-xs font-black uppercase tracking-wider text-teal-900 border-b border-teal-300 pb-1 mb-2.5 flex items-center gap-1.5">
-                    <Briefcase className="w-3.5 h-3.5 text-teal-700" />
-                    <span>{isBangla ? "কর্মঅভিজ্ঞতা (Work Experience)" : "Work Experience"}</span>
-                  </h3>
-                  <div className="space-y-3">
-                    {cv.experiences && cv.experiences.length > 0 ? (
-                      cv.experiences.map((exp, idx) => (
-                        <div key={exp.id || idx} className="border-l-2 border-teal-600 pl-3 py-0.5">
-                          <div className="flex items-center justify-between">
-                            <h4 className="text-xs font-bold text-slate-900">{exp.designation}</h4>
-                            <span className="text-[10.5px] font-semibold text-teal-800 bg-teal-50 px-2 py-0.5 rounded">
-                              {exp.durationYears}
-                            </span>
+              {/* 2. Career Objective (Expanded & Professional in English) */}
+              <div className="mb-3">
+                <h2 className="text-[11px] font-black uppercase tracking-wider text-teal-900 border-b border-teal-300 pb-0.5 mb-1 flex items-center gap-1.5">
+                  <User className="w-3 h-3 text-teal-700" />
+                  <span>Career Objective</span>
+                </h2>
+                <p className="text-[11px] text-slate-700 leading-snug text-justify font-normal">
+                  {careerObjective}
+                </p>
+              </div>
+
+              {/* 3. Work Experience */}
+              <div className="mb-3">
+                <h3 className="text-[11px] font-black uppercase tracking-wider text-teal-900 border-b border-teal-300 pb-0.5 mb-1.5 flex items-center gap-1.5">
+                  <Briefcase className="w-3 h-3 text-teal-700" />
+                  <span>Work Experience</span>
+                </h3>
+                <div className="space-y-1.5">
+                  {cv.experiences && cv.experiences.length > 0 ? (
+                    cv.experiences.map((exp, idx) => (
+                      <div key={exp.id || idx} className="border-l-2 border-teal-600 pl-2.5 py-0.5">
+                        <div className="flex items-center justify-between text-[11.5px]">
+                          <div>
+                            <span className="font-bold text-slate-900">{exp.designation}</span>
+                            <span className="text-slate-400 mx-1.5">|</span>
+                            <span className="font-semibold text-slate-700">{exp.organizationName}</span>
                           </div>
-                          <div className="text-xs font-semibold text-slate-700">
-                            {exp.organizationName}
-                          </div>
-                          {exp.responsibilities && (
-                            <p className="text-[11px] text-slate-600 mt-1 leading-relaxed">
-                              {exp.responsibilities}
-                            </p>
-                          )}
+                          <span className="text-[10px] font-bold text-teal-800 bg-teal-50 border border-teal-200 px-1.5 py-0.2 rounded">
+                            {exp.durationYears}
+                          </span>
                         </div>
-                      ))
-                    ) : (
-                      <div className="text-xs text-slate-500 italic">
-                        {isBangla ? "কোনো পূর্ব অভিজ্ঞতা যুক্ত করা হয়নি" : "No experience entries recorded"}
+                        {exp.responsibilities && (
+                          <p className="text-[10.5px] text-slate-600 leading-tight mt-0.5">
+                            {exp.responsibilities}
+                          </p>
+                        )}
+                      </div>
+                    ))
+                  ) : (
+                    <div className="text-[10.5px] text-slate-400 italic py-1">
+                      No prior work experience recorded yet.
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* 4. Educational Qualifications Table */}
+              <div className="mb-3">
+                <h3 className="text-[11px] font-black uppercase tracking-wider text-teal-900 border-b border-teal-300 pb-0.5 mb-1 flex items-center gap-1.5">
+                  <GraduationCap className="w-3.5 h-3.5 text-teal-700" />
+                  <span>Academic Qualifications</span>
+                </h3>
+                <div className="w-full overflow-hidden border border-slate-300 rounded">
+                  <table className="w-full text-left border-collapse text-[10.5px]">
+                    <thead>
+                      <tr className="bg-slate-100 border-b border-slate-300 text-slate-800">
+                        <th className="py-1 px-2 font-bold">Exam / Degree</th>
+                        <th className="py-1 px-2 font-bold">Subject / Group</th>
+                        <th className="py-1 px-2 font-bold">Institution</th>
+                        <th className="py-1 px-2 font-bold">Board / University</th>
+                        <th className="py-1 px-2 font-bold text-center">Result</th>
+                        <th className="py-1 px-2 font-bold text-center">Passing Year</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200">
+                      {cv.educations && cv.educations.length > 0 ? (
+                        cv.educations.map((edu, idx) => (
+                          <tr key={edu.id || idx} className="hover:bg-slate-50/70">
+                            <td className="py-1 px-2 font-bold text-slate-900">{edu.degreeName}</td>
+                            <td className="py-1 px-2 text-slate-700">{edu.subjectOrGroup}</td>
+                            <td className="py-1 px-2 text-slate-700">{edu.institution}</td>
+                            <td className="py-1 px-2 text-slate-600">{edu.boardOrUniversity}</td>
+                            <td className="py-1 px-2 font-bold text-teal-800 text-center">{edu.result}</td>
+                            <td className="py-1 px-2 font-semibold text-slate-700 text-center">{edu.passingYear}</td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan={6} className="py-2.5 text-center text-slate-400 italic">
+                            No educational qualifications recorded yet. Please edit CV to add your academic degrees.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* 5. Parallel Structured Section: Personal Details & Skills/Languages */}
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-3 mb-3">
+                
+                {/* Left: Personal Particulars */}
+                <div className="md:col-span-7 bg-slate-50/90 p-2.5 rounded border border-slate-200">
+                  <h4 className="text-[10.5px] font-black uppercase tracking-wider text-teal-900 border-b border-teal-200 pb-0.5 mb-1.5 flex items-center gap-1">
+                    <User className="w-3 h-3 text-teal-700" />
+                    <span>Personal Particulars</span>
+                  </h4>
+                  
+                  <div className="grid grid-cols-2 gap-x-2.5 gap-y-1.5 text-[10.5px]">
+                    <div>
+                      <span className="text-slate-500 text-[9px] block font-bold">Father's Name:</span>
+                      <span className="font-semibold text-slate-900 leading-tight block">{cv.fatherName || employee.fatherName || "—"}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 text-[9px] block font-bold">Mother's Name:</span>
+                      <span className="font-semibold text-slate-900 leading-tight block">{cv.motherName || employee.motherName || "—"}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 text-[9px] block font-bold">Date of Birth:</span>
+                      <span className="font-semibold text-slate-900">{cv.dateOfBirth || employee.dateOfBirth || "—"}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 text-[9px] block font-bold">Gender / Sex:</span>
+                      <span className="font-semibold text-slate-900">{cv.gender || employee.gender || "Male"}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 text-[9px] block font-bold">Marital Status:</span>
+                      <span className="font-semibold text-slate-900">{cv.maritalStatus || employee.maritalStatus || "SINGLE"}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 text-[9px] block font-bold">Blood Group:</span>
+                      <span className="font-bold text-rose-700">{cv.bloodGroup || employee.bloodGroup || "—"}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 text-[9px] block font-bold">Height (উচ্চতা):</span>
+                      <span className="font-semibold text-slate-900">{cv.height || employee.height || "—"}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 text-[9px] block font-bold">Religion:</span>
+                      <span className="font-semibold text-slate-900">{cv.religion || employee.religion || "Islam"}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 text-[9px] block font-bold">Nationality:</span>
+                      <span className="font-semibold text-slate-900">{cv.nationality || employee.nationality || "Bangladeshi (By Birth)"}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 text-[9px] block font-bold">National ID (NID):</span>
+                      <span className="font-mono font-bold text-slate-900">{cv.nidNumber || employee.nidNumber || "—"}</span>
+                    </div>
+                    <div className="col-span-2">
+                      <span className="text-slate-500 text-[9px] block font-bold">Emergency Contact:</span>
+                      <span className="font-mono font-semibold text-slate-800">{employee.emergencyPhone || cv.mobile || employee.phone || "—"}</span>
+                    </div>
+                    <div className="col-span-2 pt-1 border-t border-slate-200">
+                      <span className="text-slate-500 text-[9px] block font-bold">Present Address:</span>
+                      <span className="font-normal text-slate-800 leading-tight block">{cv.presentAddress || employee.presentAddress || "—"}</span>
+                    </div>
+                    <div className="col-span-2 pt-0.5 border-t border-slate-200">
+                      <span className="text-slate-500 text-[9px] block font-bold">Permanent Address:</span>
+                      <span className="font-normal text-slate-800 leading-tight block">{cv.permanentAddress || employee.permanentAddress || "—"}</span>
+                    </div>
+                    {(cv.socialLink || cv.linkedinUrl || employee.socialLink || (employee as any).linkedinUrl) && (
+                      <div className="col-span-2 pt-0.5 border-t border-slate-200">
+                        <span className="text-slate-500 text-[9px] block font-bold">LinkedIn / Social Profile:</span>
+                        <a
+                          href={
+                            (cv.socialLink || cv.linkedinUrl || employee.socialLink || (employee as any).linkedinUrl).startsWith("http")
+                              ? (cv.socialLink || cv.linkedinUrl || employee.socialLink || (employee as any).linkedinUrl)
+                              : `https://${cv.socialLink || cv.linkedinUrl || employee.socialLink || (employee as any).linkedinUrl}`
+                          }
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="font-semibold text-teal-700 hover:text-teal-900 hover:underline flex items-center gap-1.5 break-all text-[10px] mt-0.5"
+                        >
+                          <Globe className="w-3 h-3 text-teal-600 shrink-0" />
+                          <span className="truncate max-w-[320px]">
+                            {cv.socialLink || cv.linkedinUrl || employee.socialLink || (employee as any).linkedinUrl}
+                          </span>
+                          <ExternalLink className="w-2.5 h-2.5 text-slate-400 shrink-0" />
+                        </a>
                       </div>
                     )}
                   </div>
                 </div>
 
-                {/* Educational Qualifications Table */}
-                <div>
-                  <h3 className="text-xs font-black uppercase tracking-wider text-teal-900 border-b border-teal-300 pb-1 mb-2 flex items-center gap-1.5">
-                    <GraduationCap className="w-3.5 h-3.5 text-teal-700" />
-                    <span>{isBangla ? "শিক্ষাগত যোগ্যতা (Educational Qualifications)" : "Educational Qualifications"}</span>
-                  </h3>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse text-[11px]">
-                      <thead>
-                        <tr className="bg-slate-100 border-b border-slate-300 text-slate-800">
-                          <th className="p-1.5 font-bold">{isBangla ? "ডিগ্রী" : "Degree"}</th>
-                          <th className="p-1.5 font-bold">{isBangla ? "বিভাগ / গ্রুপ" : "Subject/Group"}</th>
-                          <th className="p-1.5 font-bold">{isBangla ? "প্রতিষ্ঠান" : "Institution"}</th>
-                          <th className="p-1.5 font-bold">{isBangla ? "বোর্ড/ভার্সিটি" : "Board/Univ"}</th>
-                          <th className="p-1.5 font-bold">{isBangla ? "ফলাফল" : "Result"}</th>
-                          <th className="p-1.5 font-bold">{isBangla ? "সাল" : "Year"}</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-200">
-                        {cv.educations && cv.educations.length > 0 ? (
-                          cv.educations.map((edu, idx) => (
-                            <tr key={edu.id || idx} className="hover:bg-slate-50/80">
-                              <td className="p-1.5 font-bold text-slate-900">{edu.degreeName}</td>
-                              <td className="p-1.5 text-slate-700">{edu.subjectOrGroup}</td>
-                              <td className="p-1.5 text-slate-700">{edu.institution}</td>
-                              <td className="p-1.5 text-slate-600">{edu.boardOrUniversity}</td>
-                              <td className="p-1.5 font-bold text-teal-800">{edu.result}</td>
-                              <td className="p-1.5 font-semibold text-slate-700">{edu.passingYear}</td>
-                            </tr>
-                          ))
-                        ) : (
-                          <tr>
-                            <td colSpan={6} className="p-2 text-center text-slate-400 italic">
-                              {isBangla ? "শিক্ষাগত যোগ্যতা যুক্ত করা হয়নি" : "No education data available"}
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-
-                {/* Skills Grid */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
-                  {/* Computer Skills */}
-                  <div>
-                    <h4 className="text-xs font-black uppercase tracking-wider text-teal-900 border-b border-teal-200 pb-1 mb-2 flex items-center gap-1.5">
-                      <Award className="w-3.5 h-3.5 text-teal-700" />
-                      <span>{isBangla ? "কম্পিউটার স্কিলস" : "Computer Skills"}</span>
+                {/* Right: Professional & Management Skills, Computer Skills & Languages */}
+                <div className="md:col-span-5 flex flex-col justify-between space-y-2">
+                  {/* Professional & Management Skills (Official Competencies) */}
+                  <div className="bg-slate-50/90 p-2 rounded border border-slate-200">
+                    <h4 className="text-[10px] font-black uppercase tracking-wider text-teal-900 border-b border-teal-200 pb-0.5 mb-1 flex items-center gap-1">
+                      <Briefcase className="w-3 h-3 text-teal-700" />
+                      <span>Professional & Management Skills</span>
                     </h4>
-                    <div className="flex flex-wrap gap-1.5">
-                      {cv.computerSkills && cv.computerSkills.length > 0 ? (
-                        cv.computerSkills.map((skill, idx) => (
+                    <div className="flex flex-wrap gap-1">
+                      {cv.professionalSkills && cv.professionalSkills.length > 0 ? (
+                        cv.professionalSkills.map((skill, idx) => (
                           <span
                             key={idx}
-                            className="px-2 py-0.5 rounded bg-slate-100 border border-slate-300 text-slate-800 text-[10.5px] font-semibold"
+                            className="px-1.5 py-0.2 rounded bg-white border border-teal-200 text-teal-900 text-[9.5px] font-semibold"
                           >
                             {skill}
                           </span>
                         ))
                       ) : (
-                        <span className="text-xs text-slate-400 italic">
-                          {isBangla ? "স্কিল যুক্ত করা হয়নি" : "No computer skills specified"}
-                        </span>
+                        [
+                          "Leadership & Teamwork",
+                          "Time Management & Punctuality",
+                          "Problem Solving & Adaptability",
+                          "Work Ethics & Patience",
+                          "Interpersonal Communication",
+                        ].map((skill, idx) => (
+                          <span
+                            key={idx}
+                            className="px-1.5 py-0.2 rounded bg-white border border-teal-200 text-teal-900 text-[9.5px] font-semibold"
+                          >
+                            {skill}
+                          </span>
+                        ))
                       )}
                     </div>
                   </div>
 
-                  {/* Language Skills */}
-                  <div>
-                    <h4 className="text-xs font-black uppercase tracking-wider text-teal-900 border-b border-teal-200 pb-1 mb-2 flex items-center gap-1.5">
-                      <Globe className="w-3.5 h-3.5 text-teal-700" />
-                      <span>{isBangla ? "ভাষা দক্ষতা" : "Language Skills"}</span>
+                  {/* Computer & Technical Skills */}
+                  <div className="bg-slate-50/90 p-2 rounded border border-slate-200 flex-1">
+                    <h4 className="text-[10px] font-black uppercase tracking-wider text-teal-900 border-b border-teal-200 pb-0.5 mb-1 flex items-center gap-1">
+                      <Award className="w-3 h-3 text-teal-700" />
+                      <span>Computer & Technical Skills</span>
                     </h4>
-                    <div className="space-y-1 text-[11px]">
+                    <div className="flex flex-wrap gap-1">
+                      {cv.computerSkills && cv.computerSkills.length > 0 ? (
+                        cv.computerSkills.map((skill, idx) => (
+                          <span
+                            key={idx}
+                            className="px-1.5 py-0.2 rounded bg-white border border-slate-300 text-slate-800 text-[9.5px] font-semibold"
+                          >
+                            {skill}
+                          </span>
+                        ))
+                      ) : (
+                        <span className="text-[9.5px] text-slate-400 italic">No specific skills listed</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Language Proficiency */}
+                  <div className="bg-slate-50/90 p-2 rounded border border-slate-200 flex-1">
+                    <h4 className="text-[10px] font-black uppercase tracking-wider text-teal-900 border-b border-teal-200 pb-0.5 mb-1 flex items-center gap-1">
+                      <Globe className="w-3 h-3 text-teal-700" />
+                      <span>Language Proficiency</span>
+                    </h4>
+                    <div className="space-y-0.5 text-[10px]">
                       {cv.languages && cv.languages.length > 0 ? (
                         cv.languages.map((lang, idx) => (
                           <div key={lang.id || idx} className="flex items-center justify-between">
                             <span className="font-semibold text-slate-800">{lang.language}</span>
-                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-teal-50 text-teal-800 font-bold border border-teal-200">
+                            <span className="text-[9px] px-1 py-0.2 rounded bg-teal-50 text-teal-800 font-bold border border-teal-200">
                               {getProficiencyLabel(lang.proficiency)}
                             </span>
                           </div>
                         ))
                       ) : (
-                        <span className="text-xs text-slate-400 italic">
-                          {isBangla ? "ভাষা দক্ষতা দেওয়া হয়নি" : "No languages listed"}
-                        </span>
+                        <span className="text-[9.5px] text-slate-400 italic">No language skills recorded</span>
                       )}
                     </div>
                   </div>
                 </div>
+
               </div>
-            </div>
 
-            {/* Declaration & Verification Footer */}
-            <div className="mt-6 pt-5 border-t border-slate-300 text-xs">
-              <p className="text-[11px] text-slate-600 text-justify leading-snug">
-                {isBangla
-                  ? "আমি অঙ্গীকার করছি যে উপরে প্রদত্ত সমস্ত বিবরণী ও তথ্য আমার জ্ঞান ও বিশ্বাসমতে সত্য এবং সঠিক।"
-                  : "I hereby declare that all the information provided in this curriculum vitae is true and correct to the best of my knowledge and belief."}
-              </p>
+              {/* 6. Declaration & Candidate Signature Footer */}
+              <div className="pt-2.5 border-t border-slate-300 mt-2">
+                <p className="text-[10px] text-slate-600 text-justify leading-tight">
+                  I solemnly declare that the particulars and information given above are true, complete and correct to the best of my knowledge and belief.
+                </p>
 
-              <div className="flex items-end justify-between mt-8 pt-2">
-                <div className="text-[10.5px] text-slate-500">
-                  <span>{isBangla ? "তারিখ:" : "Date:"} </span>
-                  <span className="font-semibold text-slate-700">
-                    {new Date().toLocaleDateString(isBangla ? "bn-BD" : "en-GB", {
-                      year: "numeric",
-                      month: "long",
-                      day: "numeric",
-                    })}
-                  </span>
-                </div>
-
-                <div className="text-center">
-                  <div className="w-40 border-b border-slate-400 pb-1 mb-1">
-                    {employee.savedSignatureUrl ? (
-                      <img
-                        src={employee.savedSignatureUrl}
-                        alt="Signature"
-                        className="h-8 mx-auto object-contain"
-                      />
-                    ) : (
-                      <span className="font-serif italic text-slate-700 text-xs">{cv.fullName || employee.fullName}</span>
-                    )}
+                <div className="flex items-end justify-between mt-3 pt-1">
+                  <div className="text-[10px] text-slate-600 space-y-0.5">
+                    <div>
+                      <span className="font-semibold">Date: </span>
+                      <span>
+                        {new Date().toLocaleDateString("en-GB", {
+                          year: "numeric",
+                          month: "long",
+                          day: "numeric",
+                        })}
+                      </span>
+                    </div>
                   </div>
-                  <span className="text-[10.5px] font-bold text-slate-700 block">
-                    {isBangla ? "আবেদনকারীর স্বাক্ষর" : "Candidate Signature"}
-                  </span>
+
+                  <div className="text-center flex flex-col items-center">
+                    <div className="w-44 border-b border-slate-400 pb-0.5 mb-1 flex flex-col items-center justify-end min-h-[42px]">
+                      {(employee.savedSignatureUrl || employee.signatureUrl || cv.signatureUrl) ? (
+                        <>
+                          <img
+                            src={employee.savedSignatureUrl || employee.signatureUrl || cv.signatureUrl}
+                            alt="Candidate Signature"
+                            className="h-7 max-h-8 max-w-[140px] object-contain mb-0.5"
+                          />
+                          <span className="text-[9.5px] text-slate-800 font-semibold tracking-wide">
+                            {cv.fullName || employee.fullName}
+                          </span>
+                        </>
+                      ) : (
+                        <span className="font-serif italic text-slate-800 text-xs font-semibold pb-0.5">
+                          {cv.fullName || employee.fullName}
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-[10px] font-bold text-slate-800 block">
+                      Candidate Signature
+                    </span>
+                  </div>
                 </div>
               </div>
+
             </div>
           </div>
+
         </div>
       </div>
-    </div>
+
+      {/* Standalone NID Document Modal */}
+      {showNidModal && (
+        <ViewNidCardModal
+          employee={employee}
+          isOpen={showNidModal}
+          onClose={() => setShowNidModal(false)}
+          onOpenEditCV={handleEdit}
+          isBangla={isBangla}
+        />
+      )}
+    </>,
+    document.body
   );
 };

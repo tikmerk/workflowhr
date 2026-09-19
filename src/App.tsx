@@ -789,6 +789,22 @@ function AppContent() {
     saveAuditLogToFirestore(log);
   };
 
+  // Centralized handler for employee record and profile update
+  const handleUpdateEmployee = (updatedEmp: Employee) => {
+    setEmployees((prev) =>
+      prev.map((e) => (e.id === updatedEmp.id ? updatedEmp : e))
+    );
+    if (currentEmployee.id === updatedEmp.id) {
+      setCurrentEmployee(updatedEmp);
+      try {
+        localStorage.setItem("workflow_hr_current_user", JSON.stringify(updatedEmp));
+      } catch (e) {
+        console.warn(e);
+      }
+    }
+    saveEmployeeToFirestore(updatedEmp);
+  };
+
   // Handlers for Attendance & Biometrics
   const handleAttendanceSuccess = (record: AttendanceRecord) => {
     // 1. Auto-reconcile previous unclosed clock-outs if this is a check-in on a new day
@@ -1785,20 +1801,7 @@ function AppContent() {
               onEditEmployee={(emp) => {
                 setActiveTab("employees");
               }}
-              onUpdateEmployee={(updatedEmp) => {
-                setEmployees((prev) =>
-                  prev.map((e) => (e.id === updatedEmp.id ? updatedEmp : e))
-                );
-                if (currentEmployee.id === updatedEmp.id) {
-                  setCurrentEmployee(updatedEmp);
-                  try {
-                    localStorage.setItem("workflow_hr_current_user", JSON.stringify(updatedEmp));
-                  } catch (e) {
-                    console.warn(e);
-                  }
-                }
-                saveEmployeeToFirestore(updatedEmp);
-              }}
+              onUpdateEmployee={handleUpdateEmployee}
             />
           )}
 
@@ -2156,6 +2159,7 @@ function AppContent() {
               onSendMessage={(msg) => {
                 setChatMessages((prev) => [...prev, msg]);
               }}
+              onUpdateEmployee={handleUpdateEmployee}
             />
           )}
 

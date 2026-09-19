@@ -24,6 +24,7 @@ import {
   LeaveApplication,
   Project
 } from "../../types";
+import { EmployeeDashboardView } from "./EmployeeDashboardView";
 
 export interface DashboardViewProps {
   currentEmployee?: Employee;
@@ -148,6 +149,43 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     presentCount + lateCount > 0
       ? Math.round((presentCount / (presentCount + lateCount)) * 100)
       : 96;
+
+  // Check if current user is an executive/admin with privilege to view corporate-wide analytics
+  const isExecutiveUser = Boolean(
+    activeUser.role === "SUPER_ADMIN" ||
+    activeUser.role === "GRAND_ADMIN" ||
+    activeUser.role === "COMPANY_ADMIN" ||
+    activeUser.role === "CEO" ||
+    activeUser.role === "BRANCH_MANAGER" ||
+    activeUser.role === "HR_MANAGER" ||
+    activeUser.role === "ACCOUNTS_MANAGER" ||
+    activeUser.isSuperAdmin ||
+    activeUser.isCeoOrOwner ||
+    Boolean((activeUser as any).canAccessAllBranches) ||
+    (activeUser.designationTitle && (
+      activeUser.designationTitle.toLowerCase().includes("ceo") ||
+      activeUser.designationTitle.toLowerCase().includes("director") ||
+      activeUser.designationTitle.toLowerCase().includes("founder") ||
+      activeUser.designationTitle.toLowerCase().includes("executive officer")
+    ))
+  );
+
+  // If general staff (non-executive), render the dedicated Employee Dashboard without executive metrics
+  if (!isExecutiveUser) {
+    return (
+      <EmployeeDashboardView
+        currentEmployee={activeUser}
+        branch={activeBranch}
+        attendanceLogs={attendanceLogs}
+        payslips={payslips}
+        leaves={leaveList}
+        projects={projects}
+        onOpenAttendanceModal={handleOpenAttendance}
+        onOpenAiAssistant={handleOpenAi}
+        onNavigate={handleNavigation}
+      />
+    );
+  }
 
   return (
     <div id="executive-dashboard-view" className="space-y-6 animate-in fade-in duration-300">

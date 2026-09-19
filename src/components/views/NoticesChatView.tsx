@@ -54,6 +54,7 @@ import { Notice, ChatMessage, Employee, Branch, Project } from "../../types";
 import { useThemeLanguage } from "../../context/ThemeLanguageContext";
 import { useCompanyBranding } from "../../context/CompanyBrandingContext";
 import { NoticeA4LetterheadModal, formatBanglaDate, toBanglaDigits } from "./NoticeA4LetterheadModal";
+import { compressSignatureImage } from "../../utils/imageCompression";
 
 export interface CustomGroup {
   id: string;
@@ -76,6 +77,7 @@ interface NoticesChatViewProps {
   onUpdateNotice?: (notice: Notice) => void;
   onDeleteNotice?: (noticeId: string) => void;
   onSendMessage: (msg: ChatMessage) => void;
+  onUpdateEmployee?: (updated: Employee) => void;
 }
 
 export const NoticesChatView: React.FC<NoticesChatViewProps> = ({
@@ -130,6 +132,7 @@ export const NoticesChatView: React.FC<NoticesChatViewProps> = ({
   onUpdateNotice,
   onDeleteNotice,
   onSendMessage,
+  onUpdateEmployee,
 }) => {
   const { t, isBangla, theme } = useThemeLanguage();
   const { branding, softwareBranding, getCompanyDisplayName, getCompanyAddress } = useCompanyBranding();
@@ -258,8 +261,14 @@ export const NoticesChatView: React.FC<NoticesChatViewProps> = ({
       const savedBranch = localStorage.getItem(branchKey);
       const savedOrg = localStorage.getItem(orgKey);
 
-      if (savedSig) {
-        setSignatureImage(savedSig);
+      const resolvedSig =
+        currentEmployee.savedSignatureUrl ||
+        currentEmployee.signatureUrl ||
+        currentEmployee.cvData?.signatureUrl ||
+        savedSig;
+
+      if (resolvedSig) {
+        setSignatureImage(resolvedSig);
         setHasSavedProfile(true);
       } else {
         setSignatureImage("");
@@ -319,28 +328,38 @@ export const NoticesChatView: React.FC<NoticesChatViewProps> = ({
     }
   };
 
-  // Handle signature upload (PNG, JPG, WebP)
-  const handleSignatureUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Handle signature upload (PNG, JPG, JPEG, WebP) with auto-compression
+  const handleSignatureUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       if (!file.type.match(/image\/(png|jpeg|jpg|webp)/i)) {
         alert(t("দয়া করে পিএনজি, জেপিজি অথবা ওয়েবপি (PNG, JPG, WebP) ফাইল আপলোড করুন।", "Please upload a PNG, JPG, or WebP image."));
         return;
       }
-      const reader = new FileReader();
-      reader.onload = (uploadEvent) => {
-        const base64Data = uploadEvent.target?.result as string;
-        setSignatureImage(base64Data);
-        // Persist to localStorage permanently
-        try {
-          const storageKey = `workflow_hr_saved_signature_${currentEmployee.id}`;
-          localStorage.setItem(storageKey, base64Data);
-          setHasSavedProfile(true);
-        } catch (err) {
-          console.warn("Failed saving signature to localStorage", err);
+      try {
+        const compressed = await compressSignatureImage(file, 420, 150, 0.85);
+        if (compressed) {
+          setSignatureImage(compressed);
+          // Persist to localStorage permanently
+          try {
+            const storageKey = `workflow_hr_saved_signature_${currentEmployee.id}`;
+            localStorage.setItem(storageKey, compressed);
+            setHasSavedProfile(true);
+          } catch (err) {
+            console.warn("Failed saving signature to localStorage", err);
+          }
+          if (onUpdateEmployee) {
+            onUpdateEmployee({
+              ...currentEmployee,
+              savedSignatureUrl: compressed,
+              signatureUrl: compressed,
+              cvData: currentEmployee.cvData ? { ...currentEmployee.cvData, signatureUrl: compressed } : undefined,
+            });
+          }
         }
-      };
-      reader.readAsDataURL(file);
+      } catch (err) {
+        console.error("Signature compression error in notices", err);
+      }
     }
   };
 
@@ -351,6 +370,14 @@ export const NoticesChatView: React.FC<NoticesChatViewProps> = ({
       localStorage.removeItem(storageKey);
     } catch (err) {
       console.warn("Failed removing signature from localStorage", err);
+    }
+    if (onUpdateEmployee) {
+      onUpdateEmployee({
+        ...currentEmployee,
+        savedSignatureUrl: undefined,
+        signatureUrl: undefined,
+        cvData: currentEmployee.cvData ? { ...currentEmployee.cvData, signatureUrl: undefined } : undefined,
+      });
     }
   };
 

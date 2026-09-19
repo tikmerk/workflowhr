@@ -186,12 +186,17 @@ export interface EmployeeCVData {
   email?: string;
   presentAddress?: string;
   permanentAddress?: string;
+  socialLink?: string;
+  linkedinUrl?: string;
   nidNumber?: string;
   nidCardFrontUrl?: string;
   nidCardBackUrl?: string;
   bloodGroup?: string;
   dateOfBirth?: string;
   height?: string;
+  weight?: string;
+  gender?: string;
+  nationality?: string;
   maritalStatus?: "SINGLE" | "MARRIED" | "DIVORCED" | "WIDOWED";
   religion?: string;
   joiningDate?: string;
@@ -201,7 +206,9 @@ export interface EmployeeCVData {
   educations: EducationQualification[];
   experiences: WorkExperience[];
   computerSkills: string[];
+  professionalSkills?: string[];
   languages: LanguageSkill[];
+  signatureUrl?: string;
   lastUpdatedAt?: string;
 }
 
@@ -268,8 +275,13 @@ export interface Employee {
   passportNumber?: string;
   presentAddress?: string;
   permanentAddress?: string;
+  socialLink?: string;
+  linkedinUrl?: string;
   religion?: string;
   height?: string;
+  weight?: string;
+  nationality?: string;
+  signatureUrl?: string;
   nidCardFrontUrl?: string;
   nidCardBackUrl?: string;
   cvData?: EmployeeCVData;
@@ -290,8 +302,12 @@ export interface Employee {
   
   // Bank & Payroll
   salary: SalaryBreakdown;
+  salaryPaymentMethod?: "BANK" | "CASH";
+  bankAccountHolderName?: string;
   bankName?: string;
+  bankBranchName?: string;
   bankAccountNumber?: string;
+  bankRoutingNumber?: string;
   bkashOrNagadNumber?: string;
   
   // Face & Device Verification
@@ -700,6 +716,7 @@ export interface CompanyBranding {
   website: string;
   registrationNumber?: string;
   employeeIdPrefix?: string; // Client-configurable prefix, e.g. "MWO"
+  salaryDisbursementPolicy?: "BOTH" | "BANK_ONLY" | "CASH_ONLY"; // Global policy for salary disbursement
 }
 
 export interface Notice {
@@ -1032,6 +1049,7 @@ export interface CustomBonusConfig {
 // Global Super Admin Payroll & Attendance Penalty Policy
 export interface PayrollPolicyConfig {
   id?: string;
+  salaryDisbursementPolicy?: "BOTH" | "BANK_ONLY" | "CASH_ONLY"; // Global policy: Both, Bank Only, or Cash Only
   twoEidsFixedBonusAmount?: number; // e.g. ৳15,000 per Eid
   percentageBonusRate?: number; // e.g. 50% of Basic
   bonusMaxCap?: number; // e.g. ৳50,000 max cap

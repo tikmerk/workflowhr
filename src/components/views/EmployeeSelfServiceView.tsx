@@ -45,6 +45,7 @@ import {
 import { FaceEnrollmentModal } from "../attendance/FaceEnrollmentModal";
 import { EditEmployeeCVModal } from "../modals/EditEmployeeCVModal";
 import { ViewA4ResumeModal } from "../modals/ViewA4ResumeModal";
+import { useCompanyBranding } from "../../context/CompanyBrandingContext";
 
 interface EmployeeSelfServiceViewProps {
   currentEmployee: Employee;
@@ -143,6 +144,9 @@ export const EmployeeSelfServiceView: React.FC<EmployeeSelfServiceViewProps> = (
   const [loanReason, setLoanReason] = useState("");
 
   // Profile & Designation Edit Modal State
+  const { branding } = useCompanyBranding();
+  const salaryDisbursementPolicy = branding.salaryDisbursementPolicy || "BOTH";
+
   const [showEditProfileModal, setShowEditProfileModal] = useState(false);
   const [editFullName, setEditFullName] = useState(currentEmployee.fullName);
   const [editDesignationTitle, setEditDesignationTitle] = useState(currentEmployee.designationTitle);
@@ -152,6 +156,40 @@ export const EmployeeSelfServiceView: React.FC<EmployeeSelfServiceViewProps> = (
   const [editPresentAddress, setEditPresentAddress] = useState(currentEmployee.presentAddress || "");
   const [editBloodGroup, setEditBloodGroup] = useState(currentEmployee.bloodGroup || "O+");
   const [editAvatarUrl, setEditAvatarUrl] = useState(currentEmployee.avatarUrl);
+
+  // Bank & Payment Method states
+  const [editPaymentMethod, setEditPaymentMethod] = useState<"BANK" | "CASH">(
+    currentEmployee.salaryPaymentMethod || (salaryDisbursementPolicy === "CASH_ONLY" ? "CASH" : "BANK")
+  );
+  const [editBankAccountHolderName, setEditBankAccountHolderName] = useState(
+    currentEmployee.bankAccountHolderName || currentEmployee.fullName
+  );
+  const [editBankName, setEditBankName] = useState(currentEmployee.bankName || "");
+  const [editBankBranchName, setEditBankBranchName] = useState(currentEmployee.bankBranchName || "");
+  const [editBankAccountNumber, setEditBankAccountNumber] = useState(currentEmployee.bankAccountNumber || "");
+  const [editBankRoutingNumber, setEditBankRoutingNumber] = useState(currentEmployee.bankRoutingNumber || "");
+
+  // Sync profile fields when modal opens
+  React.useEffect(() => {
+    if (showEditProfileModal) {
+      setEditFullName(currentEmployee.fullName);
+      setEditDesignationTitle(currentEmployee.designationTitle);
+      setEditDepartmentName(currentEmployee.departmentName);
+      setEditPhone(currentEmployee.phone);
+      setEditEmergencyPhone(currentEmployee.emergencyPhone || "");
+      setEditPresentAddress(currentEmployee.presentAddress || "");
+      setEditBloodGroup(currentEmployee.bloodGroup || "O+");
+      setEditAvatarUrl(currentEmployee.avatarUrl);
+      setEditPaymentMethod(
+        currentEmployee.salaryPaymentMethod || (salaryDisbursementPolicy === "CASH_ONLY" ? "CASH" : "BANK")
+      );
+      setEditBankAccountHolderName(currentEmployee.bankAccountHolderName || currentEmployee.fullName);
+      setEditBankName(currentEmployee.bankName || "");
+      setEditBankBranchName(currentEmployee.bankBranchName || "");
+      setEditBankAccountNumber(currentEmployee.bankAccountNumber || "");
+      setEditBankRoutingNumber(currentEmployee.bankRoutingNumber || "");
+    }
+  }, [showEditProfileModal, currentEmployee, salaryDisbursementPolicy]);
 
   const isCeoOrAdmin = Boolean(
     currentEmployee.isCeoOrOwner ||
@@ -168,6 +206,13 @@ export const EmployeeSelfServiceView: React.FC<EmployeeSelfServiceViewProps> = (
 
   const handleProfileSave = (e: React.FormEvent) => {
     e.preventDefault();
+    const effectivePaymentMethod: "BANK" | "CASH" =
+      salaryDisbursementPolicy === "CASH_ONLY"
+        ? "CASH"
+        : salaryDisbursementPolicy === "BANK_ONLY"
+        ? "BANK"
+        : editPaymentMethod;
+
     const updated: Employee = {
       ...currentEmployee,
       fullName: editFullName,
@@ -178,6 +223,12 @@ export const EmployeeSelfServiceView: React.FC<EmployeeSelfServiceViewProps> = (
       presentAddress: editPresentAddress,
       bloodGroup: editBloodGroup as any,
       avatarUrl: editAvatarUrl,
+      salaryPaymentMethod: effectivePaymentMethod,
+      bankAccountHolderName: editBankAccountHolderName,
+      bankName: editBankName,
+      bankBranchName: editBankBranchName,
+      bankAccountNumber: editBankAccountNumber,
+      bankRoutingNumber: editBankRoutingNumber,
       additionalDesignations: [],
       additionalDepartments: [],
     };
@@ -671,10 +722,36 @@ export const EmployeeSelfServiceView: React.FC<EmployeeSelfServiceViewProps> = (
                 <span className="font-bold text-red-500 dark:text-red-400">{currentEmployee.bloodGroup}</span>
               </div>
               <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/50">
-                <span className="text-slate-500 dark:text-slate-400 block text-[11px]">Bank Account</span>
-                <span className="font-bold text-slate-900 dark:text-slate-200">
-                  {currentEmployee.bankName} - {currentEmployee.bankAccountNumber}
+                <span className="text-slate-500 dark:text-slate-400 block text-[11px] flex items-center justify-between">
+                  <span>Salary Payment Method</span>
+                  <span className={`px-1.5 py-0.2 rounded text-[9px] font-bold ${
+                    currentEmployee.salaryPaymentMethod === "CASH"
+                      ? "bg-amber-500/15 text-amber-700 dark:text-amber-300"
+                      : "bg-teal-500/15 text-teal-700 dark:text-teal-300"
+                  }`}>
+                    {currentEmployee.salaryPaymentMethod === "CASH" ? "CASH" : "BANK"}
+                  </span>
                 </span>
+                {currentEmployee.salaryPaymentMethod === "CASH" ? (
+                  <span className="font-bold text-slate-900 dark:text-slate-200 flex items-center gap-1.5 mt-0.5">
+                    <Banknote className="w-4 h-4 text-amber-600" />
+                    <span>ক্যাশ / নগদ (Office Cash Handover)</span>
+                  </span>
+                ) : currentEmployee.bankAccountNumber ? (
+                  <div className="mt-0.5">
+                    <span className="font-bold text-slate-900 dark:text-slate-200 block">
+                      {currentEmployee.bankName || "Bank"} • {currentEmployee.bankAccountNumber}
+                    </span>
+                    <span className="text-[10px] text-slate-500 block truncate">
+                      {currentEmployee.bankAccountHolderName ? `A/C Name: ${currentEmployee.bankAccountHolderName}` : ""}
+                      {currentEmployee.bankBranchName ? ` (${currentEmployee.bankBranchName})` : ""}
+                    </span>
+                  </div>
+                ) : (
+                  <span className="font-medium text-slate-400 dark:text-slate-500 text-[11px]">
+                    ব্যাংক তথ্য দেওয়া হয়নি (Not set)
+                  </span>
+                )}
               </div>
               <div className="sm:col-span-2 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/50">
                 <span className="text-slate-500 dark:text-slate-400 block text-[11px]">Present Residential Address</span>
@@ -1744,6 +1821,153 @@ export const EmployeeSelfServiceView: React.FC<EmployeeSelfServiceViewProps> = (
                     )}
                   </div>
                 </div>
+              </div>
+
+              {/* Payment Method & Bank Account Section */}
+              <div className="p-4 rounded-2xl bg-teal-50/60 dark:bg-teal-950/20 border border-teal-200/80 dark:border-teal-800/50 space-y-3">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <h4 className="font-bold text-slate-900 dark:text-white flex items-center gap-2 text-xs sm:text-sm">
+                    <Banknote className="w-4 h-4 text-teal-600" />
+                    <span>বেতন প্রাপ্তির মাধ্যম ও ব্যাংক বিবরণ (Payment Method & Bank Details)</span>
+                  </h4>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-teal-100 dark:bg-teal-900/60 text-teal-800 dark:text-teal-300">
+                    {salaryDisbursementPolicy === "BOTH"
+                      ? "উভয় অপশন উন্মুক্ত (Bank & Cash)"
+                      : salaryDisbursementPolicy === "BANK_ONLY"
+                      ? "পলিসি: শুধুমাত্র ব্যাংক"
+                      : "পলিসি: শুধুমাত্র ক্যাশ"}
+                  </span>
+                </div>
+
+                {/* Method selector if BOTH */}
+                {salaryDisbursementPolicy === "BOTH" ? (
+                  <div>
+                    <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1.5 text-xs">
+                      বেতন প্রদানের মাধ্যম নির্বাচন করুন (Select Payment Method)
+                    </label>
+                    <div className="grid grid-cols-2 gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setEditPaymentMethod("BANK")}
+                        className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between ${
+                          editPaymentMethod === "BANK"
+                            ? "bg-white dark:bg-slate-900 border-teal-500 ring-2 ring-teal-500/20 shadow-xs"
+                            : "bg-white/60 dark:bg-slate-950/40 border-slate-200 dark:border-slate-800 hover:border-teal-300"
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <Building2 className={`w-4 h-4 ${editPaymentMethod === "BANK" ? "text-teal-600" : "text-slate-400"}`} />
+                          <div>
+                            <p className="text-xs font-bold text-slate-900 dark:text-white">ব্যাংক একাউন্ট (Bank)</p>
+                            <p className="text-[10px] text-slate-500">সরাসরি ব্যাংকে স্থানান্তর</p>
+                          </div>
+                        </div>
+                        {editPaymentMethod === "BANK" && <CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" />}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setEditPaymentMethod("CASH")}
+                        className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between ${
+                          editPaymentMethod === "CASH"
+                            ? "bg-white dark:bg-slate-900 border-teal-500 ring-2 ring-teal-500/20 shadow-xs"
+                            : "bg-white/60 dark:bg-slate-950/40 border-slate-200 dark:border-slate-800 hover:border-teal-300"
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <Banknote className={`w-4 h-4 ${editPaymentMethod === "CASH" ? "text-teal-600" : "text-slate-400"}`} />
+                          <div>
+                            <p className="text-xs font-bold text-slate-900 dark:text-white">ক্যাশ / নগদ (Cash)</p>
+                            <p className="text-[10px] text-slate-500">অফিস থেকে ক্যাশ গ্রহণ</p>
+                          </div>
+                        </div>
+                        {editPaymentMethod === "CASH" && <CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" />}
+                      </button>
+                    </div>
+                  </div>
+                ) : salaryDisbursementPolicy === "BANK_ONLY" ? (
+                  <div className="p-2.5 rounded-xl bg-blue-500/10 border border-blue-500/20 text-xs text-blue-700 dark:text-blue-300 flex items-center gap-2">
+                    <Building2 className="w-4 h-4 shrink-0" />
+                    <span>কোম্পানি পলিসি অনুযায়ী বেতন শুধুমাত্র ব্যাংকে পরিশোধ করা হবে। অনুগ্রহ করে আপনার ব্যাংক তথ্য পূরণ করুন।</span>
+                  </div>
+                ) : (
+                  <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-800 dark:text-amber-200 flex items-center gap-2">
+                    <Banknote className="w-4 h-4 shrink-0" />
+                    <span>কোম্পানি পলিসি অনুযায়ী বেতন ক্যাশে পরিশোধ করা হবে। ব্যাংক একাউন্ট দেওয়া বাধ্যতামূলক নয়।</span>
+                  </div>
+                )}
+
+                {/* Bank Account Fields - Show when BANK or BOTH with BANK selected */}
+                {(salaryDisbursementPolicy === "BANK_ONLY" || (salaryDisbursementPolicy === "BOTH" && editPaymentMethod === "BANK")) && (
+                  <div className="space-y-3 pt-2 border-t border-teal-200/50 dark:border-teal-800/30">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                      <div>
+                        <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
+                          একাউন্টধারীর নাম (Account Holder Name) *
+                        </label>
+                        <input
+                          type="text"
+                          value={editBankAccountHolderName}
+                          onChange={(e) => setEditBankAccountHolderName(e.target.value)}
+                          placeholder="যেমন: MD. RABBI SARKAR"
+                          className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white font-medium focus:outline-none focus:border-teal-500"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
+                          ব্যাংকের নাম (Bank Name) *
+                        </label>
+                        <input
+                          type="text"
+                          value={editBankName}
+                          onChange={(e) => setEditBankName(e.target.value)}
+                          placeholder="যেমন: Islami Bank Bangladesh / City Bank"
+                          className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white font-medium focus:outline-none focus:border-teal-500"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
+                          শাখার নাম (Branch Name)
+                        </label>
+                        <input
+                          type="text"
+                          value={editBankBranchName}
+                          onChange={(e) => setEditBankBranchName(e.target.value)}
+                          placeholder="যেমন: Gulshan Branch, Dhaka"
+                          className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white font-medium focus:outline-none focus:border-teal-500"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
+                          একাউন্ট নম্বর (Account Number) *
+                        </label>
+                        <input
+                          type="text"
+                          value={editBankAccountNumber}
+                          onChange={(e) => setEditBankAccountNumber(e.target.value)}
+                          placeholder="যেমন: 2050123456789012"
+                          className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white font-mono font-medium focus:outline-none focus:border-teal-500"
+                        />
+                      </div>
+
+                      <div className="sm:col-span-2">
+                        <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
+                          রাউটিং নম্বর (Routing Number - ঐচ্ছিক)
+                        </label>
+                        <input
+                          type="text"
+                          value={editBankRoutingNumber}
+                          onChange={(e) => setEditBankRoutingNumber(e.target.value)}
+                          placeholder="যেমন: 125272839 (9 Digits)"
+                          className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white font-mono font-medium focus:outline-none focus:border-teal-500"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Form Action Buttons */}

@@ -149,6 +149,7 @@ const DEFAULT_POLICY: PayrollPolicyConfig = {
   advanceSalaryRecoveryMonths: 1,
   defaultProvidentFundPercentage: 8,
   defaultTaxPercentage: 5,
+  salaryDisbursementPolicy: "BOTH",
 };
 
 export const PayrollView: React.FC<PayrollViewProps> = ({
@@ -167,7 +168,7 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
   onDisbursePayslip,
   onUpdatePayslip,
 }) => {
-  const { branding } = useCompanyBranding();
+  const { branding, updateBranding } = useCompanyBranding();
 
   // Role-Based Access Control (RBAC) Determination for Payroll Management
   const isPayrollAdmin = useMemo(() => {
@@ -446,9 +447,12 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
     e.preventDefault();
     if (onUpdatePayrollPolicy) {
       onUpdatePayrollPolicy(policyDraft);
-      setPolicySavedToast(true);
-      setTimeout(() => setPolicySavedToast(false), 3500);
     }
+    if (updateBranding && policyDraft.salaryDisbursementPolicy) {
+      updateBranding({ salaryDisbursementPolicy: policyDraft.salaryDisbursementPolicy });
+    }
+    setPolicySavedToast(true);
+    setTimeout(() => setPolicySavedToast(false), 3500);
   };
 
   const handleExportBankAdvice = () => {
@@ -2029,6 +2033,108 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
                       কর্মীর প্রোফাইলে নির্দিষ্ট ট্যাক্স না থাকলে এটি প্রযোজ্য হবে।
                     </p>
                   </div>
+                </div>
+              </div>
+
+              {/* SECTION 7: GLOBAL SALARY DISBURSEMENT POLICY */}
+              <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-950/40 border border-slate-200 dark:border-slate-800 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-bold text-xs uppercase tracking-wider text-slate-900 dark:text-white flex items-center gap-2">
+                    <Banknote className="w-4 h-4 text-teal-600 dark:text-teal-400" />
+                    <span>৭. গ্লোবাল বেতন পরিশোধ মাধ্যম পলিসি (Global Salary Disbursement Policy)</span>
+                  </h4>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-teal-500/10 text-teal-700 dark:text-teal-300">
+                    সুপার অ্যাডমিন পলিসি
+                  </span>
+                </div>
+                <p className="text-xs text-slate-600 dark:text-slate-400">
+                  প্রতিষ্ঠানব্যাপী বেতন কিভাবে দেওয়া হবে তা এখান থেকে নির্ধারণ করুন। এর ওপর ভিত্তি করে কর্মীদের সেলফ-সার্ভিস প্রোফাইলে ব্যাংক একাউন্ট বা ক্যাশ অপশন প্রদর্শিত হবে।
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setPolicyDraft({
+                        ...policyDraft,
+                        salaryDisbursementPolicy: "BOTH",
+                      })
+                    }
+                    className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-2 ${
+                      (policyDraft.salaryDisbursementPolicy || "BOTH") === "BOTH"
+                        ? "bg-white dark:bg-slate-900 border-teal-500 ring-2 ring-teal-500/20 shadow-xs"
+                        : "bg-white/60 dark:bg-slate-900/40 border-slate-200 dark:border-slate-800 hover:border-teal-300"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                        <CreditCard className="w-4 h-4 text-teal-600" />
+                        <span>ব্যাংক ও ক্যাশ উভয় (Both)</span>
+                      </span>
+                      {(policyDraft.salaryDisbursementPolicy || "BOTH") === "BOTH" && (
+                        <CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" />
+                      )}
+                    </div>
+                    <p className="text-[11px] text-slate-500">
+                      কর্মী তার সুবিধা অনুযায়ী ব্যাংক একাউন্ট অথবা নগদ ক্যাশ নির্বাচন করতে পারবে।
+                    </p>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setPolicyDraft({
+                        ...policyDraft,
+                        salaryDisbursementPolicy: "BANK_ONLY",
+                      })
+                    }
+                    className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-2 ${
+                      policyDraft.salaryDisbursementPolicy === "BANK_ONLY"
+                        ? "bg-white dark:bg-slate-900 border-teal-500 ring-2 ring-teal-500/20 shadow-xs"
+                        : "bg-white/60 dark:bg-slate-900/40 border-slate-200 dark:border-slate-800 hover:border-teal-300"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                        <Building2 className="w-4 h-4 text-blue-600" />
+                        <span>শুধুমাত্র ব্যাংক (Bank Only)</span>
+                      </span>
+                      {policyDraft.salaryDisbursementPolicy === "BANK_ONLY" && (
+                        <CheckCircle2 className="w-4 h-4 text-blue-600 shrink-0" />
+                      )}
+                    </div>
+                    <p className="text-[11px] text-slate-500">
+                      সকল কর্মীর বেতন ব্যাংক একাউন্টে প্রদান বাধ্যতামূলক। প্রোফাইলে ব্যাংক তথ্য দিতে হবে।
+                    </p>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setPolicyDraft({
+                        ...policyDraft,
+                        salaryDisbursementPolicy: "CASH_ONLY",
+                      })
+                    }
+                    className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-2 ${
+                      policyDraft.salaryDisbursementPolicy === "CASH_ONLY"
+                        ? "bg-white dark:bg-slate-900 border-teal-500 ring-2 ring-teal-500/20 shadow-xs"
+                        : "bg-white/60 dark:bg-slate-900/40 border-slate-200 dark:border-slate-800 hover:border-teal-300"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                        <Banknote className="w-4 h-4 text-amber-600" />
+                        <span>শুধুমাত্র ক্যাশ (Cash Only)</span>
+                      </span>
+                      {policyDraft.salaryDisbursementPolicy === "CASH_ONLY" && (
+                        <CheckCircle2 className="w-4 h-4 text-amber-600 shrink-0" />
+                      )}
+                    </div>
+                    <p className="text-[11px] text-slate-500">
+                      সকল কর্মীকে অফিস থেকে সরাসরি ক্যাশে বেতন পরিশোধ করা হবে। ব্যাংক একাউন্ট আবশ্যক নয়।
+                    </p>
+                  </button>
                 </div>
               </div>
 

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import {
   Building2,
   ScanFace,
@@ -38,6 +39,7 @@ import {
   Settings2,
   ChevronRight,
   FileText,
+  PenTool,
 } from "lucide-react";
 import { Employee, Branch, UserRole } from "../../types";
 import { useThemeLanguage } from "../../context/ThemeLanguageContext";
@@ -97,7 +99,7 @@ export const Header: React.FC<HeaderProps> = ({
   const [showChangeCredsModal, setShowChangeCredsModal] = useState(false);
   const [showProfilePassword, setShowProfilePassword] = useState(false);
   const [showProfileSettingsModal, setShowProfileSettingsModal] = useState(false);
-  const [profileSettingsTab, setProfileSettingsTab] = useState<"profile" | "cv" | "password" | "photo">("profile");
+  const [profileSettingsTab, setProfileSettingsTab] = useState<"profile" | "cv" | "signature" | "password" | "photo">("profile");
   const [showEditCVModal, setShowEditCVModal] = useState(false);
   const [showViewA4ResumeModal, setShowViewA4ResumeModal] = useState(false);
   const [copySuccess, setCopySuccess] = useState<string | null>(null);
@@ -636,8 +638,8 @@ export const Header: React.FC<HeaderProps> = ({
                     <ChevronRight className="w-4 h-4 text-white/80 group-hover:translate-x-1 transition-transform" />
                   </button>
 
-                  {/* 2 Dedicated Distinct Action Pills: Edit Profile & Edit CV */}
-                  <div className="grid grid-cols-2 gap-1.5 mt-1.5">
+                  {/* 3 Dedicated Distinct Action Pills: Edit Profile, Edit CV & Signature */}
+                  <div className="grid grid-cols-3 gap-1.5 mt-1.5">
                     <button
                       type="button"
                       onClick={() => {
@@ -645,10 +647,10 @@ export const Header: React.FC<HeaderProps> = ({
                         setProfileSettingsTab("profile");
                         setShowProfileSettingsModal(true);
                       }}
-                      className="py-1.5 px-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-[11px] font-bold flex items-center justify-center gap-1 transition-colors cursor-pointer"
+                      className="py-1.5 px-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-[10.5px] font-bold flex items-center justify-center gap-1 transition-colors cursor-pointer"
                     >
-                      <User className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
-                      <span>{t("এডিট প্রোফাইল", "Edit Profile")}</span>
+                      <User className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400 shrink-0" />
+                      <span className="truncate">{t("প্রোফাইল", "Profile")}</span>
                     </button>
                     <button
                       type="button"
@@ -656,10 +658,22 @@ export const Header: React.FC<HeaderProps> = ({
                         setShowRoleMenu(false);
                         setShowEditCVModal(true);
                       }}
-                      className="py-1.5 px-2 rounded-xl bg-teal-50 dark:bg-teal-950/40 hover:bg-teal-100 dark:hover:bg-teal-900/60 text-teal-700 dark:text-teal-300 border border-teal-500/30 text-[11px] font-bold flex items-center justify-center gap-1 transition-colors cursor-pointer"
+                      className="py-1.5 px-1.5 rounded-xl bg-teal-50 dark:bg-teal-950/40 hover:bg-teal-100 dark:hover:bg-teal-900/60 text-teal-700 dark:text-teal-300 border border-teal-500/30 text-[10.5px] font-bold flex items-center justify-center gap-1 transition-colors cursor-pointer"
                     >
-                      <FileText className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
-                      <span>{t("এডিট সিভি", "Edit CV")}</span>
+                      <FileText className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400 shrink-0" />
+                      <span className="truncate">{t("সিভি", "CV")}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowRoleMenu(false);
+                        setProfileSettingsTab("signature");
+                        setShowProfileSettingsModal(true);
+                      }}
+                      className="py-1.5 px-1.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/60 text-amber-700 dark:text-amber-300 border border-amber-500/30 text-[10.5px] font-bold flex items-center justify-center gap-1 transition-colors cursor-pointer"
+                    >
+                      <PenTool className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                      <span className="truncate">{t("স্বাক্ষর", "Signature")}</span>
                     </button>
                   </div>
                 </div>
@@ -942,8 +956,8 @@ export const Header: React.FC<HeaderProps> = ({
       </div>
 
       {/* Firebase Database Verification & Diagnostics Modal (Super Admin Only) */}
-      {showDbStatusModal && currentEmployee.role === "SUPER_ADMIN" && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in duration-200">
+      {showDbStatusModal && currentEmployee.role === "SUPER_ADMIN" && typeof document !== "undefined" && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in duration-200">
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 w-full max-w-lg shadow-2xl space-y-5 text-slate-900 dark:text-slate-100">
             {/* Modal Header */}
             <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
@@ -1061,7 +1075,8 @@ export const Header: React.FC<HeaderProps> = ({
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Change User Credentials & Password Modal */}

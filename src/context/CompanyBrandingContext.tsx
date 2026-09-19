@@ -31,6 +31,7 @@ const DEFAULT_BRANDING: CompanyBranding = {
   website: "https://muslimwelfare.org",
   registrationNumber: "REG-BD-2026-90812",
   employeeIdPrefix: "MWO",
+  salaryDisbursementPolicy: "BOTH",
 };
 
 export const SOFTWARE_BRANDING: SoftwareBrandingInfo = {
