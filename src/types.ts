@@ -718,6 +718,8 @@ export interface CompanyBranding {
   employeeIdPrefix?: string; // Client-configurable prefix, e.g. "MWO"
   salaryDisbursementPolicy?: "BOTH" | "BANK_ONLY" | "CASH_ONLY"; // Global policy for salary disbursement
   employeeDirectoryScope?: "OWN_BRANCH_ONLY" | "ALL_BRANCHES" | "RESTRICTED_NONE"; // Employee directory visibility policy
+  defaultSignatoryName?: string; // Super Admin configured official signatory for certificates and letters
+  defaultSignatoryTitle?: string; // Super Admin configured official signatory designation
 }
 
 export interface Notice {

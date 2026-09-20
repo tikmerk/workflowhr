@@ -31,6 +31,7 @@ interface ProjectsTasksViewProps {
   employees: Employee[];
   branches?: Branch[];
   departments?: Department[];
+  currentUser?: Employee;
   onAddProject?: (project: Project) => void;
   onDeleteProject?: (projectId: string) => void;
   onAddTask: (task: ProjectTask) => void;
@@ -44,6 +45,7 @@ export const ProjectsTasksView: React.FC<ProjectsTasksViewProps> = ({
   employees,
   branches = [],
   departments = [],
+  currentUser,
   onAddProject,
   onDeleteProject,
   onAddTask,
@@ -51,6 +53,43 @@ export const ProjectsTasksView: React.FC<ProjectsTasksViewProps> = ({
   onDeleteTask,
 }) => {
   const { t, isBangla } = useThemeLanguage();
+
+  // Role check: Only Super Admin, CEO, Branch Manager, or Project Lead can create/edit/delete
+  const isSuperAdminOrCeo = (user?: Employee) => {
+    if (!user) return false;
+    return Boolean(
+      user.role === "SUPER_ADMIN" ||
+      user.isSuperAdmin ||
+      user.role === "COMPANY_ADMIN" ||
+      user.role === "CEO" ||
+      user.isCeoOrOwner ||
+      user.designationTitle?.toLowerCase().includes("ceo") ||
+      user.designationTitle?.toLowerCase().includes("chief executive officer") ||
+      user.designationTitle?.toLowerCase().includes("সিইও")
+    );
+  };
+
+  const isBranchManager = (user?: Employee) => {
+    if (!user) return false;
+    return Boolean(
+      user.role === "BRANCH_MANAGER" ||
+      user.designationTitle?.toLowerCase().includes("branch manager") ||
+      user.designationTitle?.toLowerCase().includes("শাখা প্রধান")
+    );
+  };
+
+  // General employees CANNOT create, edit, or delete projects/tasks. They only view what is assigned to them.
+  const canManageProjectsAndTasks = useMemo(() => {
+    if (!currentUser) return false;
+    if (isSuperAdminOrCeo(currentUser)) return true;
+    if (isBranchManager(currentUser)) return true;
+    const role = String(currentUser.role || "").toUpperCase();
+    const desig = String(currentUser.designationTitle || "").toLowerCase();
+    if (role === "HR_MANAGER" || role === "PROJECT_MANAGER" || desig.includes("project manager") || desig.includes("team lead")) {
+      return true;
+    }
+    return false;
+  }, [currentUser]);
 
   const [selectedBranchId, setSelectedBranchId] = useState<string>("ALL");
   const [selectedDeptId, setSelectedDeptId] = useState<string>("ALL");
@@ -82,28 +121,57 @@ export const ProjectsTasksView: React.FC<ProjectsTasksViewProps> = ({
   const [newTaskDueDate, setNewTaskDueDate] = useState<string>("2026-09-30");
   const [newTaskDesc, setNewTaskDesc] = useState<string>("");
 
+  // Accessible projects: General employees ONLY see projects they are assigned to or part of
+  const accessibleProjects = useMemo(() => {
+    if (canManageProjectsAndTasks) return projects;
+    if (!currentUser) return [];
+
+    return projects.filter((p) => {
+      const isTeamMember =
+        (p.teamMemberIds && p.teamMemberIds.includes(currentUser.id)) ||
+        (p.teamMembers && p.teamMembers.some((m) => m.id === currentUser.id));
+      const isManager = p.managerId === currentUser.id;
+      const isMyDept = Boolean(currentUser.departmentId && p.departmentId === currentUser.departmentId);
+      const hasMyTask = tasks.some(
+        (t) =>
+          t.projectId === p.id &&
+          (t.assignedToEmployeeId === currentUser.id ||
+            (t.assignedToName && currentUser.fullName && t.assignedToName.toLowerCase().includes(currentUser.fullName.toLowerCase())))
+      );
+      return isTeamMember || isManager || isMyDept || hasMyTask;
+    });
+  }, [projects, tasks, canManageProjectsAndTasks, currentUser]);
+
   // Filter projects by branch and department
   const filteredProjects = useMemo(() => {
-    return projects.filter((p) => {
+    return accessibleProjects.filter((p) => {
       const matchBranch = selectedBranchId === "ALL" || p.branchId === selectedBranchId;
       const matchDept = selectedDeptId === "ALL" || p.departmentId === selectedDeptId;
       return matchBranch && matchDept;
     });
-  }, [projects, selectedBranchId, selectedDeptId]);
+  }, [accessibleProjects, selectedBranchId, selectedDeptId]);
 
   // Current active project details
   const activeProject = useMemo(() => {
     if (selectedProjectId === "ALL") return null;
-    return projects.find((p) => p.id === selectedProjectId) || null;
-  }, [projects, selectedProjectId]);
+    return accessibleProjects.find((p) => p.id === selectedProjectId) || null;
+  }, [accessibleProjects, selectedProjectId]);
 
-  // Filter tasks
+  // Filter tasks: General employee ONLY sees tasks assigned to themselves
   const filteredTasks = useMemo(() => {
     return tasks.filter((t) => {
-      const matchProject = selectedProjectId === "ALL" 
-        ? (filteredProjects.some((p) => p.id === t.projectId) || filteredProjects.length === 0)
-        : t.projectId === selectedProjectId;
-      
+      if (!canManageProjectsAndTasks && currentUser) {
+        const isMyTask =
+          t.assignedToEmployeeId === currentUser.id ||
+          (t.assignedToName && currentUser.fullName && t.assignedToName.toLowerCase().includes(currentUser.fullName.toLowerCase()));
+        if (!isMyTask) return false;
+      }
+
+      const matchProject =
+        selectedProjectId === "ALL"
+          ? filteredProjects.some((p) => p.id === t.projectId) || filteredProjects.length === 0
+          : t.projectId === selectedProjectId;
+
       const matchSearch =
         taskSearchTerm === "" ||
         t.title.toLowerCase().includes(taskSearchTerm.toLowerCase()) ||
@@ -112,7 +180,7 @@ export const ProjectsTasksView: React.FC<ProjectsTasksViewProps> = ({
 
       return matchProject && matchSearch;
     });
-  }, [tasks, selectedProjectId, filteredProjects, taskSearchTerm]);
+  }, [tasks, selectedProjectId, filteredProjects, taskSearchTerm, canManageProjectsAndTasks, currentUser]);
 
   const columns: Array<{ status: ProjectTask["status"]; label: string; labelBn: string; color: string }> = [
     { status: "TODO", label: "To Do", labelBn: "করণীয় কাজ", color: "border-slate-200 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-900/60" },
@@ -230,80 +298,93 @@ export const ProjectsTasksView: React.FC<ProjectsTasksViewProps> = ({
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3 shrink-0">
-          <button
-            type="button"
-            onClick={() => setShowProjectModal(true)}
-            className="px-4 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 hover:border-teal-500/40 text-teal-700 dark:text-teal-300 text-xs font-bold rounded-xl shadow-xs flex items-center gap-2 transition-all cursor-pointer"
-          >
-            <Plus className="w-4 h-4 text-teal-600 dark:text-teal-400" />
-            <span>{isBangla ? "+ নতুন প্রজেক্ট তৈরি" : "+ Create New Project"}</span>
-          </button>
+        {canManageProjectsAndTasks ? (
+          <div className="flex flex-wrap items-center gap-3 shrink-0">
+            <button
+              type="button"
+              onClick={() => setShowProjectModal(true)}
+              className="px-4 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 hover:border-teal-500/40 text-teal-700 dark:text-teal-300 text-xs font-bold rounded-xl shadow-xs flex items-center gap-2 transition-all cursor-pointer"
+            >
+              <Plus className="w-4 h-4 text-teal-600 dark:text-teal-400" />
+              <span>{isBangla ? "+ নতুন প্রজেক্ট তৈরি" : "+ Create New Project"}</span>
+            </button>
 
-          <button
-            type="button"
-            onClick={() => setShowTaskModal(true)}
-            className="px-4 py-2.5 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-teal-500/20 flex items-center gap-2 transition-all cursor-pointer"
-          >
-            <CheckSquare className="w-4 h-4" />
-            <span>{isBangla ? "+ নতুন টাস্ক যোগ" : "+ Create New Task"}</span>
-          </button>
-        </div>
+            <button
+              type="button"
+              onClick={() => setShowTaskModal(true)}
+              className="px-4 py-2.5 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-teal-500/20 flex items-center gap-2 transition-all cursor-pointer"
+            >
+              <CheckSquare className="w-4 h-4" />
+              <span>{isBangla ? "+ নতুন টাস্ক যোগ" : "+ Create New Task"}</span>
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-800 px-3.5 py-2 rounded-xl text-xs text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+            <UserCheck className="w-4 h-4 text-teal-600 dark:text-teal-400" />
+            <span className="font-semibold">
+              {isBangla ? "আমার অ্যাসাইনকৃত প্রজেক্ট ও স্প্রিন্ট টাস্ক" : "My Assigned Projects & Sprint Tasks"}
+            </span>
+          </div>
+        )}
       </div>
 
-      {/* Dynamic 3-Level Filter Bar: Branch -> Department -> Project */}
-      <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
-        {/* 1. Branch Selector */}
-        <div>
-          <label className="block text-slate-600 dark:text-slate-400 font-bold mb-1 flex items-center gap-1.5">
-            <Building2 className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
-            <span>{isBangla ? "ব্রাঞ্চ সিলেক্ট করুন:" : "1. Select Branch:"}</span>
-          </label>
-          <select
-            value={selectedBranchId}
-            onChange={(e) => {
-              setSelectedBranchId(e.target.value);
-              setSelectedProjectId("ALL");
-            }}
-            className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white focus:outline-none focus:border-teal-500"
-          >
-            <option value="ALL">{isBangla ? "সকল ব্রাঞ্চ (All Branches)" : "All Branches"}</option>
-            {branches.map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.name} ({b.city})
-              </option>
-            ))}
-          </select>
-        </div>
+      {/* Dynamic Filter Bar: Branch -> Department -> Project */}
+      <div className={`p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs grid grid-cols-1 ${canManageProjectsAndTasks ? "sm:grid-cols-2 lg:grid-cols-4" : "sm:grid-cols-2"} gap-3 text-xs`}>
+        {canManageProjectsAndTasks && (
+          <>
+            {/* 1. Branch Selector */}
+            <div>
+              <label className="block text-slate-600 dark:text-slate-400 font-bold mb-1 flex items-center gap-1.5">
+                <Building2 className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
+                <span>{isBangla ? "ব্রাঞ্চ সিলেক্ট করুন:" : "1. Select Branch:"}</span>
+              </label>
+              <select
+                value={selectedBranchId}
+                onChange={(e) => {
+                  setSelectedBranchId(e.target.value);
+                  setSelectedProjectId("ALL");
+                }}
+                className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white focus:outline-none focus:border-teal-500"
+              >
+                <option value="ALL">{isBangla ? "সকল ব্রাঞ্চ (All Branches)" : "All Branches"}</option>
+                {branches.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name} ({b.city})
+                  </option>
+                ))}
+              </select>
+            </div>
 
-        {/* 2. Department Selector */}
-        <div>
-          <label className="block text-slate-600 dark:text-slate-400 font-bold mb-1 flex items-center gap-1.5">
-            <Layers className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-            <span>{isBangla ? "ডিপার্টমেন্ট সিলেক্ট করুন:" : "2. Select Department:"}</span>
-          </label>
-          <select
-            value={selectedDeptId}
-            onChange={(e) => {
-              setSelectedDeptId(e.target.value);
-              setSelectedProjectId("ALL");
-            }}
-            className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white focus:outline-none focus:border-teal-500"
-          >
-            <option value="ALL">{isBangla ? "সকল ডিপার্টমেন্ট (All Departments)" : "All Departments"}</option>
-            {departments.map((d) => (
-              <option key={d.id} value={d.id}>
-                {d.name} ({d.code})
-              </option>
-            ))}
-          </select>
-        </div>
+            {/* 2. Department Selector */}
+            <div>
+              <label className="block text-slate-600 dark:text-slate-400 font-bold mb-1 flex items-center gap-1.5">
+                <Layers className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                <span>{isBangla ? "ডিপার্টমেন্ট সিলেক্ট করুন:" : "2. Select Department:"}</span>
+              </label>
+              <select
+                value={selectedDeptId}
+                onChange={(e) => {
+                  setSelectedDeptId(e.target.value);
+                  setSelectedProjectId("ALL");
+                }}
+                className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white focus:outline-none focus:border-teal-500"
+              >
+                <option value="ALL">{isBangla ? "সকল ডিপার্টমেন্ট (All Departments)" : "All Departments"}</option>
+                {departments.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.name} ({d.code})
+                  </option>
+                ))}
+              </select>
+            </div>
+          </>
+        )}
 
         {/* 3. Project Selector */}
         <div>
           <label className="block text-slate-600 dark:text-slate-400 font-bold mb-1 flex items-center gap-1.5">
             <FolderKanban className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-            <span>{isBangla ? "প্রজেক্ট সিলেক্ট করুন:" : "3. Select Project:"}</span>
+            <span>{isBangla ? "প্রজেক্ট সিলেক্ট করুন:" : canManageProjectsAndTasks ? "3. Select Project:" : "Select Project:"}</span>
           </label>
           <select
             value={selectedProjectId}
@@ -311,7 +392,13 @@ export const ProjectsTasksView: React.FC<ProjectsTasksViewProps> = ({
             className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white font-semibold focus:outline-none focus:border-teal-500"
           >
             <option value="ALL">
-              {isBangla ? `সকল প্রজেক্ট (${filteredProjects.length} টি)` : `All Active Projects (${filteredProjects.length})`}
+              {isBangla
+                ? canManageProjectsAndTasks
+                  ? `সকল প্রজেক্ট (${filteredProjects.length} টি)`
+                  : `আমার অ্যাসাইনকৃত প্রজেক্ট (${filteredProjects.length} টি)`
+                : canManageProjectsAndTasks
+                ? `All Active Projects (${filteredProjects.length})`
+                : `My Assigned Projects (${filteredProjects.length})`}
             </option>
             {filteredProjects.map((p) => (
               <option key={p.id} value={p.id}>
@@ -325,14 +412,14 @@ export const ProjectsTasksView: React.FC<ProjectsTasksViewProps> = ({
         <div>
           <label className="block text-slate-600 dark:text-slate-400 font-bold mb-1 flex items-center gap-1.5">
             <Search className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
-            <span>{isBangla ? "টাস্ক বা কর্মী খুঁজুন:" : "4. Search Tasks:"}</span>
+            <span>{isBangla ? "টাস্ক খুঁজুন:" : canManageProjectsAndTasks ? "4. Search Tasks:" : "Search Tasks:"}</span>
           </label>
           <div className="relative">
             <input
               type="text"
               value={taskSearchTerm}
               onChange={(e) => setTaskSearchTerm(e.target.value)}
-              placeholder={isBangla ? "টাস্ক টাইটেল বা কর্মী..." : "Task title, assignee..."}
+              placeholder={isBangla ? "টাস্কের নাম দিয়ে খুঁজুন..." : "Task title, keyword..."}
               className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl pl-3 pr-8 py-2 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-teal-500"
             />
             {taskSearchTerm && (
@@ -346,6 +433,23 @@ export const ProjectsTasksView: React.FC<ProjectsTasksViewProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Empty State for General Employee with no assigned projects */}
+      {filteredProjects.length === 0 && !canManageProjectsAndTasks && (
+        <div className="p-8 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-center space-y-3">
+          <div className="w-12 h-12 rounded-2xl bg-teal-500/10 text-teal-600 dark:text-teal-400 mx-auto flex items-center justify-center">
+            <CheckSquare className="w-6 h-6" />
+          </div>
+          <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+            {isBangla ? "বর্তমানে আপনার জন্য কোনো অ্যাসাইনকৃত প্রজেক্ট বা টাস্ক নেই" : "No Projects or Tasks Currently Assigned to You"}
+          </h3>
+          <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto">
+            {isBangla
+              ? "যখন কোনো প্রজেক্ট বা স্প্রিন্ট টাস্কে আপনাকে বা আপনার টিমকে যুক্ত করা হবে, তখন আপনি তা এখানে স্বয়ংক্রিয়ভাবে দেখতে পাবেন।"
+              : "When you or your team are assigned to an active project or sprint task, it will appear here automatically."}
+          </p>
+        </div>
+      )}
 
       {/* Selected Project Overview Card (When a specific project is selected) */}
       {activeProject && (
@@ -390,7 +494,7 @@ export const ProjectsTasksView: React.FC<ProjectsTasksViewProps> = ({
                   {activeProject.deadline || "Ongoing"}
                 </span>
               </div>
-              {onDeleteProject && (
+              {onDeleteProject && canManageProjectsAndTasks && (
                 <button
                   onClick={() => {
                     if (confirm(isBangla ? "আপনি কি এই প্রজেক্টটি মুছে ফেলতে চান?" : "Are you sure you want to delete this project?")) {
@@ -531,7 +635,7 @@ export const ProjectsTasksView: React.FC<ProjectsTasksViewProps> = ({
                           <option value="DONE">{isBangla ? "মুভ: সম্পন্ন" : "Move: Done"}</option>
                         </select>
 
-                        {onDeleteTask && (
+                        {onDeleteTask && canManageProjectsAndTasks && (
                           <button
                             onClick={() => onDeleteTask(task.id)}
                             className="p-1 rounded text-slate-400 hover:text-red-500 cursor-pointer"
@@ -551,7 +655,7 @@ export const ProjectsTasksView: React.FC<ProjectsTasksViewProps> = ({
       </div>
 
       {/* Modal: Create New Project */}
-      {showProjectModal && (
+      {showProjectModal && canManageProjectsAndTasks && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs overflow-y-auto animate-in fade-in duration-200">
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl p-6 w-full max-w-xl text-slate-900 dark:text-slate-100 shadow-2xl space-y-4 my-8 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
@@ -788,7 +892,7 @@ export const ProjectsTasksView: React.FC<ProjectsTasksViewProps> = ({
       )}
 
       {/* Modal: Create Task */}
-      {showTaskModal && (
+      {showTaskModal && canManageProjectsAndTasks && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in duration-200">
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl p-6 w-full max-w-md text-slate-900 dark:text-slate-100 shadow-2xl space-y-4">
             <div className="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-slate-800">

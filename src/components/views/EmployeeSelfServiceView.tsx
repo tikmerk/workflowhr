@@ -46,6 +46,8 @@ import { FaceEnrollmentModal } from "../attendance/FaceEnrollmentModal";
 import { EditEmployeeCVModal } from "../modals/EditEmployeeCVModal";
 import { ViewA4ResumeModal } from "../modals/ViewA4ResumeModal";
 import { useCompanyBranding } from "../../context/CompanyBrandingContext";
+import { generateCertificateHtml } from "../../utils/certificateTemplates";
+import { printDocumentHtml } from "../../utils/exportUtils";
 
 interface EmployeeSelfServiceViewProps {
   currentEmployee: Employee;
@@ -81,8 +83,9 @@ export const EmployeeSelfServiceView: React.FC<EmployeeSelfServiceViewProps> = (
   onUpdateEmployee,
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<
-    "overview" | "attendance" | "payslips" | "leaves" | "loans" | "assets" | "security"
+    "overview" | "attendance" | "payslips" | "leaves" | "loans" | "assets" | "certificates" | "security"
   >("overview");
+  const [selectedCertForPreview, setSelectedCertForPreview] = useState<CertificateRecord | null>(null);
   const [showFaceEnrollModal, setShowFaceEnrollModal] = useState<boolean>(false);
   const [candidateUploadedPhoto, setCandidateUploadedPhoto] = useState<string | null>(null);
   const [showEditCVModal, setShowEditCVModal] = useState<boolean>(false);
@@ -580,6 +583,7 @@ export const EmployeeSelfServiceView: React.FC<EmployeeSelfServiceViewProps> = (
             ? [{ id: "loans", label: "Loans & Advance Salary", icon: Banknote }]
             : []),
           { id: "assets", label: "Assigned Assets", icon: Laptop },
+          { id: "certificates", label: "My Certificates (সনদপত্র)", icon: FileCheck2 },
           { id: "security", label: "পাসওয়ার্ড ও নিরাপত্তা", icon: KeyRound },
         ].map((tab) => {
           const Icon = tab.icon;
@@ -1160,6 +1164,152 @@ export const EmployeeSelfServiceView: React.FC<EmployeeSelfServiceViewProps> = (
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* Tab: My Official Certificates & Letters */}
+      {activeSubTab === "certificates" && (
+        <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <FileCheck2 className="w-4 h-4 text-teal-600 dark:text-teal-400" />
+                <span>আমার অফিসিয়াল সনদ ও পত্রসমূহ (My Official Certificates & Letters)</span>
+              </h3>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                কোম্পানি কর্তৃক ইস্যুকৃত সরকারি ও করপোরেট সনদসমূহ নোটিশ বোর্ড স্টাইল এ-ফোর লেটারহেডে দেখুন ও ডাউনলোড করুন
+              </p>
+            </div>
+          </div>
+
+          {myCertificates.length === 0 ? (
+            <div className="text-center py-12 border border-dashed border-slate-200 dark:border-slate-800 rounded-2xl">
+              <FileCheck2 className="w-12 h-12 text-slate-300 dark:text-slate-600 mx-auto mb-3" />
+              <p className="text-sm font-semibold text-slate-600 dark:text-slate-300">
+                আপনার নামে এখনো কোনো সনদ বা পত্র ইস্যু করা হয়নি
+              </p>
+              <p className="text-xs text-slate-400 mt-1">
+                এইচআর বিভাগ বা সুপার অ্যাডমিন সনদ ইস্যু করলে তা এখানে দেখতে পারবেন।
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {myCertificates.map((cert) => {
+                const certHtml = generateCertificateHtml(cert.type, currentEmployee, branding, {
+                  authorizedSignatory: cert.authorizedSignatory || branding.defaultSignatoryName,
+                  signatoryTitle: cert.signatoryTitle || branding.defaultSignatoryTitle,
+                  refNo: cert.certificateNumber || cert.referenceNumber,
+                  issueDate: cert.issueDate,
+                });
+
+                return (
+                  <div
+                    key={cert.id}
+                    className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 space-y-3 shadow-xs"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-teal-500/10 text-teal-700 dark:text-teal-300 border border-teal-500/20">
+                          {cert.type}
+                        </span>
+                        <h4 className="text-sm font-bold text-slate-900 dark:text-white mt-1.5">
+                          {cert.title || "Official Certificate"}
+                        </h4>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">
+                          Ref: {cert.certificateNumber || cert.referenceNumber || cert.id}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="text-xs space-y-1 text-slate-600 dark:text-slate-400 pt-2 border-t border-slate-200 dark:border-slate-700/60">
+                      <div className="flex justify-between">
+                        <span>ইস্যু তারিখ (Issue Date):</span>
+                        <span className="font-semibold text-slate-800 dark:text-slate-200">{cert.issueDate}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>স্বাক্ষরকারী (Signatory):</span>
+                        <span className="font-medium text-slate-800 dark:text-slate-200">
+                          {cert.authorizedSignatory || branding.defaultSignatoryName || "Authorized Signatory"}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="pt-2 flex items-center gap-2">
+                      <button
+                        onClick={() => setSelectedCertForPreview(cert)}
+                        className="flex-1 py-1.5 px-3 rounded-xl bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 text-xs font-semibold hover:bg-slate-50 dark:hover:bg-slate-600 cursor-pointer flex items-center justify-center gap-1.5"
+                      >
+                        <FileText className="w-3.5 h-3.5 text-teal-600" />
+                        <span>প্রিভিউ দেখুন</span>
+                      </button>
+                      <button
+                        onClick={() => printDocumentHtml(cert.title || "Certificate", certHtml)}
+                        className="flex-1 py-1.5 px-3 rounded-xl bg-teal-600 hover:bg-teal-500 text-white text-xs font-semibold shadow-xs cursor-pointer flex items-center justify-center gap-1.5"
+                      >
+                        <Printer className="w-3.5 h-3.5" />
+                        <span>প্রিন্ট / PDF</span>
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Modal to view full A4 Letterhead Preview */}
+          {selectedCertForPreview && (
+            <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 overflow-y-auto">
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto shadow-2xl p-6 space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+                  <h3 className="font-bold text-slate-900 dark:text-white text-sm flex items-center gap-2">
+                    <FileCheck2 className="w-4 h-4 text-teal-600" />
+                    <span>{selectedCertForPreview.title}</span>
+                  </h3>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => {
+                        const certHtml = generateCertificateHtml(selectedCertForPreview.type, currentEmployee, branding, {
+                          authorizedSignatory: selectedCertForPreview.authorizedSignatory || branding.defaultSignatoryName,
+                          signatoryTitle: selectedCertForPreview.signatoryTitle || branding.defaultSignatoryTitle,
+                          refNo: selectedCertForPreview.certificateNumber || selectedCertForPreview.referenceNumber,
+                          issueDate: selectedCertForPreview.issueDate,
+                        });
+                        printDocumentHtml(selectedCertForPreview.title || "Certificate", certHtml);
+                      }}
+                      className="px-3 py-1.5 bg-teal-600 hover:bg-teal-500 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 cursor-pointer shadow-xs"
+                    >
+                      <Printer className="w-3.5 h-3.5" />
+                      <span>প্রিন্ট / PDF (A4)</span>
+                    </button>
+                    <button
+                      onClick={() => setSelectedCertForPreview(null)}
+                      className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-600 cursor-pointer"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="p-6 bg-slate-100 dark:bg-slate-950 rounded-xl overflow-x-auto">
+                  <div
+                    className="p-8 sm:p-12 rounded-xl bg-white text-slate-900 shadow-lg border border-slate-300 min-h-[600px] flex flex-col justify-between"
+                    style={{ minWidth: "210mm", maxWidth: "210mm", margin: "0 auto", boxSizing: "border-box" }}
+                  >
+                    <div
+                      dangerouslySetInnerHTML={{
+                        __html: generateCertificateHtml(selectedCertForPreview.type, currentEmployee, branding, {
+                          authorizedSignatory: selectedCertForPreview.authorizedSignatory || branding.defaultSignatoryName,
+                          signatoryTitle: selectedCertForPreview.signatoryTitle || branding.defaultSignatoryTitle,
+                          refNo: selectedCertForPreview.certificateNumber || selectedCertForPreview.referenceNumber,
+                          issueDate: selectedCertForPreview.issueDate,
+                        }),
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

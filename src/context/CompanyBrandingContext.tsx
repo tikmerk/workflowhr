@@ -33,6 +33,8 @@ const DEFAULT_BRANDING: CompanyBranding = {
   employeeIdPrefix: "MWO",
   salaryDisbursementPolicy: "BOTH",
   employeeDirectoryScope: "OWN_BRANCH_ONLY",
+  defaultSignatoryName: "Md. Ibrahim Hossain",
+  defaultSignatoryTitle: "Executive Director & Head of Administration",
 };
 
 export const SOFTWARE_BRANDING: SoftwareBrandingInfo = {

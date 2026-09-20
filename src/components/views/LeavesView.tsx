@@ -74,6 +74,34 @@ export const LeavesView: React.FC<LeavesViewProps> = ({
   const [editStatus, setEditStatus] = useState<LeaveApplication["status"]>("APPROVED");
   const [editReviewerComments, setEditReviewerComments] = useState("");
 
+  const isSuperAdminOrCeo = (user?: Employee) => {
+    if (!user) return false;
+    return Boolean(
+      user.role === "SUPER_ADMIN" ||
+      user.isSuperAdmin ||
+      user.role === "COMPANY_ADMIN" ||
+      user.role === "CEO" ||
+      user.isCeoOrOwner ||
+      user.designationTitle?.toLowerCase().includes("ceo") ||
+      user.designationTitle?.toLowerCase().includes("chief executive officer") ||
+      user.designationTitle?.toLowerCase().includes("সিইও")
+    );
+  };
+
+  const isBranchManager = (user?: Employee) => {
+    if (!user) return false;
+    return Boolean(
+      user.role === "BRANCH_MANAGER" ||
+      user.designationTitle?.toLowerCase().includes("branch manager") ||
+      user.designationTitle?.toLowerCase().includes("শাখা প্রধান")
+    );
+  };
+
+  const isGeneralEmployee = (user?: Employee) => {
+    if (!user) return false;
+    return !isSuperAdminOrCeo(user) && !isBranchManager(user);
+  };
+
   const calculateDays = (start: string, end: string) => {
     try {
       const s = new Date(start);
@@ -219,34 +247,6 @@ export const LeavesView: React.FC<LeavesViewProps> = ({
       onDeleteLeave(deleteLeaveId);
       setDeleteLeaveId(null);
     }
-  };
-
-  const isSuperAdminOrCeo = (user?: Employee) => {
-    if (!user) return false;
-    return Boolean(
-      user.role === "SUPER_ADMIN" ||
-      user.isSuperAdmin ||
-      user.role === "COMPANY_ADMIN" ||
-      user.role === "CEO" ||
-      user.isCeoOrOwner ||
-      user.designationTitle?.toLowerCase().includes("ceo") ||
-      user.designationTitle?.toLowerCase().includes("chief executive officer") ||
-      user.designationTitle?.toLowerCase().includes("সিইও")
-    );
-  };
-
-  const isBranchManager = (user?: Employee) => {
-    if (!user) return false;
-    return Boolean(
-      user.role === "BRANCH_MANAGER" ||
-      user.designationTitle?.toLowerCase().includes("branch manager") ||
-      user.designationTitle?.toLowerCase().includes("শাখা প্রধান")
-    );
-  };
-
-  const isGeneralEmployee = (user?: Employee) => {
-    if (!user) return false;
-    return !isSuperAdminOrCeo(user) && !isBranchManager(user);
   };
 
   // Scope:

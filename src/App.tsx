@@ -2047,8 +2047,23 @@ function AppContent() {
               projects={projects}
               tasks={tasks}
               employees={employees}
+              branches={branches}
+              departments={departments}
+              currentUser={currentEmployee}
+              onAddProject={(p) => {
+                setProjects((prev) => [p, ...prev]);
+                notifyAndLog("PROJECT_CREATED", `Created project: ${p.name}`, "OPERATIONS");
+              }}
+              onDeleteProject={(pId) => {
+                setProjects((prev) => prev.filter((p) => p.id !== pId));
+                notifyAndLog("PROJECT_DELETED", `Deleted project ${pId}`, "OPERATIONS");
+              }}
               onAddTask={handleAddTask}
               onUpdateTaskStatus={handleUpdateTaskStatus}
+              onDeleteTask={(tId) => {
+                setTasks((prev) => prev.filter((t) => t.id !== tId));
+                notifyAndLog("TASK_DELETED", `Deleted task ${tId}`, "OPERATIONS");
+              }}
             />
           )}
 
