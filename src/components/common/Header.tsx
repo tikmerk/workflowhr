@@ -215,6 +215,422 @@ export const Header: React.FC<HeaderProps> = ({
       companyId: "comp-01",
     };
 
+  const renderProfileMenuContent = () => (
+    <>
+      {/* User Info Header Card */}
+      <div className="flex items-center gap-3 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700/60 mb-2">
+        <img
+          src={currentEmployee.avatarUrl}
+          alt={currentEmployee.fullName}
+          className="w-11 h-11 rounded-xl object-cover border border-teal-500/50 shadow-xs shrink-0"
+        />
+        <div className="flex-1 min-w-0">
+          <h4 className="font-black text-sm text-slate-900 dark:text-white truncate">
+            {currentEmployee.fullName}
+          </h4>
+          <div className="text-[11px] text-teal-600 dark:text-teal-400 font-medium truncate">
+            {currentEmployee.designationTitle || currentEmployee.role.replace("_", " ")}
+          </div>
+          <div className="flex items-center gap-1.5 mt-1">
+            <span className="px-1.5 py-0.5 rounded-md bg-teal-500/15 text-teal-700 dark:text-teal-300 font-bold text-[9.5px]">
+              ID: {currentEmployee.employeeCode}
+            </span>
+            <span className="text-[9.5px] text-slate-500 dark:text-slate-400 truncate">
+              {currentEmployee.branchName || "Main Office"}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Biometric Face Status Strip */}
+      <div
+        className={`p-2 rounded-xl mb-2.5 border flex items-center justify-between gap-2 ${
+          isFaceVerificationRequired
+            ? "bg-amber-500/10 border-amber-500/30 text-amber-900 dark:text-amber-200"
+            : "bg-emerald-500/10 border-emerald-500/30 text-emerald-900 dark:text-emerald-200"
+        }`}
+      >
+        <div className="flex items-center gap-2 min-w-0">
+          {isFaceVerificationRequired ? (
+            <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 animate-pulse" />
+          ) : (
+            <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+          )}
+          <div className="truncate">
+            <div className="text-[10.5px] font-bold truncate">
+              {isFaceVerificationRequired
+                ? t("ফেস ভেরিফিকেশন প্রয়োজন", "Face Verification Required")
+                : t(
+                    `বায়োমেট্রিক ফেস ভেরিফাইড (${currentEmployee.faceVerificationScore}%)`,
+                    `Biometric Face Verified (${currentEmployee.faceVerificationScore}%)`
+                  )}
+            </div>
+            <div className="text-[9px] opacity-75 truncate">
+              {isFaceVerificationRequired
+                ? t("উপস্থিতি রেকর্ড করতে লাইভ ভেরিফাই আবশ্যক", "Live check required for attendance")
+                : t("স্মার্ট উপস্থিতি সক্রিয়", "Active for smart clock-in")}
+            </div>
+          </div>
+        </div>
+        {onOpenFaceEnrollModal && (
+          <button
+            type="button"
+            onClick={() => {
+              setShowRoleMenu(false);
+              onOpenFaceEnrollModal(currentEmployee);
+            }}
+            className={`px-2 py-1 rounded-lg text-[10px] font-bold shrink-0 transition-colors cursor-pointer ${
+              isFaceVerificationRequired
+                ? "bg-amber-600 hover:bg-amber-500 text-white shadow-xs"
+                : "bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-700 dark:text-emerald-300"
+            }`}
+          >
+            {isFaceVerificationRequired ? t("ভেরিফাই", "Verify") : t("আপডেট", "Update")}
+          </button>
+        )}
+      </div>
+
+      {/* Unified Profile Settings Hub Section */}
+      <div className="mb-2.5">
+        <button
+          type="button"
+          onClick={() => {
+            setShowRoleMenu(false);
+            setProfileSettingsTab("profile");
+            setShowProfileSettingsModal(true);
+          }}
+          className="w-full flex items-center justify-between p-3 rounded-2xl bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white font-bold text-xs shadow-md shadow-teal-500/20 cursor-pointer transition-all group"
+        >
+          <div className="flex items-center gap-2.5">
+            <div className="p-1.5 rounded-xl bg-white/20 text-white">
+              <Settings2 className="w-4 h-4" />
+            </div>
+            <div className="text-left">
+              <div className="text-xs font-black">
+                {t("প্রোফাইল সেটিংস", "Profile Settings")}
+              </div>
+              <div className="text-[10px] text-teal-100 font-normal">
+                {t("এডিট প্রোফাইল, সিভি, ছবি ও পাসওয়ার্ড", "Edit profile, CV, photo & password")}
+              </div>
+            </div>
+          </div>
+          <ChevronRight className="w-4 h-4 text-white/80 group-hover:translate-x-1 transition-transform" />
+        </button>
+
+        {/* 3 Dedicated Distinct Action Pills: Edit Profile, Edit CV & Signature */}
+        <div className="grid grid-cols-3 gap-1.5 mt-1.5">
+          <button
+            type="button"
+            onClick={() => {
+              setShowRoleMenu(false);
+              setProfileSettingsTab("profile");
+              setShowProfileSettingsModal(true);
+            }}
+            className="py-1.5 px-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-[10.5px] font-bold flex items-center justify-center gap-1 transition-colors cursor-pointer"
+          >
+            <User className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400 shrink-0" />
+            <span className="truncate">{t("প্রোফাইল", "Profile")}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setShowRoleMenu(false);
+              setShowEditCVModal(true);
+            }}
+            className="py-1.5 px-1.5 rounded-xl bg-teal-50 dark:bg-teal-950/40 hover:bg-teal-100 dark:hover:bg-teal-900/60 text-teal-700 dark:text-teal-300 border border-teal-500/30 text-[10.5px] font-bold flex items-center justify-center gap-1 transition-colors cursor-pointer"
+          >
+            <FileText className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400 shrink-0" />
+            <span className="truncate">{t("সিভি", "CV")}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setShowRoleMenu(false);
+              setProfileSettingsTab("signature");
+              setShowProfileSettingsModal(true);
+            }}
+            className="py-1.5 px-1.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/60 text-amber-700 dark:text-amber-300 border border-amber-500/30 text-[10.5px] font-bold flex items-center justify-center gap-1 transition-colors cursor-pointer"
+          >
+            <PenTool className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+            <span className="truncate">{t("স্বাক্ষর", "Signature")}</span>
+          </button>
+        </div>
+      </div>
+
+      {/* User Credentials & Password Change Access Card */}
+      <div className="p-3 rounded-2xl bg-gradient-to-br from-teal-500/10 via-slate-50 to-teal-500/5 dark:from-teal-950/40 dark:via-slate-800/80 dark:to-teal-950/20 border border-teal-500/30 space-y-2.5 mb-2.5">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5 text-xs font-bold text-teal-700 dark:text-teal-300">
+            <KeyRound className="w-4 h-4 text-teal-600 dark:text-teal-400" />
+            <span>{t("আমার লগইন তথ্য ও পাসওয়ার্ড", "My Login Credentials")}</span>
+          </div>
+          <span className="text-[9px] px-2 py-0.5 rounded-full font-bold bg-teal-500/20 text-teal-700 dark:text-teal-300 uppercase">
+            {currentEmployee.role}
+          </span>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2 text-[11px]">
+          <div className="p-2 rounded-xl bg-white/90 dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-700/80">
+            <span className="text-[9.5px] text-slate-400 block font-semibold">
+              {t("ইউজারনেম / আইডি:", "ID / Username:")}
+            </span>
+            <div className="flex items-center justify-between mt-0.5">
+              <span className="font-mono font-bold text-slate-900 dark:text-white truncate">
+                {currentEmployee.username || currentEmployee.employeeCode}
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard.writeText(currentEmployee.username || currentEmployee.employeeCode);
+                  setCopySuccess("user");
+                  setTimeout(() => setCopySuccess(null), 2000);
+                }}
+                title={t("কপি করুন", "Copy")}
+                className="text-slate-400 hover:text-teal-600 dark:hover:text-teal-400 cursor-pointer p-0.5"
+              >
+                {copySuccess === "user" ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
+              </button>
+            </div>
+          </div>
+
+          <div className="p-2 rounded-xl bg-white/90 dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-700/80">
+            <span className="text-[9.5px] text-slate-400 block font-semibold">
+              {t("পাসওয়ার্ড:", "Password:")}
+            </span>
+            <div className="flex items-center justify-between mt-0.5">
+              <span className="font-mono font-bold text-slate-900 dark:text-white">
+                {showProfilePassword ? (currentEmployee.password || "123456") : "••••••"}
+              </span>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => setShowProfilePassword(!showProfilePassword)}
+                  title={showProfilePassword ? t("লুকান", "Hide") : t("দেখান", "Show")}
+                  className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer p-0.5"
+                >
+                  {showProfilePassword ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(currentEmployee.password || "123456");
+                    setCopySuccess("pass");
+                    setTimeout(() => setCopySuccess(null), 2000);
+                  }}
+                  title={t("পাসওয়ার্ড কপি করুন", "Copy password")}
+                  className="text-slate-400 hover:text-teal-600 dark:hover:text-teal-400 cursor-pointer p-0.5"
+                >
+                  {copySuccess === "pass" ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => {
+            setShowRoleMenu(false);
+            setShowChangeCredsModal(true);
+          }}
+          className="w-full flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-teal-600 hover:bg-teal-500 text-white text-xs font-bold shadow-xs cursor-pointer transition-all"
+        >
+          <Lock className="w-3.5 h-3.5" />
+          <span>
+            {currentEmployee.role === "SUPER_ADMIN"
+              ? t("ইউজারনেম, নাম ও পাসওয়ার্ড পরিবর্তন", "Change Username, Name & Password")
+              : t("নাম ও পাসওয়ার্ড পরিবর্তন করুন", "Change Name & Password")}
+          </span>
+        </button>
+      </div>
+
+      {/* Quick Preferences & Settings Panel (Theme, Language, Branding) */}
+      <div className="space-y-1.5 pb-2.5 mb-2.5 border-b border-slate-100 dark:border-slate-800">
+        <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 px-1">
+          {t("কুইক কন্ট্রোল ও প্রেফারেন্স", "Quick Controls & Display")}
+        </div>
+
+        <div className="grid grid-cols-2 gap-1.5 pt-0.5">
+          {/* Theme Toggle Button */}
+          <button
+            type="button"
+            onClick={toggleTheme}
+            className="flex items-center gap-2 p-2 rounded-xl bg-slate-100/90 dark:bg-slate-800/90 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700/80 transition-all text-left cursor-pointer"
+          >
+            {theme === "dark" ? (
+              <Sun className="w-4 h-4 text-amber-400 shrink-0" />
+            ) : (
+              <Moon className="w-4 h-4 text-indigo-600 shrink-0" />
+            )}
+            <div className="min-w-0 flex-1">
+              <div className="text-[11px] font-bold leading-none">
+                {theme === "dark" ? t("লাইট মোড", "Light Mode") : t("ডার্ক মোড", "Dark Mode")}
+              </div>
+              <div className="text-[9px] text-slate-500 dark:text-slate-400 mt-0.5">
+                {theme === "dark" ? t("ডার্ক সক্রিয়", "Dark active") : t("লাইট সক্রিয়", "Light active")}
+              </div>
+            </div>
+          </button>
+
+          {/* Language Toggle Button */}
+          <button
+            type="button"
+            onClick={toggleLanguage}
+            className="flex items-center gap-2 p-2 rounded-xl bg-slate-100/90 dark:bg-slate-800/90 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700/80 transition-all text-left cursor-pointer"
+          >
+            <Globe className="w-4 h-4 text-teal-600 dark:text-teal-400 shrink-0" />
+            <div className="min-w-0 flex-1">
+              <div className="text-[11px] font-bold leading-none">
+                {isBangla ? "English (EN)" : "বাংলা (BN)"}
+              </div>
+              <div className="text-[9px] text-slate-500 dark:text-slate-400 mt-0.5">
+                {isBangla ? "বাংলা সক্রিয়" : "English active"}
+              </div>
+            </div>
+          </button>
+        </div>
+
+        {/* My Digital ID Card Quick Button */}
+        {onOpenDigitalIdCard && (
+          <button
+            type="button"
+            onClick={() => {
+              setShowRoleMenu(false);
+              onOpenDigitalIdCard(currentEmployee);
+            }}
+            className="w-full flex items-center justify-between p-2.5 rounded-xl bg-gradient-to-r from-teal-500/15 via-emerald-500/10 to-teal-500/15 hover:from-teal-500/25 hover:to-emerald-500/25 text-teal-700 dark:text-teal-300 border border-teal-500/30 transition-all text-left cursor-pointer mt-1 group"
+          >
+            <div className="flex items-center gap-2.5">
+              <div className="p-1.5 rounded-lg bg-teal-500/20 text-teal-600 dark:text-teal-400 group-hover:scale-105 transition-transform">
+                <CreditCard className="w-4 h-4" />
+              </div>
+              <div>
+                <div className="text-xs font-black">
+                  {t("আমার ডিজিটাল আইডি কার্ড", "My Digital ID Card")}
+                </div>
+                <div className="text-[9.5px] text-teal-600/80 dark:text-teal-300/80">
+                  {t("উচ্চ রেজোলিউশনে ভিউ ও PNG ডাউনলোড", "View & High-Res PNG Download")}
+                </div>
+              </div>
+            </div>
+            <Sparkles className="w-3.5 h-3.5 text-teal-500 shrink-0 animate-pulse" />
+          </button>
+        )}
+
+        {/* Super Admin Company Branding Button inside Profile */}
+        {isSuperAdmin && (
+          <button
+            type="button"
+            onClick={() => {
+              setShowRoleMenu(false);
+              setIsBrandingModalOpen(true);
+            }}
+            className="w-full flex items-center justify-between p-2 rounded-xl bg-purple-500/10 hover:bg-purple-500/20 text-purple-700 dark:text-purple-300 border border-purple-500/25 transition-all text-left cursor-pointer mt-1"
+          >
+            <div className="flex items-center gap-2">
+              <Building2 className="w-4 h-4 text-purple-600 dark:text-purple-400 shrink-0" />
+              <div>
+                <div className="text-[11px] font-bold">
+                  {t("কোম্পানি লোগো ও ব্র্যান্ডিং সেটআপ", "Company Logo & Branding Setup")}
+                </div>
+                <div className="text-[9px] text-purple-600/80 dark:text-purple-300/80">
+                  {t("নাম, লোগো ও হোয়াইট-লেবেল কনফিগারেশন", "White-label name, logo & letterhead")}
+                </div>
+              </div>
+            </div>
+            <Sparkles className="w-3.5 h-3.5 text-purple-500 shrink-0" />
+          </button>
+        )}
+
+        {/* Super Admin Organization Data Reset Button */}
+        {isSuperAdmin && onOpenOrganizationReset && (
+          <button
+            type="button"
+            onClick={() => {
+              setShowRoleMenu(false);
+              onOpenOrganizationReset();
+            }}
+            className="w-full flex items-center justify-between p-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-700 dark:text-rose-300 border border-rose-500/25 transition-all text-left cursor-pointer mt-1"
+          >
+            <div className="flex items-center gap-2">
+              <RotateCcw className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0" />
+              <div>
+                <div className="text-[11px] font-bold text-rose-700 dark:text-rose-300">
+                  {t("রিসেট প্রতিষ্ঠান (Organization Reset)", "Reset Organization")}
+                </div>
+                <div className="text-[9px] text-rose-600/80 dark:text-rose-300/80">
+                  {t("শাখাভিত্তিক বা সার্বিক ডামি ডাটা ক্লিন করুন", "Safely wipe dummy records per branch or company")}
+                </div>
+              </div>
+            </div>
+            <span className="text-[9px] px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-600 dark:text-rose-300 font-bold uppercase font-mono">
+              Reset
+            </span>
+          </button>
+        )}
+
+        {/* Firebase Database Live Health & Sync Diagnostics (Super Admin Only) */}
+        {currentEmployee.role === "SUPER_ADMIN" && (
+          <button
+            type="button"
+            onClick={() => {
+              setShowRoleMenu(false);
+              setShowDbStatusModal(true);
+            }}
+            className="w-full flex items-center justify-between p-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/25 transition-all text-left cursor-pointer mt-1 group"
+          >
+            <div className="flex items-center gap-2.5">
+              <div className="relative flex h-3 w-3 shrink-0 ml-0.5 items-center justify-center">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+              </div>
+              <div>
+                <div className="text-[11px] font-bold flex items-center gap-1.5">
+                  <Database className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                  <span>{t("ফায়ারবেস ডাটাবেজ লাইভ স্ট্যাটাস", "Firebase Database Live Status")}</span>
+                </div>
+                <div className="text-[9px] text-emerald-600/80 dark:text-emerald-300/80">
+                  {t("ক্লাউড সিঙ্ক স্থিতি, লেটেন্সি ও পিং টেস্ট", "Cloud sync health, latency & verify status")}
+                </div>
+              </div>
+            </div>
+            <span className="px-1.5 py-0.5 rounded text-[9.5px] font-bold bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 shrink-0">
+              {t("সিঙ্কড", "Synced")}
+            </span>
+          </button>
+        )}
+      </div>
+
+      {/* Account Security Notice */}
+      <div className="p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60 mb-2.5 text-slate-600 dark:text-slate-400 text-[11px] flex items-center gap-2">
+        <Shield className="w-4 h-4 text-teal-500 shrink-0" />
+        <span>
+          {t(
+            "নিরাপত্তার স্বার্থে সরাসরি প্রোফাইল সুইচিং বন্ধ রাখা হয়েছে। অন্য অ্যাকাউন্টে প্রবেশ করতে লগআউট করুন।",
+            "Direct in-session role switching is disabled for security. Please log out to access another account."
+          )}
+        </span>
+      </div>
+
+      {/* Profile Footer: Sign Out / Logout Option */}
+      {onLogout && (
+        <div className="pt-2 mt-2 border-t border-slate-200/80 dark:border-slate-800/80">
+          <button
+            type="button"
+            onClick={() => {
+              setShowRoleMenu(false);
+              onLogout();
+            }}
+            className="w-full flex items-center justify-center gap-2 p-2.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 border border-rose-500/20 text-xs font-bold transition-all cursor-pointer shadow-xs active:scale-[0.98]"
+          >
+            <LogOut className="w-4 h-4" />
+            <span>{t("সিস্টেম থেকে লগআউট করুন", "Log Out of System")}</span>
+          </button>
+        </div>
+      )}
+    </>
+  );
+
   return (
     <header
       id="workflow-hr-header"
@@ -535,434 +951,66 @@ export const Header: React.FC<HeaderProps> = ({
               <ChevronDown className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400 shrink-0" />
             </button>
 
-            {/* Profile Popover Card - Smooth touch scrolling & sticky logout for mobile/tablet */}
+            {/* Desktop Profile Popover Dropdown (lg and up) */}
             {showRoleMenu && (
-              <>
-                {/* Mobile Backdrop Overlay */}
+              <div
+                tabIndex={0}
+                className="hidden lg:block absolute right-0 top-full mt-2 w-88 max-h-[calc(100vh-80px)] overflow-y-auto overscroll-contain bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700/90 rounded-2xl shadow-2xl p-3.5 pb-4 z-50 animate-in fade-in slide-in-from-top-2 duration-150 text-xs"
+              >
+                {renderProfileMenuContent()}
+              </div>
+            )}
+
+            {/* Mobile & Tablet Full-Height Right Slide-out Drawer via Portal (strictly above bottom bar) */}
+            {showRoleMenu && typeof document !== "undefined" && createPortal(
+              <div className="fixed inset-0 z-50 lg:hidden flex justify-end">
+                {/* Full-screen Dark Backdrop */}
                 <div
-                  className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-50 sm:hidden animate-in fade-in duration-150"
+                  className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm transition-opacity"
                   onClick={() => setShowRoleMenu(false)}
                 />
 
+                {/* Right Slide-out Drawer Panel */}
                 <div
-                  tabIndex={0}
-                  style={{ WebkitOverflowScrolling: "touch" }}
-                  className="fixed sm:absolute inset-x-2 sm:inset-x-auto sm:right-0 top-14 sm:top-full mt-1.5 w-auto sm:w-88 max-w-[96vw] sm:max-w-md max-h-[calc(100dvh-8rem)] sm:max-h-[calc(100vh-80px)] overflow-y-auto overscroll-contain bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700/90 rounded-2xl shadow-2xl p-3.5 pb-4 z-50 animate-in fade-in slide-in-from-top-2 duration-150 text-xs touch-pan-y"
+                  className="relative w-full sm:w-96 max-w-[92vw] sm:max-w-md bg-white dark:bg-slate-900 h-full shadow-2xl border-l border-slate-200 dark:border-slate-800 flex flex-col z-10 animate-in slide-in-from-right duration-200"
+                  onClick={(e) => e.stopPropagation()}
                 >
-                {/* User Info Header Card */}
-                <div className="flex items-center gap-3 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700/60 mb-2">
-                  <img
-                    src={currentEmployee.avatarUrl}
-                    alt={currentEmployee.fullName}
-                    className="w-11 h-11 rounded-xl object-cover border border-teal-500/50 shadow-xs shrink-0"
-                  />
-                  <div className="flex-1 min-w-0">
-                    <h4 className="font-black text-sm text-slate-900 dark:text-white truncate">
-                      {currentEmployee.fullName}
-                    </h4>
-                    <div className="text-[11px] text-teal-600 dark:text-teal-400 font-medium truncate">
-                      {currentEmployee.designationTitle || currentEmployee.role.replace("_", " ")}
+                  {/* Drawer Header with Title and Prominent Cross (X) Close Button */}
+                  <div className="p-3.5 sm:p-4 border-b border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 sticky top-0 z-10 backdrop-blur-md flex items-center justify-between">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <img
+                        src={currentEmployee.avatarUrl}
+                        alt={currentEmployee.fullName}
+                        className="w-8 h-8 rounded-lg object-cover border border-teal-500/50 shrink-0"
+                      />
+                      <div className="min-w-0">
+                        <h3 className="font-bold text-xs sm:text-sm text-slate-900 dark:text-white truncate">
+                          {currentEmployee.fullName}
+                        </h3>
+                        <p className="text-[10px] text-teal-600 dark:text-teal-400 font-semibold truncate">
+                          {t("প্রোফাইল ও সেটিংস", "Profile & Settings")}
+                        </p>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-1.5 mt-1">
-                      <span className="px-1.5 py-0.5 rounded-md bg-teal-500/15 text-teal-700 dark:text-teal-300 font-bold text-[9.5px]">
-                        ID: {currentEmployee.employeeCode}
-                      </span>
-                      <span className="text-[9.5px] text-slate-500 dark:text-slate-400 truncate">
-                        {currentEmployee.branchName || "Main Office"}
-                      </span>
-                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setShowRoleMenu(false)}
+                      className="p-1.5 rounded-lg text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors shrink-0 cursor-pointer"
+                      aria-label="Close Profile Menu"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+
+                  {/* Drawer Scrollable Content with ample bottom padding so logout button is fully visible */}
+                  <div className="flex-1 overflow-y-auto p-4 pb-20 space-y-3.5 text-xs touch-pan-y overscroll-contain">
+                    {renderProfileMenuContent()}
                   </div>
                 </div>
-
-                {/* Biometric Face Status Strip */}
-                <div
-                  className={`p-2 rounded-xl mb-2.5 border flex items-center justify-between gap-2 ${
-                    isFaceVerificationRequired
-                      ? "bg-amber-500/10 border-amber-500/30 text-amber-900 dark:text-amber-200"
-                      : "bg-emerald-500/10 border-emerald-500/30 text-emerald-900 dark:text-emerald-200"
-                  }`}
-                >
-                  <div className="flex items-center gap-2 min-w-0">
-                    {isFaceVerificationRequired ? (
-                      <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 animate-pulse" />
-                    ) : (
-                      <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
-                    )}
-                    <div className="truncate">
-                      <div className="text-[10.5px] font-bold truncate">
-                        {isFaceVerificationRequired
-                          ? t("ফেস ভেরিফিকেশন প্রয়োজন", "Face Verification Required")
-                          : t(
-                              `বায়োমেট্রিক ফেস ভেরিফাইড (${currentEmployee.faceVerificationScore}%)`,
-                              `Biometric Face Verified (${currentEmployee.faceVerificationScore}%)`
-                            )}
-                      </div>
-                      <div className="text-[9px] opacity-75 truncate">
-                        {isFaceVerificationRequired
-                          ? t("উপস্থিতি রেকর্ড করতে লাইভ ভেরিফাই আবশ্যক", "Live check required for attendance")
-                          : t("স্মার্ট উপস্থিতি সক্রিয়", "Active for smart clock-in")}
-                      </div>
-                    </div>
-                  </div>
-                  {onOpenFaceEnrollModal && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowRoleMenu(false);
-                        onOpenFaceEnrollModal(currentEmployee);
-                      }}
-                      className={`px-2 py-1 rounded-lg text-[10px] font-bold shrink-0 transition-colors cursor-pointer ${
-                        isFaceVerificationRequired
-                          ? "bg-amber-600 hover:bg-amber-500 text-white shadow-xs"
-                          : "bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-700 dark:text-emerald-300"
-                      }`}
-                    >
-                      {isFaceVerificationRequired ? t("ভেরিফাই", "Verify") : t("আপডেট", "Update")}
-                    </button>
-                  )}
-                </div>
-
-                {/* Unified Profile Settings Hub Section */}
-                <div className="mb-2.5">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowRoleMenu(false);
-                      setProfileSettingsTab("profile");
-                      setShowProfileSettingsModal(true);
-                    }}
-                    className="w-full flex items-center justify-between p-3 rounded-2xl bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white font-bold text-xs shadow-md shadow-teal-500/20 cursor-pointer transition-all group"
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <div className="p-1.5 rounded-xl bg-white/20 text-white">
-                        <Settings2 className="w-4 h-4" />
-                      </div>
-                      <div className="text-left">
-                        <div className="text-xs font-black">
-                          {t("প্রোফাইল সেটিংস", "Profile Settings")}
-                        </div>
-                        <div className="text-[10px] text-teal-100 font-normal">
-                          {t("এডিট প্রোফাইল, সিভি, ছবি ও পাসওয়ার্ড", "Edit profile, CV, photo & password")}
-                        </div>
-                      </div>
-                    </div>
-                    <ChevronRight className="w-4 h-4 text-white/80 group-hover:translate-x-1 transition-transform" />
-                  </button>
-
-                  {/* 3 Dedicated Distinct Action Pills: Edit Profile, Edit CV & Signature */}
-                  <div className="grid grid-cols-3 gap-1.5 mt-1.5">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowRoleMenu(false);
-                        setProfileSettingsTab("profile");
-                        setShowProfileSettingsModal(true);
-                      }}
-                      className="py-1.5 px-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-[10.5px] font-bold flex items-center justify-center gap-1 transition-colors cursor-pointer"
-                    >
-                      <User className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400 shrink-0" />
-                      <span className="truncate">{t("প্রোফাইল", "Profile")}</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowRoleMenu(false);
-                        setShowEditCVModal(true);
-                      }}
-                      className="py-1.5 px-1.5 rounded-xl bg-teal-50 dark:bg-teal-950/40 hover:bg-teal-100 dark:hover:bg-teal-900/60 text-teal-700 dark:text-teal-300 border border-teal-500/30 text-[10.5px] font-bold flex items-center justify-center gap-1 transition-colors cursor-pointer"
-                    >
-                      <FileText className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400 shrink-0" />
-                      <span className="truncate">{t("সিভি", "CV")}</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowRoleMenu(false);
-                        setProfileSettingsTab("signature");
-                        setShowProfileSettingsModal(true);
-                      }}
-                      className="py-1.5 px-1.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/60 text-amber-700 dark:text-amber-300 border border-amber-500/30 text-[10.5px] font-bold flex items-center justify-center gap-1 transition-colors cursor-pointer"
-                    >
-                      <PenTool className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
-                      <span className="truncate">{t("স্বাক্ষর", "Signature")}</span>
-                    </button>
-                  </div>
-                </div>
-
-                {/* User Credentials & Password Change Access Card */}
-                <div className="p-3 rounded-2xl bg-gradient-to-br from-teal-500/10 via-slate-50 to-teal-500/5 dark:from-teal-950/40 dark:via-slate-800/80 dark:to-teal-950/20 border border-teal-500/30 space-y-2.5 mb-2.5">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-1.5 text-xs font-bold text-teal-700 dark:text-teal-300">
-                      <KeyRound className="w-4 h-4 text-teal-600 dark:text-teal-400" />
-                      <span>{t("আমার লগইন তথ্য ও পাসওয়ার্ড", "My Login Credentials")}</span>
-                    </div>
-                    <span className="text-[9px] px-2 py-0.5 rounded-full font-bold bg-teal-500/20 text-teal-700 dark:text-teal-300 uppercase">
-                      {currentEmployee.role}
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2 text-[11px]">
-                    <div className="p-2 rounded-xl bg-white/90 dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-700/80">
-                      <span className="text-[9.5px] text-slate-400 block font-semibold">
-                        {t("ইউজারনেম / আইডি:", "ID / Username:")}
-                      </span>
-                      <div className="flex items-center justify-between mt-0.5">
-                        <span className="font-mono font-bold text-slate-900 dark:text-white truncate">
-                          {currentEmployee.username || currentEmployee.employeeCode}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            navigator.clipboard.writeText(currentEmployee.username || currentEmployee.employeeCode);
-                            setCopySuccess("user");
-                            setTimeout(() => setCopySuccess(null), 2000);
-                          }}
-                          title={t("কপি করুন", "Copy")}
-                          className="text-slate-400 hover:text-teal-600 dark:hover:text-teal-400 cursor-pointer p-0.5"
-                        >
-                          {copySuccess === "user" ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="p-2 rounded-xl bg-white/90 dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-700/80">
-                      <span className="text-[9.5px] text-slate-400 block font-semibold">
-                        {t("পাসওয়ার্ড:", "Password:")}
-                      </span>
-                      <div className="flex items-center justify-between mt-0.5">
-                        <span className="font-mono font-bold text-slate-900 dark:text-white">
-                          {showProfilePassword ? (currentEmployee.password || "123456") : "••••••"}
-                        </span>
-                        <div className="flex items-center gap-1">
-                          <button
-                            type="button"
-                            onClick={() => setShowProfilePassword(!showProfilePassword)}
-                            title={showProfilePassword ? t("লুকান", "Hide") : t("দেখান", "Show")}
-                            className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer p-0.5"
-                          >
-                            {showProfilePassword ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              navigator.clipboard.writeText(currentEmployee.password || "123456");
-                              setCopySuccess("pass");
-                              setTimeout(() => setCopySuccess(null), 2000);
-                            }}
-                            title={t("পাসওয়ার্ড কপি করুন", "Copy password")}
-                            className="text-slate-400 hover:text-teal-600 dark:hover:text-teal-400 cursor-pointer p-0.5"
-                          >
-                            {copySuccess === "pass" ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowRoleMenu(false);
-                      setShowChangeCredsModal(true);
-                    }}
-                    className="w-full flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-teal-600 hover:bg-teal-500 text-white text-xs font-bold shadow-xs cursor-pointer transition-all"
-                  >
-                    <Lock className="w-3.5 h-3.5" />
-                    <span>
-                      {currentEmployee.role === "SUPER_ADMIN"
-                        ? t("ইউজারনেম, নাম ও পাসওয়ার্ড পরিবর্তন", "Change Username, Name & Password")
-                        : t("নাম ও পাসওয়ার্ড পরিবর্তন করুন", "Change Name & Password")}
-                    </span>
-                  </button>
-                </div>
-
-                {/* Quick Preferences & Settings Panel (Theme, Language, Branding) */}
-                <div className="space-y-1.5 pb-2.5 mb-2.5 border-b border-slate-100 dark:border-slate-800">
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 px-1">
-                    {t("কুইক কন্ট্রোল ও প্রেফারেন্স", "Quick Controls & Display")}
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-1.5 pt-0.5">
-                    {/* Theme Toggle Button */}
-                    <button
-                      type="button"
-                      onClick={toggleTheme}
-                      className="flex items-center gap-2 p-2 rounded-xl bg-slate-100/90 dark:bg-slate-800/90 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700/80 transition-all text-left cursor-pointer"
-                    >
-                      {theme === "dark" ? (
-                        <Sun className="w-4 h-4 text-amber-400 shrink-0" />
-                      ) : (
-                        <Moon className="w-4 h-4 text-indigo-600 shrink-0" />
-                      )}
-                      <div className="min-w-0 flex-1">
-                        <div className="text-[11px] font-bold leading-none">
-                          {theme === "dark" ? t("লাইট মোড", "Light Mode") : t("ডার্ক মোড", "Dark Mode")}
-                        </div>
-                        <div className="text-[9px] text-slate-500 dark:text-slate-400 mt-0.5">
-                          {theme === "dark" ? t("ডার্ক সক্রিয়", "Dark active") : t("লাইট সক্রিয়", "Light active")}
-                        </div>
-                      </div>
-                    </button>
-
-                    {/* Language Toggle Button */}
-                    <button
-                      type="button"
-                      onClick={toggleLanguage}
-                      className="flex items-center gap-2 p-2 rounded-xl bg-slate-100/90 dark:bg-slate-800/90 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700/80 transition-all text-left cursor-pointer"
-                    >
-                      <Globe className="w-4 h-4 text-teal-600 dark:text-teal-400 shrink-0" />
-                      <div className="min-w-0 flex-1">
-                        <div className="text-[11px] font-bold leading-none">
-                          {isBangla ? "English (EN)" : "বাংলা (BN)"}
-                        </div>
-                        <div className="text-[9px] text-slate-500 dark:text-slate-400 mt-0.5">
-                          {isBangla ? "বাংলা সক্রিয়" : "English active"}
-                        </div>
-                      </div>
-                    </button>
-                  </div>
-
-                  {/* My Digital ID Card Quick Button */}
-                  {onOpenDigitalIdCard && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowRoleMenu(false);
-                        onOpenDigitalIdCard(currentEmployee);
-                      }}
-                      className="w-full flex items-center justify-between p-2.5 rounded-xl bg-gradient-to-r from-teal-500/15 via-emerald-500/10 to-teal-500/15 hover:from-teal-500/25 hover:to-emerald-500/25 text-teal-700 dark:text-teal-300 border border-teal-500/30 transition-all text-left cursor-pointer mt-1 group"
-                    >
-                      <div className="flex items-center gap-2.5">
-                        <div className="p-1.5 rounded-lg bg-teal-500/20 text-teal-600 dark:text-teal-400 group-hover:scale-105 transition-transform">
-                          <CreditCard className="w-4 h-4" />
-                        </div>
-                        <div>
-                          <div className="text-xs font-black">
-                            {t("আমার ডিজিটাল আইডি কার্ড", "My Digital ID Card")}
-                          </div>
-                          <div className="text-[9.5px] text-teal-600/80 dark:text-teal-300/80">
-                            {t("উচ্চ রেজোলিউশনে ভিউ ও PNG ডাউনলোড", "View & High-Res PNG Download")}
-                          </div>
-                        </div>
-                      </div>
-                      <Sparkles className="w-3.5 h-3.5 text-teal-500 shrink-0 animate-pulse" />
-                    </button>
-                  )}
-
-                  {/* Super Admin Company Branding Button inside Profile */}
-                  {isSuperAdmin && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowRoleMenu(false);
-                        setIsBrandingModalOpen(true);
-                      }}
-                      className="w-full flex items-center justify-between p-2 rounded-xl bg-purple-500/10 hover:bg-purple-500/20 text-purple-700 dark:text-purple-300 border border-purple-500/25 transition-all text-left cursor-pointer mt-1"
-                    >
-                      <div className="flex items-center gap-2">
-                        <Building2 className="w-4 h-4 text-purple-600 dark:text-purple-400 shrink-0" />
-                        <div>
-                          <div className="text-[11px] font-bold">
-                            {t("কোম্পানি লোগো ও ব্র্যান্ডিং সেটআপ", "Company Logo & Branding Setup")}
-                          </div>
-                          <div className="text-[9px] text-purple-600/80 dark:text-purple-300/80">
-                            {t("নাম, লোগো ও হোয়াইট-লেবেল কনফিগারেশন", "White-label name, logo & letterhead")}
-                          </div>
-                        </div>
-                      </div>
-                      <Sparkles className="w-3.5 h-3.5 text-purple-500 shrink-0" />
-                    </button>
-                  )}
-
-                  {/* Super Admin Organization Data Reset Button */}
-                  {isSuperAdmin && onOpenOrganizationReset && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowRoleMenu(false);
-                        onOpenOrganizationReset();
-                      }}
-                      className="w-full flex items-center justify-between p-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-700 dark:text-rose-300 border border-rose-500/25 transition-all text-left cursor-pointer mt-1"
-                    >
-                      <div className="flex items-center gap-2">
-                        <RotateCcw className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0" />
-                        <div>
-                          <div className="text-[11px] font-bold text-rose-700 dark:text-rose-300">
-                            {t("রিসেট প্রতিষ্ঠান (Organization Reset)", "Reset Organization")}
-                          </div>
-                          <div className="text-[9px] text-rose-600/80 dark:text-rose-300/80">
-                            {t("শাখাভিত্তিক বা সার্বিক ডামি ডাটা ক্লিন করুন", "Safely wipe dummy records per branch or company")}
-                          </div>
-                        </div>
-                      </div>
-                      <span className="text-[9px] px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-600 dark:text-rose-300 font-bold uppercase font-mono">
-                        Reset
-                      </span>
-                    </button>
-                  )}
-
-                  {/* Firebase Database Live Health & Sync Diagnostics (Super Admin Only) */}
-                  {currentEmployee.role === "SUPER_ADMIN" && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowRoleMenu(false);
-                        setShowDbStatusModal(true);
-                      }}
-                      className="w-full flex items-center justify-between p-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/25 transition-all text-left cursor-pointer mt-1 group"
-                    >
-                      <div className="flex items-center gap-2.5">
-                        <div className="relative flex h-3 w-3 shrink-0 ml-0.5 items-center justify-center">
-                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                          <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                        </div>
-                        <div>
-                          <div className="text-[11px] font-bold flex items-center gap-1.5">
-                            <Database className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                            <span>{t("ফায়ারবেস ডাটাবেজ লাইভ স্ট্যাটাস", "Firebase Database Live Status")}</span>
-                          </div>
-                          <div className="text-[9px] text-emerald-600/80 dark:text-emerald-300/80">
-                            {t("ক্লাউড সিঙ্ক স্থিতি, লেটেন্সি ও পিং টেস্ট", "Cloud sync health, latency & verify status")}
-                          </div>
-                        </div>
-                      </div>
-                      <span className="px-1.5 py-0.5 rounded text-[9.5px] font-bold bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 shrink-0">
-                        {t("সিঙ্কড", "Synced")}
-                      </span>
-                    </button>
-                  )}
-                </div>
-
-                {/* Account Security Notice */}
-                <div className="p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60 mb-2.5 text-slate-600 dark:text-slate-400 text-[11px] flex items-center gap-2">
-                  <Shield className="w-4 h-4 text-teal-500 shrink-0" />
-                  <span>
-                    {t(
-                      "নিরাপত্তার স্বার্থে সরাসরি প্রোফাইল সুইচিং বন্ধ রাখা হয়েছে। অন্য অ্যাকাউন্টে প্রবেশ করতে লগআউট করুন।",
-                      "Direct in-session role switching is disabled for security. Please log out to access another account."
-                    )}
-                  </span>
-                </div>
-
-                {/* Profile Footer: Sign Out / Logout Option */}
-                {onLogout && (
-                  <div className="pt-2 mt-2 border-t border-slate-200/80 dark:border-slate-800/80">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowRoleMenu(false);
-                        onLogout();
-                      }}
-                      className="w-full flex items-center justify-center gap-2 p-2.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 border border-rose-500/20 text-xs font-bold transition-all cursor-pointer shadow-xs active:scale-[0.98]"
-                    >
-                      <LogOut className="w-4 h-4" />
-                      <span>{t("সিস্টেম থেকে লগআউট করুন", "Log Out of System")}</span>
-                    </button>
-                  </div>
-                )}
-              </div>
-            </>
-          )}
+              </div>,
+              document.body
+            )}
           </div>
         </div>
       </div>
