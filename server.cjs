@@ -41,8 +41,10 @@ app.use((_req, res, next) => {
 app.use(
   "/models",
   import_express.default.static(import_path.default.join(process.cwd(), "public", "models"), {
+    maxAge: "30d",
     setHeaders: (res, filePath) => {
       res.setHeader("Access-Control-Allow-Origin", "*");
+      res.setHeader("Cache-Control", "public, max-age=2592000, immutable");
       if (filePath.endsWith(".json")) {
         res.setHeader("Content-Type", "application/json");
       } else {
