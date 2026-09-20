@@ -4,12 +4,14 @@ import {
   UserCheck,
   ScanFace,
   Users,
+  CalendarCheck,
   Menu,
 } from "lucide-react";
 import { NavTabId } from "./Sidebar";
 
 interface MobileBottomNavProps {
   activeTab: NavTabId;
+  isGeneralEmployee?: boolean;
   onTabChange: (tab: NavTabId) => void;
   onOpenAttendance: () => void;
   onOpenMobileMenu: () => void;
@@ -17,6 +19,7 @@ interface MobileBottomNavProps {
 
 export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
   activeTab,
+  isGeneralEmployee = false,
   onTabChange,
   onOpenAttendance,
   onOpenMobileMenu,
@@ -24,7 +27,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
   return (
     <div
       id="mobile-bottom-navigation-bar"
-      className="fixed bottom-0 inset-x-0 z-40 lg:hidden bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border-t border-slate-200 dark:border-slate-800/90 px-3 py-1.5 flex items-center justify-around shadow-2xl safe-bottom text-slate-600 dark:text-slate-400"
+      className="fixed bottom-0 inset-x-0 z-30 lg:hidden bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border-t border-slate-200 dark:border-slate-800/90 px-3 py-1.5 flex items-center justify-around shadow-2xl safe-bottom text-slate-600 dark:text-slate-400"
     >
       {/* 1. Dashboard */}
       <button
@@ -45,7 +48,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
         type="button"
         onClick={() => onTabChange("my-portal")}
         className={`flex flex-col items-center justify-center p-1 rounded-xl transition-all cursor-pointer ${
-          activeTab === "my-portal"
+          activeTab === "my-portal" || (activeTab as any) === "self-service"
             ? "text-teal-600 dark:text-teal-400 font-bold"
             : "text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
         }`}
@@ -66,19 +69,34 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
         <span className="text-[10px] font-bold text-teal-600 dark:text-teal-400 mt-0.5">Face Clock</span>
       </button>
 
-      {/* 4. Staff Directory */}
-      <button
-        type="button"
-        onClick={() => onTabChange("employees")}
-        className={`flex flex-col items-center justify-center p-1 rounded-xl transition-all cursor-pointer ${
-          activeTab === "employees"
-            ? "text-teal-600 dark:text-teal-400 font-bold"
-            : "text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
-        }`}
-      >
-        <Users className="w-5 h-5 mb-0.5" />
-        <span className="text-[10px]">Directory</span>
-      </button>
+      {/* 4. Staff Directory OR Leaves for General Employees */}
+      {isGeneralEmployee ? (
+        <button
+          type="button"
+          onClick={() => onTabChange("leaves")}
+          className={`flex flex-col items-center justify-center p-1 rounded-xl transition-all cursor-pointer ${
+            activeTab === "leaves"
+              ? "text-teal-600 dark:text-teal-400 font-bold"
+              : "text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+          }`}
+        >
+          <CalendarCheck className="w-5 h-5 mb-0.5" />
+          <span className="text-[10px]">Leaves</span>
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={() => onTabChange("employees")}
+          className={`flex flex-col items-center justify-center p-1 rounded-xl transition-all cursor-pointer ${
+            activeTab === "employees"
+              ? "text-teal-600 dark:text-teal-400 font-bold"
+              : "text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+          }`}
+        >
+          <Users className="w-5 h-5 mb-0.5" />
+          <span className="text-[10px]">Directory</span>
+        </button>
+      )}
 
       {/* 5. More / Menu Drawer Toggle */}
       <button

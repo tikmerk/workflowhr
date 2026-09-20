@@ -117,18 +117,21 @@ export const LeavesView: React.FC<LeavesViewProps> = ({
   };
 
   const selectableEmployees = employees.filter((emp) => {
-    if (!currentUser) return true;
+    if (!currentUser) return false;
     if (isSuperAdminOrCeo(currentUser)) return true;
     if (isBranchManager(currentUser)) return emp.branchId === currentUser.branchId;
     return emp.id === currentUser.id;
   });
 
   const openCreateModal = () => {
-    const defaultEmp = isGeneralEmployee(currentUser) && currentUser
-      ? currentUser
-      : selectableEmployees[0] || employees[0];
-    if (defaultEmp) {
-      setSelectedEmpId(defaultEmp.id);
+    const isGeneral = isGeneralEmployee(currentUser);
+    if (isGeneral && currentUser) {
+      setSelectedEmpId(currentUser.id);
+    } else {
+      const defaultEmp = selectableEmployees[0] || employees[0];
+      if (defaultEmp) {
+        setSelectedEmpId(defaultEmp.id);
+      }
     }
     const today = new Date().toISOString().split("T")[0];
     setCreateStartDate(today);
@@ -136,7 +139,7 @@ export const LeavesView: React.FC<LeavesViewProps> = ({
     setCreateTotalDays(1);
     setCreateLeaveType("CASUAL");
     setCreateReason("");
-    setCreateApprovedDirectly(!isGeneralEmployee(currentUser));
+    setCreateApprovedDirectly(false);
     setShowCreateModal(true);
   };
 
@@ -153,8 +156,13 @@ export const LeavesView: React.FC<LeavesViewProps> = ({
 
   const handleSaveCreateLeave = (e: React.FormEvent) => {
     e.preventDefault();
-    const emp = employees.find((x) => x.id === selectedEmpId) || employees[0];
+    const isGeneral = isGeneralEmployee(currentUser);
+    const emp = isGeneral && currentUser
+      ? currentUser
+      : (employees.find((x) => x.id === selectedEmpId) || employees[0]);
     if (!emp) return;
+
+    const shouldApproveDirectly = isGeneral ? false : createApprovedDirectly;
 
     const newLeave: LeaveApplication = {
       id: `leave-${Date.now()}`,
@@ -169,12 +177,12 @@ export const LeavesView: React.FC<LeavesViewProps> = ({
       startDate: createStartDate,
       endDate: createEndDate,
       totalDays: createTotalDays,
-      reason: createReason.trim() || "অফিসিয়াল অনুমোদনক্রমে ছুটি প্রদান",
-      status: createApprovedDirectly ? "APPROVED" : "PENDING",
+      reason: createReason.trim() || (isGeneral ? "ব্যক্তিগত ছুটির আবেদন" : "অফিসিয়াল অনুমোদনক্রমে ছুটি প্রদান"),
+      status: shouldApproveDirectly ? "APPROVED" : "PENDING",
       appliedDate: new Date().toISOString().split("T")[0],
-      reviewedBy: createApprovedDirectly ? "Super Admin" : undefined,
-      reviewedAt: createApprovedDirectly ? new Date().toISOString().split("T")[0] : undefined,
-      reviewerComments: createApprovedDirectly ? "সুপার অ্যাডমিন কর্তৃক সরাসরি ছুটি বরাদ্দ ও অনুমোদিত" : undefined,
+      reviewedBy: shouldApproveDirectly ? "Super Admin" : undefined,
+      reviewedAt: shouldApproveDirectly ? new Date().toISOString().split("T")[0] : undefined,
+      reviewerComments: shouldApproveDirectly ? "সুপার অ্যাডমিন কর্তৃক সরাসরি ছুটি বরাদ্দ ও অনুমোদিত" : undefined,
     };
 
     if (onAddLeave) {
@@ -214,7 +222,7 @@ export const LeavesView: React.FC<LeavesViewProps> = ({
   };
 
   const isSuperAdminOrCeo = (user?: Employee) => {
-    if (!user) return true;
+    if (!user) return false;
     return Boolean(
       user.role === "SUPER_ADMIN" ||
       user.isSuperAdmin ||
@@ -246,7 +254,7 @@ export const LeavesView: React.FC<LeavesViewProps> = ({
   // - Branch Manager: see their branch leaves
   // - General Employee: see ONLY their own leaves
   const roleScopedLeaves = leaves.filter((l) => {
-    if (!currentUser) return true;
+    if (!currentUser) return false;
     if (isSuperAdminOrCeo(currentUser)) return true;
     if (isBranchManager(currentUser)) {
       return l.branchId === currentUser.branchId;
@@ -255,7 +263,7 @@ export const LeavesView: React.FC<LeavesViewProps> = ({
   });
 
   const canApproveRejectLeave = (leave: LeaveApplication) => {
-    if (!currentUser) return true;
+    if (!currentUser) return false;
     if (isSuperAdminOrCeo(currentUser)) return true;
     if (isBranchManager(currentUser)) {
       return leave.branchId === currentUser.branchId;
@@ -263,8 +271,17 @@ export const LeavesView: React.FC<LeavesViewProps> = ({
     return false;
   };
 
-  const canEditOrDeleteLeave = (leave: LeaveApplication) => {
-    if (!currentUser) return true;
+  const canEditLeave = (leave: LeaveApplication) => {
+    if (!currentUser) return false;
+    if (isSuperAdminOrCeo(currentUser)) return true;
+    if (isBranchManager(currentUser)) {
+      return leave.branchId === currentUser.branchId;
+    }
+    return false;
+  };
+
+  const canDeleteLeave = (leave: LeaveApplication) => {
+    if (!currentUser) return false;
     if (isSuperAdminOrCeo(currentUser)) return true;
     if (isBranchManager(currentUser)) {
       return leave.branchId === currentUser.branchId;
@@ -506,7 +523,7 @@ export const LeavesView: React.FC<LeavesViewProps> = ({
                           </button>
                         )}
 
-                        {onUpdateLeave && canEditOrDeleteLeave(l) && (
+                        {onUpdateLeave && canEditLeave(l) && (
                           <button
                             type="button"
                             onClick={() => openEditModal(l)}
@@ -517,7 +534,7 @@ export const LeavesView: React.FC<LeavesViewProps> = ({
                           </button>
                         )}
 
-                        {onDeleteLeave && canEditOrDeleteLeave(l) && (
+                        {onDeleteLeave && canDeleteLeave(l) && (
                           <button
                             type="button"
                             onClick={() => setDeleteLeaveId(l.id)}
@@ -649,7 +666,14 @@ export const LeavesView: React.FC<LeavesViewProps> = ({
                 />
               </div>
 
-              {!isGeneralEmployee(currentUser) && (
+              {isGeneralEmployee(currentUser) ? (
+                <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-900 dark:text-amber-200 flex items-center gap-2.5">
+                  <Clock className="w-4 h-4 text-amber-500 shrink-0" />
+                  <span className="text-[11px] leading-relaxed font-medium">
+                    ছুটির আবেদন সাবমিট করার পর অফিস অ্যাডমিন বা এইচআর অনুমোদন (Approve) না করা পর্যন্ত এটি অপেক্ষমাণ (Pending) থাকবে।
+                  </span>
+                </div>
+              ) : (
                 <div className="p-3 rounded-xl bg-teal-50/60 dark:bg-teal-950/30 border border-teal-200 dark:border-teal-800/60 flex items-center justify-between">
                   <div>
                     <span className="font-bold text-teal-900 dark:text-teal-200 block text-xs">সরাসরি অনুমোদিত হিসেবে সেভ করুন</span>

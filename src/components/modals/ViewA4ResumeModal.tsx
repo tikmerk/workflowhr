@@ -284,13 +284,19 @@ export const ViewA4ResumeModal: React.FC<ViewA4ResumeModalProps> = ({
             </div>
           </div>
 
-          {/* Scrollable Preview Area with A4 paper frame */}
-          <div className="flex-1 overflow-y-auto p-2 sm:p-5 flex justify-center bg-slate-200/80 dark:bg-slate-950/70">
+          {/* Scrollable Preview Area with A4 paper frame - Locked 210mm width */}
+          <div className="flex-1 overflow-x-auto overflow-y-auto p-2 sm:p-5 flex justify-start md:justify-center bg-slate-200/80 dark:bg-slate-950/70">
             <div
               id="printable-a4-resume"
               ref={printContentRef}
-              className="w-full max-w-[210mm] bg-white text-slate-900 shadow-xl rounded-sm p-6 sm:p-8 font-sans border border-slate-300 print:border-0 print:shadow-none print:m-0 print:p-6 print:w-full"
-              style={{ minHeight: "297mm", boxSizing: "border-box" }}
+              className="bg-white text-slate-900 shadow-xl rounded-sm p-6 sm:p-8 font-sans border border-slate-300 print:border-0 print:shadow-none print:m-0 print:p-6"
+              style={{
+                width: "210mm",
+                minWidth: "210mm",
+                maxWidth: "210mm",
+                minHeight: "297mm",
+                boxSizing: "border-box",
+              }}
             >
               
               {/* 1. Header: Organization, Candidate & Passport Photo */}

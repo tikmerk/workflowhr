@@ -91,61 +91,115 @@ export const MAX_DESCRIPTOR_DISTANCE = 0.45;
 let modelsLoaded = false;
 let modelLoadingPromise: Promise<boolean> | null = null;
 
+export function areModelsLoaded(): boolean {
+  if (modelsLoaded) return true;
+  try {
+    const isTinyLoaded = Boolean(faceapi?.nets?.tinyFaceDetector?.isLoaded);
+    const isLandmarkLoaded = Boolean(faceapi?.nets?.faceLandmark68Net?.isLoaded);
+    const isRecognitionLoaded = Boolean(faceapi?.nets?.faceRecognitionNet?.isLoaded);
+    if (isTinyLoaded && isLandmarkLoaded && isRecognitionLoaded) {
+      modelsLoaded = true;
+      return true;
+    }
+  } catch {
+    // Ignore error checking faceapi instance
+  }
+  return false;
+}
+
 /**
  * Load face-api.js neural networks:
- * 1. tinyFaceDetector (Fast face detection)
- * 2. faceLandmark68Net (68 facial landmark points)
- * 3. faceRecognitionNet (128-dimensional biometric embeddings)
+ * 1. tinyFaceDetector (Fast face detection, ~190KB)
+ * 2. faceLandmark68Net (68 facial landmark points, ~350KB)
+ * 3. faceRecognitionNet (128-dimensional biometric embeddings, ~6.2MB)
  *
- * First attempts to load from local /models, falls back to official CDN.
+ * Sequentially loads each model to avoid network socket congestion.
+ * Checks .isLoaded so already loaded weights are never re-downloaded.
+ * Automatically clears timeout timers to avoid unhandled rejection leaks.
  */
 export async function loadFaceApiModels(): Promise<boolean> {
-  if (modelsLoaded) return true;
+  if (areModelsLoaded()) return true;
   if (modelLoadingPromise) return modelLoadingPromise;
 
   modelLoadingPromise = (async () => {
-    const localUri = "/models";
-    const cdnUri = "https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@master/weights";
+    // Double check before fetching
+    if (areModelsLoaded()) {
+      modelsLoaded = true;
+      return true;
+    }
 
-    const loadNets = async (baseUri: string, timeoutMs: number = 8000) => {
-      const loadPromise = Promise.all([
-        faceapi.nets.tinyFaceDetector.loadFromUri(baseUri),
-        faceapi.nets.faceLandmark68Net.loadFromUri(baseUri),
-        faceapi.nets.faceRecognitionNet.loadFromUri(baseUri),
-      ]);
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error(`Timeout loading weights from ${baseUri}`)), timeoutMs)
-      );
-      await Promise.race([loadPromise, timeoutPromise]);
+    const hostOrigin = typeof window !== "undefined" && window.location?.origin ? window.location.origin : "";
+    const candidateUris: string[] = [
+      "/models",
+      ...(hostOrigin ? [`${hostOrigin}/models`] : []),
+      "https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@master/weights",
+      "https://raw.githubusercontent.com/justadudewhohacks/face-api.js/master/weights",
+    ];
+
+    const loadNetWithTimeout = async (net: any, netName: string, baseUri: string, timeoutMs: number): Promise<boolean> => {
+      if (net?.isLoaded) return true;
+
+      let timer: ReturnType<typeof setTimeout> | null = null;
+      try {
+        const loadPromise = net.loadFromUri(baseUri);
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          timer = setTimeout(() => {
+            reject(new Error(`Timeout (${timeoutMs}ms) loading ${netName} from ${baseUri}`));
+          }, timeoutMs);
+        });
+
+        await Promise.race([loadPromise, timeoutPromise]);
+        return true;
+      } catch (err: any) {
+        console.warn(`[face-api] ${netName} load attempt from ${baseUri} notice:`, err?.message || err);
+        return false;
+      } finally {
+        if (timer) clearTimeout(timer);
+      }
     };
 
-    try {
-      await loadNets(localUri, 7000);
-      modelsLoaded = true;
-      console.log("[face-api] Models loaded successfully from /models");
-      return true;
-    } catch (localErr) {
-      console.warn("[face-api] Local models failed/timeout, loading from CDN fallback...", localErr);
+    for (const uri of candidateUris) {
       try {
-        await loadNets(cdnUri, 12000);
-        modelsLoaded = true;
-        console.log("[face-api] Models loaded successfully from CDN");
-        return true;
-      } catch (cdnErr) {
-        console.error("[face-api] Failed to load models from both local and CDN:", cdnErr);
-        modelsLoaded = false;
-        return false;
+        // 1. Tiny Face Detector (lightweight: ~190KB)
+        if (!faceapi.nets.tinyFaceDetector.isLoaded) {
+          await loadNetWithTimeout(faceapi.nets.tinyFaceDetector, "tinyFaceDetector", uri, 25000);
+        }
+
+        // 2. Face Landmark 68 (lightweight: ~350KB)
+        if (!faceapi.nets.faceLandmark68Net.isLoaded) {
+          await loadNetWithTimeout(faceapi.nets.faceLandmark68Net, "faceLandmark68Net", uri, 30000);
+        }
+
+        // 3. Face Recognition Net (heavyweight: ~6.2MB across 2 shards)
+        if (!faceapi.nets.faceRecognitionNet.isLoaded) {
+          await loadNetWithTimeout(faceapi.nets.faceRecognitionNet, "faceRecognitionNet", uri, 60000);
+        }
+
+        // If all 3 models are loaded, we are ready!
+        if (areModelsLoaded()) {
+          modelsLoaded = true;
+          console.log(`[face-api] Neural network models successfully loaded from ${uri}`);
+          return true;
+        }
+      } catch (candidateErr: any) {
+        console.warn(`[face-api] Failed source ${uri}, trying next candidate...`, candidateErr?.message || candidateErr);
       }
-    } finally {
-      modelLoadingPromise = null;
     }
-  })();
+
+    // Final check
+    if (areModelsLoaded()) {
+      modelsLoaded = true;
+      return true;
+    }
+
+    console.warn("[face-api] Neural network models could not be completely initialized; biometrics will retry on demand.");
+    modelsLoaded = false;
+    return false;
+  })().finally(() => {
+    modelLoadingPromise = null;
+  });
 
   return modelLoadingPromise;
-}
-
-export function areModelsLoaded(): boolean {
-  return modelsLoaded;
 }
 
 // In-memory cache of extracted 128D descriptors for fast 1:N matching

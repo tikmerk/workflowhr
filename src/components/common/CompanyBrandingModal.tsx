@@ -60,6 +60,9 @@ export const CompanyBrandingModal: React.FC<CompanyBrandingModalProps> = ({ curr
   const [salaryDisbursementPolicy, setSalaryDisbursementPolicy] = useState<"BOTH" | "BANK_ONLY" | "CASH_ONLY">(
     branding.salaryDisbursementPolicy || "BOTH"
   );
+  const [employeeDirectoryScope, setEmployeeDirectoryScope] = useState<"OWN_BRANCH_ONLY" | "ALL_BRANCHES" | "RESTRICTED_NONE">(
+    branding.employeeDirectoryScope || "OWN_BRANCH_ONLY"
+  );
   const [savedSuccess, setSavedSuccess] = useState(false);
 
   // Role check: Only core Platform Super Admin can toggle Demo Mode
@@ -91,6 +94,7 @@ export const CompanyBrandingModal: React.FC<CompanyBrandingModalProps> = ({ curr
       setRegNo(branding.registrationNumber || "");
       setEmployeeIdPrefix(branding.employeeIdPrefix || "MWO");
       setSalaryDisbursementPolicy(branding.salaryDisbursementPolicy || "BOTH");
+      setEmployeeDirectoryScope(branding.employeeDirectoryScope || "OWN_BRANCH_ONLY");
       setSavedSuccess(false);
     }
   }, [isBrandingModalOpen, branding]);
@@ -138,6 +142,7 @@ export const CompanyBrandingModal: React.FC<CompanyBrandingModalProps> = ({ curr
       registrationNumber: regNo,
       employeeIdPrefix: employeeIdPrefix.trim().toUpperCase() || "MWO",
       salaryDisbursementPolicy,
+      employeeDirectoryScope,
     });
     setSavedSuccess(true);
     setTimeout(() => {
@@ -551,7 +556,112 @@ export const CompanyBrandingModal: React.FC<CompanyBrandingModalProps> = ({ curr
             </div>
           </div>
 
-          {/* 6. Interactive Demo Mode Toggle (Super Admin Control Only) */}
+          {/* 6. Employee Directory Visibility Scope (Super Admin Control) */}
+          <div className="space-y-2 p-3.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Users className="w-4 h-4 text-teal-600 dark:text-teal-400" />
+                <div>
+                  <h4 className="text-xs font-bold text-slate-900 dark:text-white">
+                    {t("এমপ্লয়ি ডিরেক্টরি দৃশ্যমানতা নীতি (Staff Directory Visibility)", "Staff Directory Visibility Scope")}
+                  </h4>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    {t(
+                      "সাধারণ এমপ্লয়িরা কি শুধু নিজ ব্রাঞ্চের সহকর্মীদের দেখবে, নাকি সবাইকে দেখতে পারবে তা নির্ধারণ করুন।",
+                      "Configure whether general employees see only their own branch staff or company-wide."
+                    )}
+                  </p>
+                </div>
+              </div>
+
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-teal-100 dark:bg-teal-900/60 text-teal-800 dark:text-teal-300 border border-teal-200 dark:border-teal-700">
+                {employeeDirectoryScope === "OWN_BRANCH_ONLY"
+                  ? t("শুধুমাত্র নিজ ব্রাঞ্চ (ডিফল্ট)", "Own Branch Only")
+                  : employeeDirectoryScope === "ALL_BRANCHES"
+                  ? t("সকল ব্রাঞ্চ উন্মুক্ত", "All Branches")
+                  : t("ডিরেক্টরি সীমাবদ্ধ", "Restricted")}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
+              <button
+                type="button"
+                onClick={() => setEmployeeDirectoryScope("OWN_BRANCH_ONLY")}
+                className={`p-2.5 rounded-xl text-left border transition-all cursor-pointer ${
+                  employeeDirectoryScope === "OWN_BRANCH_ONLY"
+                    ? "bg-white dark:bg-slate-900 border-teal-600 dark:border-teal-400 ring-2 ring-teal-500/20 shadow-xs"
+                    : "bg-white/60 dark:bg-slate-900/40 border-slate-200 dark:border-slate-800 hover:border-teal-300"
+                }`}
+              >
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs font-bold text-slate-900 dark:text-white">
+                    {t("নিজ ব্রাঞ্চ শুধুমাত্র", "Own Branch Only")}
+                  </span>
+                  {employeeDirectoryScope === "OWN_BRANCH_ONLY" && (
+                    <CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" />
+                  )}
+                </div>
+                <p className="text-[10.5px] text-slate-500 dark:text-slate-400 leading-tight">
+                  {t(
+                    "এমপ্লয়িরা শুধু তাদের নিজস্ব ব্রাঞ্চের সহকর্মীদের দেখতে পারবে। অন্য ব্রাঞ্চের কারো তথ্য দেখতে পারবে না।",
+                    "Employees only view staff members of their assigned branch."
+                  )}
+                </p>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setEmployeeDirectoryScope("ALL_BRANCHES")}
+                className={`p-2.5 rounded-xl text-left border transition-all cursor-pointer ${
+                  employeeDirectoryScope === "ALL_BRANCHES"
+                    ? "bg-white dark:bg-slate-900 border-teal-600 dark:border-teal-400 ring-2 ring-teal-500/20 shadow-xs"
+                    : "bg-white/60 dark:bg-slate-900/40 border-slate-200 dark:border-slate-800 hover:border-teal-300"
+                }`}
+              >
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs font-bold text-slate-900 dark:text-white">
+                    {t("সকল ব্রাঞ্চ (Company-wide)", "All Branches")}
+                  </span>
+                  {employeeDirectoryScope === "ALL_BRANCHES" && (
+                    <CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" />
+                  )}
+                </div>
+                <p className="text-[10.5px] text-slate-500 dark:text-slate-400 leading-tight">
+                  {t(
+                    "প্রতিষ্ঠানের সকল ব্রাঞ্চের সকল কর্মীদের ডিরেক্টরি উন্মুক্ত থাকবে।",
+                    "All staff members across all branches are visible in directory."
+                  )}
+                </p>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setEmployeeDirectoryScope("RESTRICTED_NONE")}
+                className={`p-2.5 rounded-xl text-left border transition-all cursor-pointer ${
+                  employeeDirectoryScope === "RESTRICTED_NONE"
+                    ? "bg-white dark:bg-slate-900 border-teal-600 dark:border-teal-400 ring-2 ring-teal-500/20 shadow-xs"
+                    : "bg-white/60 dark:bg-slate-900/40 border-slate-200 dark:border-slate-800 hover:border-teal-300"
+                }`}
+              >
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs font-bold text-slate-900 dark:text-white">
+                    {t("এমপ্লয়িদের জন্য বন্ধ", "Restricted / Admin Only")}
+                  </span>
+                  {employeeDirectoryScope === "RESTRICTED_NONE" && (
+                    <CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" />
+                  )}
+                </div>
+                <p className="text-[10.5px] text-slate-500 dark:text-slate-400 leading-tight">
+                  {t(
+                    "সাধারণ এমপ্লয়িদের ডিরেক্টরি দেখানো হবে না। শুধু অ্যাডমিন ও ম্যানেজাররা দেখতে পাবেন।",
+                    "Directory is hidden for general employees. Only Admins/Managers can view."
+                  )}
+                </p>
+              </button>
+            </div>
+          </div>
+
+          {/* 7. Interactive Demo Mode Toggle (Super Admin Control Only) */}
           <div className="p-3.5 rounded-xl bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-start gap-3">
               <div className={`p-2 rounded-xl mt-0.5 ${isDemoModeEnabled ? "bg-teal-500/20 text-teal-400" : "bg-slate-200 dark:bg-slate-800 text-slate-500"}`}>

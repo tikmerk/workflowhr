@@ -23,9 +23,23 @@
   scrollbar-width: none !important;
 }
 
-/* Dedicated Print Styles for Salary Certificate and Payslips */
+/* Dedicated Print Styles for Salary Certificate, Payslips, A4 Resumes & Circulars */
 @media print {
-  body > *:not(#workflowhr-print-mount) {
+  @page {
+    size: A4 portrait;
+    margin: 10mm 15mm;
+  }
+
+  body {
+    background: #ffffff !important;
+    color: #0f172a !important;
+    font-size: 12pt !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* When workflowhr-print-mount is used (payslips, certificates) */
+  body:has(#workflowhr-print-mount:not(:empty)) > *:not(#workflowhr-print-mount) {
     display: none !important;
   }
   #workflowhr-print-mount {
@@ -37,8 +51,17 @@
     background: #ffffff !important;
     color: #0f172a !important;
   }
-  @page {
-    size: A4;
-    margin: 10mm 15mm;
+
+  /* When printing directly from modal dialogs (CV or Notice) */
+  #printable-a4-resume,
+  #a4-printable-notice {
+    box-shadow: none !important;
+    border: none !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 10mm 12mm !important;
+    transform: none !important;
+    page-break-inside: avoid;
   }
 }

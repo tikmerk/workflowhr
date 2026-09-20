@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import {
   X,
   Printer,
@@ -17,7 +17,10 @@ import {
   FileText,
   ShieldCheck,
   Languages,
+  Loader2,
 } from "lucide-react";
+import { toJpeg } from "html-to-image";
+import jsPDF from "jspdf";
 import { Notice, Branch, Employee } from "../../types";
 import { useThemeLanguage } from "../../context/ThemeLanguageContext";
 import { useCompanyBranding } from "../../context/CompanyBrandingContext";
@@ -82,6 +85,8 @@ export const NoticeA4LetterheadModal: React.FC<NoticeA4LetterheadModalProps> = (
 
   const [zoomLevel, setZoomLevel] = useState<number>(100);
   const [copyStatus, setCopyStatus] = useState<boolean>(false);
+  const [isDownloadingPdf, setIsDownloadingPdf] = useState<boolean>(false);
+  const printableNoticeRef = useRef<HTMLDivElement>(null);
   
   // Notice language mode (default to notice.language or Bangla if unspecified)
   const isNoticeBangla = notice ? (notice.language === "bn" || (!notice.language && isBangla)) : isBangla;
@@ -93,7 +98,82 @@ export const NoticeA4LetterheadModal: React.FC<NoticeA4LetterheadModalProps> = (
   if (!isOpen || !notice) return null;
 
   const handlePrint = () => {
-    window.print();
+    try {
+      window.print();
+    } catch {
+      // If window.print is blocked by iframe, download PDF directly
+      handleDownloadPdf();
+    }
+  };
+
+  const handleDownloadPdf = async () => {
+    if (!printableNoticeRef.current || isDownloadingPdf) return;
+    setIsDownloadingPdf(true);
+
+    try {
+      const element = printableNoticeRef.current;
+
+      // Capture element as high-res image
+      const imgData = await toJpeg(element, {
+        quality: 0.96,
+        pixelRatio: 2.5,
+        backgroundColor: "#ffffff",
+        cacheBust: true,
+      });
+
+      const pdf = new jsPDF({
+        orientation: "portrait",
+        unit: "mm",
+        format: "a4",
+      });
+
+      const pdfWidth = 210;
+      const pdfHeight = 297;
+
+      const elWidth = element.offsetWidth || 794;
+      const elHeight = element.offsetHeight || 1123;
+      const ratio = elHeight / elWidth;
+      const calculatedHeight = pdfWidth * ratio;
+
+      if (calculatedHeight <= pdfHeight) {
+        pdf.addImage(imgData, "JPEG", 0, 0, pdfWidth, calculatedHeight, undefined, "FAST");
+      } else {
+        const scale = pdfHeight / calculatedHeight;
+        if (scale > 0.82) {
+          const fittedWidth = pdfWidth * scale;
+          const xOffset = (pdfWidth - fittedWidth) / 2;
+          pdf.addImage(imgData, "JPEG", xOffset, 0, fittedWidth, pdfHeight, undefined, "FAST");
+        } else {
+          let heightLeft = calculatedHeight;
+          let position = 0;
+          pdf.addImage(imgData, "JPEG", 0, position, pdfWidth, calculatedHeight, undefined, "FAST");
+          heightLeft -= pdfHeight;
+
+          while (heightLeft > 0) {
+            position = heightLeft - calculatedHeight;
+            pdf.addPage();
+            pdf.addImage(imgData, "JPEG", 0, position, pdfWidth, calculatedHeight, undefined, "FAST");
+            heightLeft -= pdfHeight;
+          }
+        }
+      }
+
+      const cleanTitle = (notice.subject || notice.title || "Notice")
+        .trim()
+        .replace(/[^a-zA-Z0-9_\u0980-\u09FF]/g, "_")
+        .slice(0, 40);
+      const filename = `Notice_${cleanTitle}_${notice.id || "A4"}.pdf`;
+      pdf.save(filename);
+    } catch (err) {
+      console.error("PDF generation failed:", err);
+      try {
+        window.print();
+      } catch (printErr) {
+        console.error("Print fallback also failed:", printErr);
+      }
+    } finally {
+      setIsDownloadingPdf(false);
+    }
   };
 
   const companyName = isBanglaMode
@@ -229,6 +309,25 @@ ${companyName}
               )}
             </button>
 
+            {/* Download A4 PDF Button */}
+            <button
+              onClick={handleDownloadPdf}
+              disabled={isDownloadingPdf}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 disabled:opacity-50 text-white text-xs font-bold shadow-lg shadow-blue-500/20 transition cursor-pointer"
+            >
+              {isDownloadingPdf ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span>{isBanglaMode ? "তৈরি হচ্ছে..." : "Generating..."}</span>
+                </>
+              ) : (
+                <>
+                  <Download className="w-3.5 h-3.5" />
+                  <span>{isBanglaMode ? "ডাউনলোড PDF (A4)" : "Download PDF (A4)"}</span>
+                </>
+              )}
+            </button>
+
             {/* Print Button */}
             <button
               onClick={handlePrint}
@@ -249,13 +348,22 @@ ${companyName}
           </div>
         </div>
 
-        {/* Paper Scroll Area */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-8 bg-slate-950/60 flex justify-center items-start no-scrollbar">
-          {/* A4 Sheet Container (Responsive display + Print CSS) */}
+        {/* Paper Scroll Area with horizontal and vertical scroll support for true A4 preservation */}
+        <div className="flex-1 overflow-x-auto overflow-y-auto p-3 sm:p-8 bg-slate-950/60 flex justify-start md:justify-center items-start">
+          {/* A4 Sheet Container (Locked 210mm width for true print fidelity across mobile, tablet & desktop) */}
           <div
             id="a4-printable-notice"
-            style={{ transform: `scale(${zoomLevel / 100})`, transformOrigin: "top center" }}
-            className="w-full max-w-[210mm] min-h-[297mm] bg-white text-slate-900 p-8 sm:p-14 shadow-2xl rounded-sm border border-slate-300 flex flex-col justify-between transition-transform duration-150 print:shadow-none print:border-none print:m-0 print:p-8 print:w-full print:max-w-none print:transform-none"
+            ref={printableNoticeRef}
+            style={{
+              width: "210mm",
+              minWidth: "210mm",
+              maxWidth: "210mm",
+              minHeight: "297mm",
+              boxSizing: "border-box",
+              transform: zoomLevel !== 100 ? `scale(${zoomLevel / 100})` : undefined,
+              transformOrigin: "top center",
+            }}
+            className="bg-white text-slate-900 p-8 sm:p-14 shadow-2xl rounded-sm border border-slate-300 flex flex-col justify-between transition-transform duration-150 print:shadow-none print:border-none print:m-0 print:p-8 print:w-full print:max-w-none print:transform-none"
           >
             {/* 1. Official Letterhead Header */}
             <div>

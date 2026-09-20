@@ -22,11 +22,13 @@ import {
 import { AttendanceRecord, Branch, Employee } from "../../types";
 import { exportToCSV } from "../../utils/exportUtils";
 import { useThemeLanguage } from "../../context/ThemeLanguageContext";
+import { filterAttendanceLogsForUser, isGeneralEmployeeRole } from "../../utils/permissions";
 
 interface AttendanceLogsViewProps {
   attendanceLogs: AttendanceRecord[];
   branches: Branch[];
   employees?: Employee[];
+  currentUser?: Employee;
   onOpenAttendanceModal: () => void;
 }
 
@@ -34,9 +36,17 @@ export const AttendanceLogsView: React.FC<AttendanceLogsViewProps> = ({
   attendanceLogs,
   branches,
   employees = [],
+  currentUser,
   onOpenAttendanceModal,
 }) => {
   const { t, isBangla } = useThemeLanguage();
+
+  // Strict role-based log scoping: General employees ONLY see their own logs
+  const accessibleLogs = useMemo(() => {
+    return filterAttendanceLogsForUser(attendanceLogs, currentUser);
+  }, [attendanceLogs, currentUser]);
+
+  const isRestrictedToOwnLogs = isGeneralEmployeeRole(currentUser);
 
   const [selectedBranch, setSelectedBranch] = useState("ALL");
   const [selectedStatus, setSelectedStatus] = useState("ALL");
@@ -88,7 +98,7 @@ export const AttendanceLogsView: React.FC<AttendanceLogsViewProps> = ({
   };
 
   const filteredLogs = useMemo(() => {
-    return attendanceLogs.filter((log) => {
+    return accessibleLogs.filter((log) => {
       if (employees.length > 0 && !employees.some((e) => e.id === log.employeeId)) {
         return false;
       }
@@ -111,7 +121,7 @@ export const AttendanceLogsView: React.FC<AttendanceLogsViewProps> = ({
 
       return matchesSearch && matchesBranch && matchesStatus && matchesDate;
     });
-  }, [attendanceLogs, searchTerm, selectedBranch, selectedStatus, startDate, endDate]);
+  }, [accessibleLogs, employees, searchTerm, selectedBranch, selectedStatus, startDate, endDate]);
 
   const handleExportCSV = () => {
     const data = filteredLogs.map((log) => ({
@@ -146,10 +156,20 @@ export const AttendanceLogsView: React.FC<AttendanceLogsViewProps> = ({
               </span>
             </div>
             <h2 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight mt-2">
-              {isBangla ? "স্মার্ট অ্যাটেনডেন্স ও জিওফেন্স লগ অডিট" : "Attendance Records & Geofence Logs"}
+              {isRestrictedToOwnLogs
+                ? isBangla
+                  ? "আমার ব্যক্তিগত উপস্থিতি ও বায়োমেট্রিক রেকর্ড"
+                  : "My Personal Attendance & Biometric History"
+                : isBangla
+                ? "স্মার্ট অ্যাটেনডেন্স ও জিওফেন্স লগ অডিট"
+                : "Attendance Records & Geofence Logs"}
             </h2>
             <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
-              {isBangla
+              {isRestrictedToOwnLogs
+                ? isBangla
+                  ? "আপনার নিজস্ব দৈনিক হাজিরা, চেক-ইন/আউট সময়, কর্মঘণ্টা ও স্ট্যাটাস রিপোর্ট"
+                  : "Your personal clock-in/out timestamps, hours worked, late penalties and attendance status"
+                : isBangla
                 ? "নির্দিষ্ট তারিখ বা সময়সীমা সিলেক্ট করে উপস্থিতি ফিল্টার করুন, এক্সেল/CSV ডাউনলোড করুন"
                 : "Filter records by custom date ranges, branches, verify GPS coordinates and export reports"}
             </p>

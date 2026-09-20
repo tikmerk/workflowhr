@@ -16,6 +16,9 @@ export interface CertificateDetails {
 export function generateCertificateHTML(type: CertificateType, details: CertificateDetails): string {
   const { refNo, issueDate, employee, authorizedSignatory, signatoryTitle, companyName, customReason, newDesignation, newBranch, warningReason } = details;
 
+  // Global styling classes for justified, publication-quality typography
+  const textJustifyClass = "text-justify text-slate-800 leading-relaxed";
+
   switch (type) {
     case "NOC":
     case "NOC_LETTER" as any:
@@ -27,13 +30,13 @@ export function generateCertificateHTML(type: CertificateType, details: Certific
           </div>
           <div class="pt-6 space-y-4 text-sm font-sans">
             <p><strong>TO WHOM IT MAY CONCERN,</strong></p>
-            <p>
+            <p class="${textJustifyClass}">
               This is to certify that <strong>${employee.fullName}</strong>, bearing Employee ID <strong>${employee.employeeCode}</strong>, is a permanent employee of <strong>${companyName}</strong>, currently serving as <strong>${employee.designationTitle}</strong> in the Department of <strong>${employee.departmentName}</strong> (${employee.branchName}) since <strong>${employee.joiningDate}</strong>.
             </p>
-            <p>
+            <p class="${textJustifyClass}">
               The management has <strong>No Objection</strong> whatsoever regarding ${customReason || "their personal travel abroad / higher education pursuit / visa application"}. During their tenure, they have shown exemplary dedication, good moral conduct, and outstanding professional discipline.
             </p>
-            <p>
+            <p class="${textJustifyClass}">
               This certificate is issued upon the request of the employee without any financial or legal liability on behalf of the company.
             </p>
             <div class="pt-12 flex justify-between items-end text-xs">
@@ -59,13 +62,13 @@ export function generateCertificateHTML(type: CertificateType, details: Certific
           </div>
           <div class="pt-6 space-y-4 text-sm font-sans">
             <p><strong>TO WHOM IT MAY CONCERN,</strong></p>
-            <p>
+            <p class="${textJustifyClass}">
               This is to certify that <strong>${employee.fullName}</strong> (Employee ID: <strong>${employee.employeeCode}</strong>) has been working with <strong>${companyName}</strong> as <strong>${employee.designationTitle}</strong> in the Department of <strong>${employee.departmentName}</strong> at our <strong>${employee.branchName}</strong> from <strong>${employee.joiningDate}</strong> to the present date.
             </p>
-            <p>
+            <p class="${textJustifyClass}">
               During their tenure with us, ${employee.gender === "FEMALE" ? "she" : "he"} has displayed strong analytical competence, problem-solving skills, and commendable teamwork. Their professional contributions have been integral to organizational success.
             </p>
-            <p>
+            <p class="${textJustifyClass}">
               We wish ${employee.gender === "FEMALE" ? "her" : "him"} all the best in all future endeavors and career opportunities.
             </p>
             <div class="pt-12 flex justify-between items-end text-xs">
@@ -91,7 +94,7 @@ export function generateCertificateHTML(type: CertificateType, details: Certific
           </div>
           <div class="pt-6 space-y-4 text-sm font-sans">
             <p><strong>TO WHOM IT MAY CONCERN,</strong></p>
-            <p>
+            <p class="${textJustifyClass}">
               This is to certify that <strong>${employee.fullName}</strong> is a full-time regular employee of <strong>${companyName}</strong>, working as <strong>${employee.designationTitle}</strong> at <strong>${employee.branchName}</strong>.
             </p>
             <div class="my-3 p-4 bg-slate-50 border border-slate-200 rounded">
@@ -106,7 +109,7 @@ export function generateCertificateHTML(type: CertificateType, details: Certific
                 <span class="border-t pt-1 font-bold text-right text-emerald-700">BDT ${(employee.salary?.grossSalary || 90000).toLocaleString()}</span>
               </div>
             </div>
-            <p>
+            <p class="${textJustifyClass}">
               This certificate is issued at the request of the employee for banking, loan, or official verification purposes.
             </p>
             <div class="pt-8 flex justify-between items-end text-xs">
@@ -134,7 +137,7 @@ export function generateCertificateHTML(type: CertificateType, details: Certific
           <div class="pt-6 space-y-3 text-sm font-sans">
             <p>To,<br/><strong>${employee.fullName}</strong><br/>${employee.presentAddress || "Dhaka, Bangladesh"}</p>
             <p class="pt-2"><strong>Dear ${employee.fullName},</strong></p>
-            <p>
+            <p class="${textJustifyClass}">
               We are pleased to offer you the position of <strong>${employee.designationTitle}</strong> in the Department of <strong>${employee.departmentName}</strong> at <strong>${companyName}</strong> (${employee.branchName}).
             </p>
             <ul class="list-disc pl-5 space-y-1 text-xs text-slate-700">
@@ -144,7 +147,7 @@ export function generateCertificateHTML(type: CertificateType, details: Certific
               <li><strong>Working Hours & Shift:</strong> ${employee.shiftName || "Regular Morning Shift"} (As per company shift roster)</li>
               <li><strong>Probation Period:</strong> 6 Months from the joining date</li>
             </ul>
-            <p>
+            <p class="${textJustifyClass}">
               You will be subject to all policies, geofencing attendance rules, and standards of conduct outlined in the Workflow HR Enterprise manual.
             </p>
             <div class="pt-10 flex justify-between items-end text-xs">
@@ -171,10 +174,10 @@ export function generateCertificateHTML(type: CertificateType, details: Certific
           <div class="pt-6 space-y-4 text-sm font-sans">
             <p>To: <strong>${employee.fullName}</strong> (${employee.employeeCode})</p>
             <p><strong>Dear ${employee.fullName},</strong></p>
-            <p>
+            <p class="${textJustifyClass}">
               Following your annual performance appraisal review, the management of <strong>${companyName}</strong> is pleased to announce a merit salary revision of 15% effective from this month.
             </p>
-            <p>
+            <p class="${textJustifyClass}">
               We appreciate your continued commitment to organizational standards and client satisfaction.
             </p>
             <div class="pt-12 flex justify-between items-end text-xs">
@@ -196,10 +199,10 @@ export function generateCertificateHTML(type: CertificateType, details: Certific
           </div>
           <div class="pt-6 space-y-4 text-sm font-sans">
             <p><strong>TO WHOM IT MAY CONCERN,</strong></p>
-            <p>
+            <p class="${textJustifyClass}">
               This is to certify that <strong>${employee.fullName}</strong> has successfully completed an intensive internship program in the Department of <strong>${employee.departmentName}</strong> at <strong>${companyName}</strong>.
             </p>
-            <p>
+            <p class="${textJustifyClass}">
               During this period, ${employee.gender === "FEMALE" ? "she" : "he"} demonstrated exceptional curiosity, discipline, and aptitude in software engineering and operations.
             </p>
             <div class="pt-12 flex justify-between items-end text-xs">
@@ -221,10 +224,10 @@ export function generateCertificateHTML(type: CertificateType, details: Certific
           </div>
           <div class="pt-6 space-y-4 text-sm font-sans">
             <p><strong>TO WHOM IT MAY CONCERN,</strong></p>
-            <p>
+            <p class="${textJustifyClass}">
               It gives me immense pleasure to write this letter of recommendation for <strong>${employee.fullName}</strong>, who has been an indispensable member of our organization as <strong>${employee.designationTitle}</strong>.
             </p>
-            <p>
+            <p class="${textJustifyClass}">
               I strongly recommend ${employee.gender === "FEMALE" ? "her" : "him"} for any senior technical or leadership capacity in prospective organizations or academic institutions.
             </p>
             <div class="pt-12 flex justify-between items-end text-xs">
@@ -247,10 +250,10 @@ export function generateCertificateHTML(type: CertificateType, details: Certific
           <div class="pt-6 space-y-4 text-sm font-sans">
             <p>To: <strong>${employee.fullName}</strong> (${employee.employeeCode})</p>
             <p class="text-red-700 font-semibold">Subject: Formal Notice Regarding Compliance / Performance Issue</p>
-            <p>
+            <p class="${textJustifyClass}">
               This formal warning letter is issued regarding: <em>"${warningReason || "Repeated unexcused late attendances / non-compliance with operational protocols"}"</em>.
             </p>
-            <p>
+            <p class="${textJustifyClass}">
               You are advised to take immediate corrective measures. Recurrence of similar behavior may result in administrative disciplinary actions under the company's code of conduct.
             </p>
             <div class="pt-12 flex justify-between items-end text-xs">
@@ -274,10 +277,10 @@ export function generateCertificateHTML(type: CertificateType, details: Certific
           </div>
           <div class="pt-6 space-y-4 text-sm font-sans">
             <p><strong>TO WHOM IT MAY CONCERN,</strong></p>
-            <p>
+            <p class="${textJustifyClass}">
               This is to certify that <strong>${employee.fullName}</strong>, formerly employed as <strong>${employee.designationTitle}</strong> in the Department of <strong>${employee.departmentName}</strong> at <strong>${companyName}</strong> (${employee.branchName}), has been formally relieved of ${employee.gender === "FEMALE" ? "her" : "his"} duties on <strong>${issueDate}</strong>.
             </p>
-            <p>
+            <p class="${textJustifyClass}">
               All organizational assets, documentation, and handover processes have been duly verified and cleared with zero pending dues.
             </p>
             <div class="pt-12 flex justify-between items-end text-xs">

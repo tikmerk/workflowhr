@@ -535,9 +535,20 @@ export const Header: React.FC<HeaderProps> = ({
               <ChevronDown className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400 shrink-0" />
             </button>
 
-            {/* Profile Popover Card - Scrollable without visible scrollbar */}
+            {/* Profile Popover Card - Smooth touch scrolling & sticky logout for mobile/tablet */}
             {showRoleMenu && (
-              <div className="absolute right-0 mt-2 w-84 max-w-[92vw] max-h-[82vh] overflow-y-auto no-scrollbar hide-scrollbars overscroll-contain bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700/90 rounded-2xl shadow-2xl p-3 z-50 animate-in fade-in slide-in-from-top-2 duration-150 text-xs">
+              <>
+                {/* Mobile Backdrop Overlay */}
+                <div
+                  className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-50 sm:hidden animate-in fade-in duration-150"
+                  onClick={() => setShowRoleMenu(false)}
+                />
+
+                <div
+                  tabIndex={0}
+                  style={{ WebkitOverflowScrolling: "touch" }}
+                  className="fixed sm:absolute inset-x-2 sm:inset-x-auto sm:right-0 top-14 sm:top-full mt-1.5 w-auto sm:w-88 max-w-[96vw] sm:max-w-md max-h-[calc(100dvh-8rem)] sm:max-h-[calc(100vh-80px)] overflow-y-auto overscroll-contain bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700/90 rounded-2xl shadow-2xl p-3.5 pb-4 z-50 animate-in fade-in slide-in-from-top-2 duration-150 text-xs touch-pan-y"
+                >
                 {/* User Info Header Card */}
                 <div className="flex items-center gap-3 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700/60 mb-2">
                   <img
@@ -935,14 +946,14 @@ export const Header: React.FC<HeaderProps> = ({
 
                 {/* Profile Footer: Sign Out / Logout Option */}
                 {onLogout && (
-                  <div className="pt-1">
+                  <div className="pt-2 mt-2 border-t border-slate-200/80 dark:border-slate-800/80">
                     <button
                       type="button"
                       onClick={() => {
                         setShowRoleMenu(false);
                         onLogout();
                       }}
-                      className="w-full flex items-center justify-center gap-2 p-2.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 border border-rose-500/20 text-xs font-bold transition-all cursor-pointer"
+                      className="w-full flex items-center justify-center gap-2 p-2.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 border border-rose-500/20 text-xs font-bold transition-all cursor-pointer shadow-xs active:scale-[0.98]"
                     >
                       <LogOut className="w-4 h-4" />
                       <span>{t("সিস্টেম থেকে লগআউট করুন", "Log Out of System")}</span>
@@ -950,7 +961,8 @@ export const Header: React.FC<HeaderProps> = ({
                   </div>
                 )}
               </div>
-            )}
+            </>
+          )}
           </div>
         </div>
       </div>

@@ -20,12 +20,14 @@ app.use((_req, res, next) => {
   next();
 });
 
-// Serve biometric face-api model weights with explicit MIME types and CORS
+// Serve biometric face-api model weights with explicit MIME types, CORS and long-term caching
 app.use(
   "/models",
   express.static(path.join(process.cwd(), "public", "models"), {
+    maxAge: "30d",
     setHeaders: (res, filePath) => {
       res.setHeader("Access-Control-Allow-Origin", "*");
+      res.setHeader("Cache-Control", "public, max-age=2592000, immutable");
       if (filePath.endsWith(".json")) {
         res.setHeader("Content-Type", "application/json");
       } else {

@@ -717,6 +717,7 @@ export interface CompanyBranding {
   registrationNumber?: string;
   employeeIdPrefix?: string; // Client-configurable prefix, e.g. "MWO"
   salaryDisbursementPolicy?: "BOTH" | "BANK_ONLY" | "CASH_ONLY"; // Global policy for salary disbursement
+  employeeDirectoryScope?: "OWN_BRANCH_ONLY" | "ALL_BRANCHES" | "RESTRICTED_NONE"; // Employee directory visibility policy
 }
 
 export interface Notice {

@@ -1915,6 +1915,7 @@ function AppContent() {
               attendanceLogs={attendanceLogs}
               branches={branches}
               employees={employees}
+              currentUser={currentEmployee}
               onOpenAttendanceModal={() => setIsAttendanceModalOpen(true)}
             />
           )}
@@ -1961,6 +1962,7 @@ function AppContent() {
               leaves={leaves}
               branches={branches}
               employees={employees}
+              currentUser={currentEmployee}
               onApproveLeave={handleApproveLeave}
               onRejectLeave={handleRejectLeave}
               onAddLeave={handleCreateLeaveByAdmin}
@@ -2055,6 +2057,7 @@ function AppContent() {
               assets={assets}
               employees={employees}
               branches={branches}
+              currentUser={currentEmployee}
               onAddAsset={(ast) => {
                 setAssets((prev) => [ast, ...prev]);
                 notifyAndLog("ASSET_REGISTERED", `Added asset: ${ast.name}`, "ASSETS");
@@ -2107,6 +2110,7 @@ function AppContent() {
               certificates={certificates}
               employees={employees}
               branches={branches}
+              currentUser={currentEmployee}
               onGenerateCertificate={(cert) => {
                 setCertificates((prev) => [cert, ...prev]);
                 notifyAndLog(
@@ -2281,6 +2285,14 @@ function AppContent() {
       {/* Mobile Bottom Navigation Bar (Phones & Tablets) */}
       <MobileBottomNav
         activeTab={activeTab as any}
+        isGeneralEmployee={
+          currentEmployee.role === "EMPLOYEE" ||
+          (!currentEmployee.isSuperAdmin &&
+            currentEmployee.role !== "SUPER_ADMIN" &&
+            currentEmployee.role !== "BRANCH_MANAGER" &&
+            currentEmployee.role !== "COMPANY_ADMIN" &&
+            currentEmployee.role !== "CEO")
+        }
         onTabChange={(tab) => {
           setActiveTab(tab);
           setIsMobileMenuOpen(false);

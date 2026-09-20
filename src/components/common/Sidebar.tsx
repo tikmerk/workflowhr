@@ -33,6 +33,7 @@ import { UserRole, Employee } from "../../types";
 import { useThemeLanguage } from "../../context/ThemeLanguageContext";
 import { useCompanyBranding } from "../../context/CompanyBrandingContext";
 import { APP_VERSION, APP_BUILD_NAME } from "../../version";
+import { getDefaultTabsForRole } from "../views/EmployeesDirectoryView";
 
 export type NavTabId =
   | "dashboard"
@@ -291,20 +292,25 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const filteredNavGroups = React.useMemo(() => {
     if (isSuperAdmin) return navGroups;
-    const allowed = currentEmployee?.allowedTabs;
-    if (!allowed || allowed.length === 0) return navGroups;
+    // Determine effective allowed tabs for current employee
+    const effectiveAllowed =
+      currentEmployee?.allowedTabs && currentEmployee.allowedTabs.length > 0
+        ? currentEmployee.allowedTabs
+        : getDefaultTabsForRole(currentEmployee?.role || "EMPLOYEE");
+
     return navGroups
       .map((g) => ({
         ...g,
         items: g.items.filter(
           (item) =>
-            allowed.includes(item.id) ||
+            effectiveAllowed.includes(item.id) ||
             item.id === "dashboard" ||
-            item.id === "my-portal"
+            item.id === "face-recognition-kiosk" ||
+            (item.id === "my-portal" && (effectiveAllowed.includes("my-portal") || effectiveAllowed.includes("self-service")))
         ),
       }))
       .filter((g) => g.items.length > 0);
-  }, [isSuperAdmin, currentEmployee?.allowedTabs, navGroups]);
+  }, [isSuperAdmin, currentEmployee?.allowedTabs, currentEmployee?.role, navGroups]);
 
   const handleItemClick = (id: NavTabId) => {
     onTabChange(id);
@@ -347,7 +353,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
             <div className="space-y-0.5 mt-1">
               {group.items.map((item) => {
-                const isActive = activeTab === item.id;
+                const isActive =
+                  activeTab === item.id ||
+                  (item.id === "my-portal" && ((activeTab as string) === "self-service" || activeTab === "my-portal")) ||
+                  ((item.id as string) === "self-service" && (activeTab === "my-portal" || (activeTab as string) === "self-service"));
                 const IconComponent = item.icon;
                 const itemLabel = isBangla ? item.labelBn : item.labelEn;
                 const badgeLabel = isBangla ? item.badgeBn : item.badgeEn;

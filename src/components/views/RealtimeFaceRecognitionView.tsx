@@ -910,27 +910,6 @@ export const RealtimeFaceRecognitionView: React.FC<RealtimeFaceRecognitionViewPr
             </div>
 
             <div className="flex items-center flex-wrap gap-2">
-              {/* Geofence GPS status */}
-              <div
-                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[11px] font-semibold border ${
-                  isInsideGeofence
-                    ? "bg-emerald-950/60 border-emerald-500/40 text-emerald-300"
-                    : "bg-amber-950/60 border-amber-500/40 text-amber-300"
-                }`}
-                title={gpsAddress || "Branch Geofence Status"}
-              >
-                <MapPin className="w-3.5 h-3.5 text-teal-400" />
-                <span>
-                  {isInsideGeofence
-                    ? isBangla
-                      ? `জোন ভ্যালিড (${gpsDistanceMeters}m)`
-                      : `Zone Valid (${gpsDistanceMeters}m)`
-                    : isBangla
-                    ? `জোন বহির্ভূত (${gpsDistanceMeters}m)`
-                    : `Outside Zone (${gpsDistanceMeters}m)`}
-                </span>
-              </div>
-
               {/* Screen Fill-Light Toggle */}
               <button
                 type="button"
@@ -955,35 +934,22 @@ export const RealtimeFaceRecognitionView: React.FC<RealtimeFaceRecognitionViewPr
                 {soundEnabled ? <Volume2 className="w-4 h-4 text-teal-400" /> : <VolumeX className="w-4 h-4 text-slate-400" />}
               </button>
 
-              {/* Branch Selector */}
-              <div className="flex items-center gap-1.5 bg-slate-800 border border-slate-700 px-2.5 py-1 rounded-xl text-xs">
-                <MapPin className="w-3.5 h-3.5 text-teal-400" />
-                <select
-                  value={selectedBranchId}
-                  onChange={(e) => setSelectedBranchId(e.target.value)}
-                  className="bg-transparent text-white font-medium focus:outline-none cursor-pointer max-w-[130px] truncate"
+              {/* Admin Biometric Policy (Super Admin Only) */}
+              {isSuperAdmin && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTempModeAvailability(biometricSettings?.modeAvailability || "BOTH");
+                    setShowAdminSettingsModal(true);
+                  }}
+                  className="p-2 rounded-xl border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors cursor-pointer flex items-center gap-1.5 text-xs"
+                  title={isBangla ? "পলিসি সেটিংস (সুপার অ্যাডমিন)" : "Admin Biometric Settings"}
                 >
-                  {branches.map((b) => (
-                    <option key={b.id} value={b.id} className="bg-slate-900 text-white">
-                      {b.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Camera Switcher */}
-              {availableDevices.length > 1 && (
-                <select
-                  value={selectedDeviceId}
-                  onChange={(e) => setSelectedDeviceId(e.target.value)}
-                  className="bg-slate-800 border border-slate-700 px-2 py-1 rounded-xl text-xs text-white focus:outline-none cursor-pointer max-w-[100px] truncate"
-                >
-                  {availableDevices.map((d, i) => (
-                    <option key={d.deviceId} value={d.deviceId} className="bg-slate-900 text-white">
-                      {d.label || `Cam ${i + 1}`}
-                    </option>
-                  ))}
-                </select>
+                  <Settings className="w-4 h-4 text-teal-400" />
+                  <span className="hidden sm:inline font-semibold text-[11px] text-teal-300">
+                    {isBangla ? "পলিসি" : "Policy"}
+                  </span>
+                </button>
               )}
 
               {/* Close Button */}
@@ -1079,36 +1045,20 @@ export const RealtimeFaceRecognitionView: React.FC<RealtimeFaceRecognitionViewPr
                 {soundEnabled ? <Volume2 className="w-4 h-4 text-teal-400" /> : <VolumeX className="w-4 h-4 text-slate-400" />}
               </button>
 
-              {/* Branch Selector */}
-              <div className="flex items-center gap-2 bg-slate-800/90 border border-slate-700 px-3 py-1.5 rounded-xl text-xs">
-                <MapPin className="w-4 h-4 text-teal-400" />
-                <span className="text-slate-400">{isBangla ? "কিওস্ক ব্রাঞ্চ:" : "Branch:"}</span>
-                <select
-                  value={selectedBranchId}
-                  onChange={(e) => setSelectedBranchId(e.target.value)}
-                  className="bg-transparent text-white font-medium focus:outline-none cursor-pointer"
+              {/* Admin Biometric Policy Button (Super Admin Only) */}
+              {isSuperAdmin && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTempModeAvailability(biometricSettings?.modeAvailability || "BOTH");
+                    setShowAdminSettingsModal(true);
+                  }}
+                  className="px-3 py-2 rounded-xl border border-slate-700 bg-slate-800/80 hover:bg-slate-700 text-slate-300 transition-colors cursor-pointer flex items-center gap-1.5 text-xs font-semibold"
+                  title={isBangla ? "পলিসি সেটিংস (সুপার অ্যাডমিন)" : "Admin Biometric Settings"}
                 >
-                  {branches.map((b) => (
-                    <option key={b.id} value={b.id} className="bg-slate-900 text-white">
-                      {b.name} ({b.code})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Camera Switcher */}
-              {availableDevices.length > 1 && (
-                <select
-                  value={selectedDeviceId}
-                  onChange={(e) => setSelectedDeviceId(e.target.value)}
-                  className="bg-slate-800/90 border border-slate-700 px-3 py-2 rounded-xl text-xs text-white focus:outline-none cursor-pointer"
-                >
-                  {availableDevices.map((d, i) => (
-                    <option key={d.deviceId} value={d.deviceId} className="bg-slate-900 text-white">
-                      {d.label || `Camera ${i + 1}`}
-                    </option>
-                  ))}
-                </select>
+                  <Settings className="w-4 h-4 text-teal-400" />
+                  <span className="text-teal-300">{isBangla ? "পলিসি সেটিংস" : "Policy Settings"}</span>
+                </button>
               )}
 
               {/* Camera Power Toggle */}
@@ -1192,6 +1142,7 @@ export const RealtimeFaceRecognitionView: React.FC<RealtimeFaceRecognitionViewPr
             attendanceLogs={attendanceLogs}
             branches={branches}
             employees={employees}
+            currentUser={currentEmployee}
             onOpenAttendanceModal={onOpenAttendanceModal || (() => {})}
           />
         </div>
@@ -1316,19 +1267,6 @@ export const RealtimeFaceRecognitionView: React.FC<RealtimeFaceRecognitionViewPr
                       128D
                     </span>
                   )}
-
-                  {/* Geofence GPS status badge (compact for mobile & desktop) */}
-                  <div
-                    className={`flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-semibold border ${
-                      isInsideGeofence
-                        ? "bg-emerald-950/60 border-emerald-500/40 text-emerald-300"
-                        : "bg-amber-950/60 border-amber-500/40 text-amber-300"
-                    }`}
-                    title={gpsAddress || "Branch Geofence"}
-                  >
-                    <MapPin className="w-3 h-3 text-teal-400" />
-                    <span>{isInsideGeofence ? (isBangla ? "জোন ভ্যালিড" : "Zone Valid") : (isBangla ? "জোন বহির্ভূত" : "Out of Zone")}</span>
-                  </div>
 
                   {/* Screen Fill Light Quick Toggle */}
                   <button
@@ -1733,123 +1671,8 @@ export const RealtimeFaceRecognitionView: React.FC<RealtimeFaceRecognitionViewPr
             </div>
           </div>
 
-          {/* 2. RECOGNITION RESULTS & ACTIONS: order-2 on mobile (IMMEDIATELY BELOW CAMERA!), lg:order-2 lg:col-span-5 space-y-4 */}
+          {/* 2. RECOGNITION RESULTS & ACTIONS: lg:col-span-5 space-y-4 */}
           <div className="order-2 lg:order-2 lg:col-span-5 space-y-4">
-            {/* KIOSK MODE & HARDWARE SETTINGS CARD (Always below camera on mobile, or in sidebar on desktop) */}
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-sm space-y-3.5 text-white">
-              {/* Header with Mode Status & Policy */}
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Settings className="w-4 h-4 text-teal-400" />
-                  <h3 className="text-xs font-bold text-white uppercase tracking-wider">
-                    {isBangla ? "কিওস্ক সেটিংস ও অপারেটিং মোড" : "Kiosk Operating Mode & Settings"}
-                  </h3>
-                </div>
-                {isSuperAdmin && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setTempModeAvailability(biometricSettings?.modeAvailability || "BOTH");
-                      setShowAdminSettingsModal(true);
-                    }}
-                    className="text-[11px] text-amber-400 hover:text-amber-300 font-semibold flex items-center gap-1 cursor-pointer"
-                    title={isBangla ? "পলিসি পরিবর্তন করুন" : "Change Policy"}
-                  >
-                    <ShieldAlert className="w-3.5 h-3.5" />
-                    <span>{isBangla ? "পলিসি (সুপার অ্যাডমিন)" : "Policy"}</span>
-                  </button>
-                )}
-              </div>
-
-              {/* Mode Switching Buttons (if policy allows BOTH) or Policy Lock Indicator */}
-              {biometricSettings?.modeAvailability === "AUTO_KIOSK_ONLY" ? (
-                <div className="p-2.5 bg-teal-950/40 border border-teal-500/30 rounded-xl text-xs text-teal-200 flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 text-teal-400 shrink-0" />
-                  <span>
-                    {isBangla
-                      ? "সুপার অ্যাডমিন কর্তৃক শুধুমাত্র স্বয়ংক্রিয় কিওস্ক মোড (1:N) নির্ধারিত।"
-                      : "Locked to Auto Kiosk (1:N) by Super Admin policy."}
-                  </span>
-                </div>
-              ) : biometricSettings?.modeAvailability === "ONE_TO_ONE_ONLY" ? (
-                <div className="p-2.5 bg-teal-950/40 border border-teal-500/30 rounded-xl text-xs text-teal-200 flex items-center gap-2">
-                  <UserCheck className="w-4 h-4 text-teal-400 shrink-0" />
-                  <span>
-                    {isBangla
-                      ? "সুপার অ্যাডমিন কর্তৃক শুধুমাত্র ১:১ ভেরিফিকেশন মোড নির্ধারিত।"
-                      : "Locked to 1:1 Staff Verify by Super Admin policy."}
-                  </span>
-                </div>
-              ) : (
-                /* Both modes permitted: Switcher tabs */
-                <div className="grid grid-cols-2 gap-2 p-1 bg-slate-950/70 border border-slate-800 rounded-xl text-xs">
-                  <button
-                    type="button"
-                    onClick={() => setActiveMode("AUTO_KIOSK")}
-                    className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg font-bold transition-all cursor-pointer ${
-                      activeMode === "AUTO_KIOSK"
-                        ? "bg-teal-500 text-slate-950 shadow-sm"
-                        : "text-slate-400 hover:text-white"
-                    }`}
-                  >
-                    <Sparkles className="w-3.5 h-3.5" />
-                    <span>{isBangla ? "অটো কিওস্ক (1:N)" : "Auto Kiosk"}</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setActiveMode("ONE_TO_ONE")}
-                    className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg font-bold transition-all cursor-pointer ${
-                      activeMode === "ONE_TO_ONE"
-                        ? "bg-teal-500 text-slate-950 shadow-sm"
-                        : "text-slate-400 hover:text-white"
-                    }`}
-                  >
-                    <UserCheck className="w-3.5 h-3.5" />
-                    <span>{isBangla ? "১:১ নির্বাচন (1:1)" : "1:1 Staff Verify"}</span>
-                  </button>
-                </div>
-              )}
-
-              {/* Branch & Camera Device Quick Hardware Selection */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1 text-xs">
-                <div>
-                  <label className="text-[11px] text-slate-400 mb-1 block">
-                    {isBangla ? "ব্রাঞ্চ লোকেশন" : "Branch Location"}
-                  </label>
-                  <select
-                    value={selectedBranchId}
-                    onChange={(e) => setSelectedBranchId(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-2 text-xs text-white focus:outline-none cursor-pointer"
-                  >
-                    {branches.map((b) => (
-                      <option key={b.id} value={b.id}>
-                        {b.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {availableDevices.length > 1 && (
-                  <div>
-                    <label className="text-[11px] text-slate-400 mb-1 block">
-                      {isBangla ? "ক্যামেরা ডিভাইস পরিবর্তন" : "Camera Input Device"}
-                    </label>
-                    <select
-                      value={selectedDeviceId}
-                      onChange={(e) => setSelectedDeviceId(e.target.value)}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-2 text-xs text-white focus:outline-none cursor-pointer"
-                    >
-                      {availableDevices.map((dev, i) => (
-                        <option key={dev.deviceId || i} value={dev.deviceId}>
-                          {dev.label || `Camera ${i + 1}`}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-              </div>
-            </div>
-
             {/* Mode Specific Selector Toolbar for 1:1 Verification */}
             {activeMode === "ONE_TO_ONE" && (
               <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-sm space-y-3">
@@ -2626,7 +2449,7 @@ export const RealtimeFaceRecognitionView: React.FC<RealtimeFaceRecognitionViewPr
         }`}
       >
         <div
-          className={`relative w-full max-w-7xl max-h-[96vh] overflow-y-auto rounded-3xl shadow-2xl p-3 sm:p-5 space-y-4 transition-all duration-300 ${
+          className={`relative w-full max-w-7xl max-h-[96dvh] overflow-y-auto rounded-3xl shadow-2xl p-3 sm:p-5 pb-28 sm:pb-5 space-y-4 transition-all duration-300 touch-pan-y ${
             screenFillLight
               ? "bg-slate-900 border-4 border-amber-300 ring-8 ring-amber-300/30"
               : "bg-slate-900 border border-slate-800"
@@ -2640,7 +2463,7 @@ export const RealtimeFaceRecognitionView: React.FC<RealtimeFaceRecognitionViewPr
 
   return (
     <div
-      className={`space-y-6 pb-12 transition-colors duration-300 ${
+      className={`space-y-6 pb-28 lg:pb-12 transition-colors duration-300 ${
         screenFillLight ? "bg-white p-6 rounded-3xl shadow-[inset_0_0_150px_rgba(255,255,255,1)]" : ""
       }`}
     >

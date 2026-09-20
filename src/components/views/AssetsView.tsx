@@ -28,6 +28,7 @@ interface AssetsViewProps {
   assets: CompanyAsset[];
   employees: Employee[];
   branches: Branch[];
+  currentUser?: Employee;
   onAddAsset: (asset: CompanyAsset) => void;
   onAssignAsset: (assetId: string, empId: string) => void;
   onWithdrawAsset?: (assetId: string, conditionOnReturn: string, note: string) => void;
@@ -39,6 +40,7 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
   assets,
   employees,
   branches,
+  currentUser,
   onAddAsset,
   onAssignAsset,
   onWithdrawAsset,
@@ -46,6 +48,31 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
   onDeleteAsset,
 }) => {
   const { t, isBangla } = useThemeLanguage();
+
+  // Role Scoping for Assets: General employees only see their assigned company assets
+  const isSuperAdminOrCeo = Boolean(
+    currentUser?.isSuperAdmin ||
+    currentUser?.isCeoOrOwner ||
+    currentUser?.role === "SUPER_ADMIN" ||
+    currentUser?.role === "CEO" ||
+    currentUser?.role === "HR_MANAGER"
+  );
+  const isBranchManager = currentUser?.role === "BRANCH_MANAGER";
+  const isGeneralEmp = !isSuperAdminOrCeo && !isBranchManager;
+
+  const scopedAssets = useMemo(() => {
+    if (!currentUser) return assets;
+    if (isSuperAdminOrCeo) return assets;
+    if (isBranchManager) {
+      return assets.filter(
+        (a) =>
+          a.assignedBranchId === currentUser.branchId ||
+          employees.find((e) => e.id === a.assignedToEmployeeId)?.branchId === currentUser.branchId
+      );
+    }
+    // General Employee: strictly see assets assigned to self
+    return assets.filter((a) => a.assignedToEmployeeId === currentUser.id);
+  }, [assets, currentUser, isSuperAdminOrCeo, isBranchManager, employees]);
 
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("ALL");
@@ -72,7 +99,7 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
   const [reassignEmpId, setReassignEmpId] = useState("");
 
   const filteredAssets = useMemo(() => {
-    return assets.filter((ast) => {
+    return scopedAssets.filter((ast) => {
       const matchesSearch =
         searchTerm === "" ||
         ast.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -87,7 +114,7 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
 
       return matchesSearch && matchesCat && matchesCond && matchesStat;
     });
-  }, [assets, searchTerm, selectedCategory, selectedCondition, selectedStatus]);
+  }, [scopedAssets, searchTerm, selectedCategory, selectedCondition, selectedStatus]);
 
   const handleCreateAsset = (e: React.FormEvent) => {
     e.preventDefault();
@@ -206,13 +233,15 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
               <span>{isBangla ? "ইনভেন্টরি এক্সপোর্ট" : "Export CSV"}</span>
             </button>
 
-            <button
-              onClick={() => setShowAddModal(true)}
-              className="px-4 py-2.5 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-teal-500/20 flex items-center gap-1.5 transition-all cursor-pointer"
-            >
-              <Plus className="w-4 h-4" />
-              <span>{isBangla ? "+ নতুন অ্যাসেট যোগ" : "+ Register Asset"}</span>
-            </button>
+            {!isGeneralEmp && (
+              <button
+                onClick={() => setShowAddModal(true)}
+                className="px-4 py-2.5 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-teal-500/20 flex items-center gap-1.5 transition-all cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                <span>{isBangla ? "+ নতুন অ্যাসেট যোগ" : "+ Register Asset"}</span>
+              </button>
+            )}
           </div>
         </div>
 
@@ -339,22 +368,26 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
                     </span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-slate-500 dark:text-slate-400">{isBangla ? "কন্ডিশন পরিবর্তন:" : "Change Condition:"}</span>
-                    <select
-                      value={ast.condition}
-                      onChange={(e) => {
-                        if (onUpdateAssetCondition) {
-                          onUpdateAssetCondition(ast.id, e.target.value as any);
-                        }
-                      }}
-                      className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 text-[10px] rounded px-1.5 py-0.5 cursor-pointer"
-                    >
-                      <option value="BRAND_NEW">Brand New</option>
-                      <option value="GOOD">Good (ভালো)</option>
-                      <option value="FAIR">Fair (চলনসই)</option>
-                      <option value="BAD">Bad (খারাপ)</option>
-                      <option value="SEVERE">Severe (নষ্ট)</option>
-                    </select>
+                    <span className="text-slate-500 dark:text-slate-400">{isBangla ? "কন্ডিশন:" : "Condition:"}</span>
+                    {!isGeneralEmp ? (
+                      <select
+                        value={ast.condition}
+                        onChange={(e) => {
+                          if (onUpdateAssetCondition) {
+                            onUpdateAssetCondition(ast.id, e.target.value as any);
+                          }
+                        }}
+                        className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 text-[10px] rounded px-1.5 py-0.5 cursor-pointer"
+                      >
+                        <option value="BRAND_NEW">Brand New</option>
+                        <option value="GOOD">Good (ভালো)</option>
+                        <option value="FAIR">Fair (চলনসই)</option>
+                        <option value="BAD">Bad (খারাপ)</option>
+                        <option value="SEVERE">Severe (নষ্ট)</option>
+                      </select>
+                    ) : (
+                      getConditionBadge(ast.condition)
+                    )}
                   </div>
                 </div>
 
@@ -377,46 +410,48 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
                 </div>
               </div>
 
-              {/* Action Buttons: Withdraw / Reassign / Delete */}
-              <div className="pt-3 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between gap-2">
-                {ast.assignedToEmployeeId ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowWithdrawModal(ast);
-                      setWithdrawCondition(ast.condition);
-                    }}
-                    className="flex-1 py-1.5 px-3 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30 font-bold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
-                  >
-                    <Undo2 className="w-3.5 h-3.5" />
-                    <span>{isBangla ? "উইথড্র / ফেরত নিন" : "Withdraw / Return"}</span>
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => setShowReassignModal(ast)}
-                    className="flex-1 py-1.5 px-3 rounded-xl bg-teal-500/10 hover:bg-teal-500/20 text-teal-700 dark:text-teal-300 border border-teal-500/30 font-bold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
-                  >
-                    <Users className="w-3.5 h-3.5" />
-                    <span>{isBangla ? "কর্মী বরাদ্দ দিন" : "Assign Custodian"}</span>
-                  </button>
-                )}
+              {/* Action Buttons: Withdraw / Reassign / Delete (Admin / Manager only) */}
+              {!isGeneralEmp && (
+                <div className="pt-3 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between gap-2">
+                  {ast.assignedToEmployeeId ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowWithdrawModal(ast);
+                        setWithdrawCondition(ast.condition);
+                      }}
+                      className="flex-1 py-1.5 px-3 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30 font-bold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                    >
+                      <Undo2 className="w-3.5 h-3.5" />
+                      <span>{isBangla ? "উইথড্র / ফেরত নিন" : "Withdraw / Return"}</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setShowReassignModal(ast)}
+                      className="flex-1 py-1.5 px-3 rounded-xl bg-teal-500/10 hover:bg-teal-500/20 text-teal-700 dark:text-teal-300 border border-teal-500/30 font-bold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                    >
+                      <Users className="w-3.5 h-3.5" />
+                      <span>{isBangla ? "কর্মী বরাদ্দ দিন" : "Assign Custodian"}</span>
+                    </button>
+                  )}
 
-                {onDeleteAsset && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (confirm(isBangla ? "আপনি কি এই অ্যাসেটটি মুছে ফেলতে চান?" : "Are you sure you want to delete this asset?")) {
-                        onDeleteAsset(ast.id);
-                      }
-                    }}
-                    className="p-2 rounded-xl text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-500/10 transition-colors cursor-pointer"
-                    title="Delete Asset"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                )}
-              </div>
+                  {onDeleteAsset && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (confirm(isBangla ? "আপনি কি এই অ্যাসেটটি মুছে ফেলতে চান?" : "Are you sure you want to delete this asset?")) {
+                          onDeleteAsset(ast.id);
+                        }
+                      }}
+                      className="p-2 rounded-xl text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-500/10 transition-colors cursor-pointer"
+                      title="Delete Asset"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           ))
         )}

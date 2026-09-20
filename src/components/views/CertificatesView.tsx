@@ -10,17 +10,23 @@ import {
   Calendar,
   FileText,
   X,
-  QrCode
+  QrCode,
+  ShieldCheck,
+  MapPin,
+  Phone,
+  Mail
 } from "lucide-react";
 import { CertificateRecord, Employee, Branch } from "../../types";
 import { generateCertificateHtml } from "../../utils/certificateTemplates";
 import { printDocumentHtml } from "../../utils/exportUtils";
 import { useCompanyBranding } from "../../context/CompanyBrandingContext";
+import { useThemeLanguage } from "../../context/ThemeLanguageContext";
 
 interface CertificatesViewProps {
   certificates: CertificateRecord[];
   employees: Employee[];
   branches: Branch[];
+  currentUser?: Employee;
   onGenerateCertificate: (cert: CertificateRecord) => void;
 }
 
@@ -28,10 +34,29 @@ export const CertificatesView: React.FC<CertificatesViewProps> = ({
   certificates,
   employees,
   branches,
+  currentUser,
   onGenerateCertificate,
 }) => {
   const { branding } = useCompanyBranding();
-  const [selectedEmpId, setSelectedEmpId] = useState(employees[0]?.id || "");
+  const { t, isBangla } = useThemeLanguage();
+
+  // Role-based employee access: Branch Managers see their branch employees, general employees see self
+  const isSuperAdminOrCeo =
+    Boolean(currentUser?.isSuperAdmin) ||
+    Boolean(currentUser?.isCeoOrOwner) ||
+    currentUser?.role === "SUPER_ADMIN" ||
+    currentUser?.role === "CEO" ||
+    currentUser?.role === "HR_MANAGER";
+
+  const isBranchManager = currentUser?.role === "BRANCH_MANAGER";
+
+  const accessibleEmployees = employees.filter((emp) => {
+    if (isSuperAdminOrCeo) return true;
+    if (isBranchManager) return emp.branchId === currentUser?.branchId;
+    return emp.id === currentUser?.id;
+  });
+
+  const [selectedEmpId, setSelectedEmpId] = useState(accessibleEmployees[0]?.id || employees[0]?.id || "");
   const [selectedType, setSelectedType] = useState<CertificateRecord["type"]>("EXPERIENCE_CERTIFICATE");
   const [remarks, setRemarks] = useState("");
   const [previewCert, setPreviewCert] = useState<CertificateRecord | null>(certificates[0] || null);
@@ -50,7 +75,7 @@ export const CertificatesView: React.FC<CertificatesViewProps> = ({
 
   const handleGenerateNew = (e: React.FormEvent) => {
     e.preventDefault();
-    const emp = employees.find((e) => e.id === selectedEmpId) || employees[0];
+    const emp = employees.find((e) => e.id === selectedEmpId) || accessibleEmployees[0] || employees[0];
     const typeObj = certTypes.find((t) => t.type === selectedType);
 
     const prefix = branding.employeeIdPrefix || "MWO";
@@ -75,6 +100,10 @@ export const CertificatesView: React.FC<CertificatesViewProps> = ({
       printDocumentHtml(previewCert.title, previewCert.contentHtml);
     }
   };
+
+  const companyName = isBangla ? (branding.companyNameBn || branding.companyName) : branding.companyName;
+  const companyTagline = isBangla ? (branding.taglineBn || branding.tagline) : branding.tagline;
+  const companyAddress = isBangla ? (branding.addressBn || branding.address) : branding.address;
 
   return (
     <div id="certificates-generator-view" className="space-y-6 animate-in fade-in duration-300">
@@ -112,15 +141,17 @@ export const CertificatesView: React.FC<CertificatesViewProps> = ({
 
             <form onSubmit={handleGenerateNew} className="space-y-3 text-xs">
               <div>
-                <label className="block text-slate-600 dark:text-slate-400 mb-1 font-medium">Select Employee</label>
+                <label className="block text-slate-600 dark:text-slate-400 mb-1 font-medium">
+                  {t("কর্মচারী নির্বাচন করুন (Employee)", "Select Employee")}
+                </label>
                 <select
                   value={selectedEmpId}
                   onChange={(e) => setSelectedEmpId(e.target.value)}
                   className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white"
                 >
-                  {employees.map((e) => (
+                  {accessibleEmployees.map((e) => (
                     <option key={e.id} value={e.id}>
-                      {e.fullName} ({e.designationTitle})
+                      {e.fullName} ({e.employeeCode}) - {e.designationTitle}
                     </option>
                   ))}
                 </select>
@@ -186,10 +217,13 @@ export const CertificatesView: React.FC<CertificatesViewProps> = ({
           </div>
         </div>
 
-        {/* Right: Live Document Preview */}
-        <div className="lg:col-span-8">
+        {/* Right: Live Document Preview with locked A4 width & horizontal scrolling for mobile */}
+        <div className="lg:col-span-8 overflow-x-auto">
           {previewCert ? (
-            <div className="p-8 rounded-2xl bg-white text-slate-900 shadow-xl border border-slate-300 min-h-[600px] flex flex-col justify-between">
+            <div
+              className="p-8 rounded-2xl bg-white text-slate-900 shadow-xl border border-slate-300 min-h-[600px] flex flex-col justify-between"
+              style={{ minWidth: "100%", maxWidth: "210mm", margin: "0 auto", boxSizing: "border-box" }}
+            >
               <div
                 className="prose max-w-none text-slate-900 leading-relaxed font-sans"
                 dangerouslySetInnerHTML={{ __html: previewCert.contentHtml }}

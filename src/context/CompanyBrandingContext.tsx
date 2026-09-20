@@ -32,6 +32,7 @@ const DEFAULT_BRANDING: CompanyBranding = {
   registrationNumber: "REG-BD-2026-90812",
   employeeIdPrefix: "MWO",
   salaryDisbursementPolicy: "BOTH",
+  employeeDirectoryScope: "OWN_BRANCH_ONLY",
 };
 
 export const SOFTWARE_BRANDING: SoftwareBrandingInfo = {

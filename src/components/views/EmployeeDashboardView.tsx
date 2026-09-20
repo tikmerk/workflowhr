@@ -41,7 +41,7 @@ export interface EmployeeDashboardViewProps {
   projects?: Project[];
   onOpenAttendanceModal?: () => void;
   onOpenAiAssistant?: () => void;
-  onNavigate?: (tab: any) => void;
+  onNavigate?: (tab: any, subTab?: string) => void;
 }
 
 export const EmployeeDashboardView: React.FC<EmployeeDashboardViewProps> = ({
@@ -114,9 +114,9 @@ export const EmployeeDashboardView: React.FC<EmployeeDashboardViewProps> = ({
     );
   });
 
-  const handleNavigate = (tab: string) => {
+  const handleNavigate = (tab: string, subTab?: string) => {
     if (onNavigate) {
-      onNavigate(tab);
+      onNavigate(tab, subTab);
     }
   };
 

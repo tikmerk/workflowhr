@@ -91,10 +91,14 @@ export const APP_TAB_OPTIONS = [
 export const DEFAULT_EMPLOYEE_ALLOWED_TABS = [
   "dashboard",
   "my-portal",
+  "face-recognition-kiosk",
   "attendance-logs",
   "leaves",
+  "payroll",
+  "loans",
   "notices-chat",
   "projects-tasks",
+  "assets",
   "certificates",
 ];
 
