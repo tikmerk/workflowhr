@@ -29,11 +29,11 @@ import {
   ScanFace,
 } from "lucide-react";
 import { Logo } from "./Logo";
-import { UserRole, Employee } from "../../types";
+import { UserRole, Employee, RolePermissionConfig } from "../../types";
 import { useThemeLanguage } from "../../context/ThemeLanguageContext";
 import { useCompanyBranding } from "../../context/CompanyBrandingContext";
 import { APP_VERSION, APP_BUILD_NAME } from "../../version";
-import { getDefaultTabsForRole } from "../views/EmployeesDirectoryView";
+import { getEffectiveTabsForEmployee, isTabAllowedInList } from "../../utils/permissions";
 
 export type NavTabId =
   | "dashboard"
@@ -63,6 +63,7 @@ interface SidebarProps {
   onTabChange: (tab: NavTabId) => void;
   userRole: UserRole;
   currentEmployee?: Employee;
+  rolePermissions?: RolePermissionConfig[];
   unreadCount?: number;
   isOpenMobile?: boolean;
   onCloseMobile?: () => void;
@@ -92,6 +93,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onTabChange,
   userRole,
   currentEmployee,
+  rolePermissions,
   unreadCount = 0,
   isOpenMobile = false,
   onCloseMobile,
@@ -187,6 +189,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
           icon: ScanFace,
           badgeEn: "Smart Kiosk",
           badgeBn: "স্মার্ট কিওস্ক",
+        },
+        {
+          id: "attendance-logs",
+          labelEn: "Attendance Logs",
+          labelBn: "বায়োমেট্রিক উপস্থিতি লগ",
+          icon: Clock,
         },
         {
           id: "shifts-holidays",
@@ -292,25 +300,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const filteredNavGroups = React.useMemo(() => {
     if (isSuperAdmin) return navGroups;
-    // Determine effective allowed tabs for current employee
-    const effectiveAllowed =
-      currentEmployee?.allowedTabs && currentEmployee.allowedTabs.length > 0
-        ? currentEmployee.allowedTabs
-        : getDefaultTabsForRole(currentEmployee?.role || "EMPLOYEE");
+    // Determine effective allowed tabs for current employee dynamically from role & permissions
+    const effectiveAllowed = getEffectiveTabsForEmployee(currentEmployee, rolePermissions);
 
     return navGroups
       .map((g) => ({
         ...g,
         items: g.items.filter(
           (item) =>
-            effectiveAllowed.includes(item.id) ||
+            isTabAllowedInList(item.id, effectiveAllowed) ||
             item.id === "dashboard" ||
             item.id === "face-recognition-kiosk" ||
-            (item.id === "my-portal" && (effectiveAllowed.includes("my-portal") || effectiveAllowed.includes("self-service")))
+            item.id === "my-portal"
         ),
       }))
       .filter((g) => g.items.length > 0);
-  }, [isSuperAdmin, currentEmployee?.allowedTabs, currentEmployee?.role, navGroups]);
+  }, [isSuperAdmin, currentEmployee, rolePermissions, navGroups]);
 
   const handleItemClick = (id: NavTabId) => {
     onTabChange(id);

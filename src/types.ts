@@ -328,6 +328,7 @@ export interface Employee {
 
   // Account Visibility & Access Control
   allowedTabs?: string[]; // Specific tab IDs visible to this employee's account
+  hasCustomTabAccess?: boolean; // If true, manually overrides role-level menu permissions. If false/undefined, dynamically inherits the Role's allowed tabs
   permissions?: string[];
   accountPermissions?: {
     canViewSalary?: boolean;

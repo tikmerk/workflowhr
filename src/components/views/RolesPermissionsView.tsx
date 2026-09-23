@@ -40,6 +40,7 @@ import {
   BiometricKioskSettings,
   BiometricModeConfig
 } from "../../types";
+import { normalizeTabList, isTabAllowedInList } from "../../utils/permissions";
 import { useThemeLanguage } from "../../context/ThemeLanguageContext";
 
 interface RolesPermissionsViewProps {
@@ -148,16 +149,26 @@ export const RolesPermissionsView: React.FC<RolesPermissionsViewProps> = ({
   const handleToggleNavTab = (tab: NavigationTab) => {
     if (!activeRoleConfig) return;
     const currentTabs = activeRoleConfig.allowedNavTabs || [];
-    const isAllowed = currentTabs.includes(tab);
-    const newTabs = isAllowed
-      ? currentTabs.filter((t) => t !== tab)
-      : [...currentTabs, tab];
+    const isAllowed = isTabAllowedInList(tab, currentTabs);
+    let newTabs: string[];
+    if (isAllowed) {
+      newTabs = currentTabs.filter((t) => {
+        if (t === tab) return false;
+        if (tab === "self-service" && t === "my-portal") return false;
+        if (tab === "my-portal" && t === "self-service") return false;
+        if (tab === "branches" && t === "branches-geofence") return false;
+        if (tab === "branches-geofence" && t === "branches") return false;
+        return true;
+      });
+    } else {
+      newTabs = normalizeTabList([...currentTabs, tab]);
+    }
 
-    const updated = permissionsState.map((r) => {
+    const updated: RolePermissionConfig[] = permissionsState.map((r) => {
       if (r.role === selectedRole) {
         return {
           ...r,
-          allowedNavTabs: newTabs,
+          allowedNavTabs: newTabs as NavigationTab[],
         };
       }
       return r;
@@ -794,7 +805,7 @@ export const RolesPermissionsView: React.FC<RolesPermissionsViewProps> = ({
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-72 overflow-y-auto p-3 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800">
                   {allNavTabsList.map((tab) => {
-                    const isChecked = activeRoleConfig?.allowedNavTabs?.includes(tab.id);
+                    const isChecked = isTabAllowedInList(tab.id, activeRoleConfig?.allowedNavTabs);
                     return (
                       <label
                         key={tab.id}

@@ -143,6 +143,7 @@ import {
   BiometricKioskSettings,
   TreasuryAccount,
 } from "./types";
+import { normalizeTabList, getEffectiveTabsForEmployee } from "./utils/permissions";
 import { CheckCircle2, Info, X } from "lucide-react";
 
 function AppContent() {
@@ -1411,6 +1412,7 @@ function AppContent() {
         }}
         userRole={currentEmployee.role}
         currentEmployee={currentEmployee}
+        rolePermissions={rolePermissions}
         isOpenMobile={isMobileMenuOpen}
         onCloseMobile={() => setIsMobileMenuOpen(false)}
         isCollapsed={sidebarCollapsed}
@@ -2192,9 +2194,40 @@ function AppContent() {
                 } catch (e) {
                   console.error(e);
                 }
+
+                // Automatically synchronize dashboard menus for all staff assigned to updated roles
+                setEmployees((prev) =>
+                  prev.map((emp) => {
+                    const matchedRole = updatedRoles.find((r) => r.role === emp.role);
+                    if (matchedRole && !emp.hasCustomTabAccess) {
+                      const newTabs = normalizeTabList(matchedRole.allowedNavTabs || []);
+                      const updated = { ...emp, allowedTabs: newTabs };
+                      saveEmployeeToFirestore(updated);
+                      return updated;
+                    }
+                    return emp;
+                  })
+                );
+
+                // Instantly update current active user if they inherit permissions from the updated role
+                setCurrentEmployee((prevCurr) => {
+                  const matchedRole = updatedRoles.find((r) => r.role === prevCurr.role);
+                  if (matchedRole && !prevCurr.hasCustomTabAccess) {
+                    const newTabs = normalizeTabList(matchedRole.allowedNavTabs || []);
+                    const updated = { ...prevCurr, allowedTabs: newTabs };
+                    try {
+                      localStorage.setItem("workflow_hr_current_user", JSON.stringify(updated));
+                    } catch (e) {
+                      console.warn(e);
+                    }
+                    return updated;
+                  }
+                  return prevCurr;
+                });
+
                 notifyAndLog(
                   "ROLE_PERMISSIONS_UPDATED",
-                  `Updated role permissions and access matrix`,
+                  `Updated role permissions and synchronized dashboard menus for all assigned staff`,
                   "SECURITY"
                 );
               }}

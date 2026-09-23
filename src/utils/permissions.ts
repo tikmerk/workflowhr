@@ -1,4 +1,62 @@
-import { Employee, UserRole } from "../types";
+import { Employee, UserRole, RolePermissionConfig, NavigationTab } from "../types";
+
+// Master list of all available navigation tabs in the application
+export const ALL_APP_NAVIGATION_TABS: NavigationTab[] = [
+  "dashboard",
+  "my-portal",
+  "self-service",
+  "employees",
+  "departments-designations",
+  "branches",
+  "branches-geofence",
+  "ngo-programs-training",
+  "meetings-conferences",
+  "face-recognition-kiosk",
+  "attendance-logs",
+  "shifts-holidays",
+  "leaves",
+  "payroll",
+  "loans",
+  "recruitment",
+  "projects-tasks",
+  "assets",
+  "certificates",
+  "exit-management",
+  "notices-chat",
+  "roles-permissions",
+  "audit-reports",
+];
+
+/**
+ * Normalizes tab identifiers between legacy and new schema aliases
+ * - Maps 'my-portal' <-> 'self-service'
+ * - Maps 'branches' <-> 'branches-geofence'
+ */
+export const normalizeTabList = (tabs: string[] = []): string[] => {
+  const set = new Set<string>();
+  tabs.forEach((tab) => {
+    if (!tab) return;
+    set.add(tab);
+    if (tab === "self-service") set.add("my-portal");
+    if (tab === "my-portal") set.add("self-service");
+    if (tab === "branches-geofence") set.add("branches");
+    if (tab === "branches") set.add("branches-geofence");
+  });
+  return Array.from(set);
+};
+
+/**
+ * Checks if a specific tab is allowed in the tab list, handling aliases
+ */
+export const isTabAllowedInList = (tabId: string, allowedTabs: string[] = []): boolean => {
+  if (!tabId) return false;
+  if (allowedTabs.includes(tabId)) return true;
+  if (tabId === "my-portal" && allowedTabs.includes("self-service")) return true;
+  if (tabId === "self-service" && allowedTabs.includes("my-portal")) return true;
+  if (tabId === "branches" && allowedTabs.includes("branches-geofence")) return true;
+  if (tabId === "branches-geofence" && allowedTabs.includes("branches")) return true;
+  return false;
+};
 
 /**
  * Enterprise Role-Based Access Control (RBAC) Permission Utility
@@ -130,6 +188,7 @@ export const GENERAL_EMPLOYEE_ALLOWED_TABS: string[] = [
   "my-portal",
   "face-recognition-kiosk",
   "attendance-logs",
+  "shifts-holidays",
   "leaves",
   "payroll",
   "loans",
@@ -137,4 +196,158 @@ export const GENERAL_EMPLOYEE_ALLOWED_TABS: string[] = [
   "projects-tasks",
   "assets",
   "certificates",
+  "meetings-conferences",
 ];
+
+/**
+ * Returns intelligent default navigation tabs based on role and custom role permissions
+ */
+export const getDefaultTabsForRole = (
+  roleKey: string,
+  rolePermissionsList?: RolePermissionConfig[]
+): string[] => {
+  const matchedRole = rolePermissionsList?.find((r) => r.role === roleKey);
+  if (matchedRole?.allowedNavTabs && matchedRole.allowedNavTabs.length > 0) {
+    return normalizeTabList(matchedRole.allowedNavTabs);
+  }
+
+  // Built-in intelligent defaults by role if not customized in role permissions
+  if (
+    roleKey === "SUPER_ADMIN" ||
+    roleKey === "CEO" ||
+    roleKey === "GRAND_ADMIN" ||
+    roleKey === "COMPANY_ADMIN"
+  ) {
+    return ALL_APP_NAVIGATION_TABS.map((t) => t);
+  }
+  if (roleKey === "HR_MANAGER") {
+    return normalizeTabList([
+      "dashboard",
+      "self-service",
+      "my-portal",
+      "employees",
+      "departments-designations",
+      "branches",
+      "branches-geofence",
+      "ngo-programs-training",
+      "meetings-conferences",
+      "attendance-logs",
+      "shifts-holidays",
+      "leaves",
+      "payroll",
+      "loans",
+      "recruitment",
+      "projects-tasks",
+      "assets",
+      "certificates",
+      "exit-management",
+      "notices-chat",
+    ]);
+  }
+  if (roleKey === "ACCOUNT_PAYROLL" || roleKey === "ACCOUNTS_MANAGER") {
+    return normalizeTabList([
+      "dashboard",
+      "self-service",
+      "my-portal",
+      "payroll",
+      "loans",
+      "employees",
+      "attendance-logs",
+      "leaves",
+      "notices-chat",
+      "assets",
+      "certificates",
+      "meetings-conferences",
+    ]);
+  }
+  if (roleKey === "BRANCH_MANAGER") {
+    return normalizeTabList([
+      "dashboard",
+      "self-service",
+      "my-portal",
+      "employees",
+      "branches",
+      "branches-geofence",
+      "ngo-programs-training",
+      "attendance-logs",
+      "leaves",
+      "shifts-holidays",
+      "notices-chat",
+      "projects-tasks",
+      "assets",
+      "certificates",
+      "meetings-conferences",
+    ]);
+  }
+  if (roleKey === "PROJECT_MANAGER" || roleKey === "TEAM_LEADER") {
+    return normalizeTabList([
+      "dashboard",
+      "self-service",
+      "my-portal",
+      "projects-tasks",
+      "attendance-logs",
+      "leaves",
+      "shifts-holidays",
+      "notices-chat",
+      "meetings-conferences",
+      "certificates",
+      "assets",
+    ]);
+  }
+  if (roleKey === "INTERNAL_AUDITOR" || roleKey === "AUDITOR") {
+    return normalizeTabList([
+      "dashboard",
+      "self-service",
+      "my-portal",
+      "employees",
+      "attendance-logs",
+      "payroll",
+      "loans",
+      "assets",
+      "audit-reports",
+      "notices-chat",
+    ]);
+  }
+
+  return normalizeTabList(GENERAL_EMPLOYEE_ALLOWED_TABS);
+};
+
+/**
+ * Returns the effective accessible navigation tabs for an employee.
+ * - Super Admins and CEOs get all tabs.
+ * - If employee has manual custom tab overrides (hasCustomTabAccess: true), respects employee.allowedTabs.
+ * - Otherwise (default), dynamically inherits the role's configured tabs from rolePermissionsList.
+ */
+export const getEffectiveTabsForEmployee = (
+  employee?: Partial<Employee> | null,
+  rolePermissionsList?: RolePermissionConfig[]
+): string[] => {
+  if (!employee) return normalizeTabList(GENERAL_EMPLOYEE_ALLOWED_TABS);
+
+  // Super Admin / CEO / Grand Admin always has full access
+  if (
+    employee.isSuperAdmin ||
+    employee.isCeoOrOwner ||
+    employee.role === "SUPER_ADMIN" ||
+    employee.role === "GRAND_ADMIN" ||
+    employee.role === "COMPANY_ADMIN" ||
+    employee.role === "CEO"
+  ) {
+    return ALL_APP_NAVIGATION_TABS.map((t) => t);
+  }
+
+  // Explicit manual customization override for exceptional users
+  if (employee.hasCustomTabAccess === true && employee.allowedTabs && employee.allowedTabs.length > 0) {
+    return normalizeTabList(employee.allowedTabs);
+  }
+
+  // Strictly and dynamically resolve from the employee's assigned role configuration
+  const roleKey = employee.role || "EMPLOYEE";
+  const matchedRole = rolePermissionsList?.find((r) => r.role === roleKey);
+  if (matchedRole?.allowedNavTabs && matchedRole.allowedNavTabs.length > 0) {
+    return normalizeTabList(matchedRole.allowedNavTabs);
+  }
+
+  // Fallback to intelligent role defaults
+  return getDefaultTabsForRole(roleKey, rolePermissionsList);
+};

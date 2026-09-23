@@ -313,6 +313,7 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
   const [editIsAttendanceExempt, setEditIsAttendanceExempt] = useState(false);
   const [editFaceVerified, setEditFaceVerified] = useState(false);
   const [editAllowedTabs, setEditAllowedTabs] = useState<string[]>(DEFAULT_EMPLOYEE_ALLOWED_TABS);
+  const [editHasCustomTabAccess, setEditHasCustomTabAccess] = useState(false);
   const [editFlexibleHours, setEditFlexibleHours] = useState(false);
   const [editSalaryProtected, setEditSalaryProtected] = useState(false);
   const [editFixedContractSalary, setEditFixedContractSalary] = useState(false);
@@ -472,8 +473,10 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
     setEditHideSalaryFromSelf(Boolean(emp.hideSalaryFromSelf));
     setEditIsAttendanceExempt(Boolean(emp.isAttendanceExempt));
     setEditFaceVerified(Boolean(emp.faceVerified));
+    const isCustom = Boolean(emp.hasCustomTabAccess);
+    setEditHasCustomTabAccess(isCustom);
     setEditAllowedTabs(
-      emp.allowedTabs && emp.allowedTabs.length > 0
+      isCustom && emp.allowedTabs && emp.allowedTabs.length > 0
         ? normalizeTabList(emp.allowedTabs)
         : getDefaultTabsForRole(emp.role || "EMPLOYEE", rolePermissions)
     );
@@ -551,7 +554,10 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
       hideSalaryFromSelf: editHideSalaryFromSelf,
       isAttendanceExempt: editIsAttendanceExempt,
       faceVerified: editFaceVerified,
-      allowedTabs: editAllowedTabs,
+      hasCustomTabAccess: editHasCustomTabAccess,
+      allowedTabs: editHasCustomTabAccess
+        ? normalizeTabList(editAllowedTabs)
+        : getDefaultTabsForRole(editRole, rolePermissions),
       passwordLastChangedAt: isPasswordChanged ? new Date().toISOString() : editingEmployee.passwordLastChangedAt,
       salary: {
         ...editingEmployee.salary,
@@ -809,6 +815,7 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
   const [newIsAttendanceExempt, setNewIsAttendanceExempt] = useState(false);
   const [newFaceVerified, setNewFaceVerified] = useState(false);
   const [newAllowedTabs, setNewAllowedTabs] = useState<string[]>(DEFAULT_EMPLOYEE_ALLOWED_TABS);
+  const [newHasCustomTabAccess, setNewHasCustomTabAccess] = useState(false);
   const [newFlexibleHours, setNewFlexibleHours] = useState(false);
   const [newSalaryProtected, setNewSalaryProtected] = useState(false);
   const [newFixedContractSalary, setNewFixedContractSalary] = useState(false);
@@ -956,7 +963,10 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
       hideSalaryFromSelf: newHideSalaryFromSelf,
       isAttendanceExempt: newIsAttendanceExempt,
       faceVerified: newFaceVerified,
-      allowedTabs: newAllowedTabs,
+      hasCustomTabAccess: newHasCustomTabAccess,
+      allowedTabs: newHasCustomTabAccess
+        ? normalizeTabList(newAllowedTabs)
+        : getDefaultTabsForRole(newRole, rolePermissions),
       salary: {
         basic: basic,
         houseRent: isFixed ? 0 : Math.round(basic * 0.4),
@@ -996,7 +1006,8 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
     setNewHideSalaryFromSelf(false);
     setNewIsAttendanceExempt(false);
     setNewFaceVerified(false);
-    setNewAllowedTabs(DEFAULT_EMPLOYEE_ALLOWED_TABS);
+    setNewHasCustomTabAccess(false);
+    setNewAllowedTabs(getDefaultTabsForRole("EMPLOYEE", rolePermissions));
     setNewFlexibleHours(false);
     setNewSalaryProtected(false);
     setNewFixedContractSalary(false);
@@ -2193,6 +2204,7 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
                       setNewRole(selRole as any);
                       const autoTabs = getDefaultTabsForRole(selRole, rolePermissions);
                       setNewAllowedTabs(autoTabs);
+                      setNewHasCustomTabAccess(false);
                       if (selRole === "SUPER_ADMIN") {
                         setNewIsSuperAdmin(true);
                       }
@@ -2553,15 +2565,18 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
                         {isBangla ? "দৃশ্যমান মেনু ও অ্যাক্সেস কন্ট্রোল (Allowed Navigation Tabs)" : "Allowed Navigation Tabs"}
                       </span>
                       <p className="text-[10px] text-slate-500">
-                        {isBangla 
-                          ? "রোল পরিবর্তন করলে সেই রোলের মেনু স্বয়ংক্রিয়ভাবে সিলেক্ট হয়। প্রয়োজনে নিচে ম্যানুয়ালি কাস্টমাইজ করুন।" 
-                          : "Role changes auto-sync menu tabs. Check/uncheck below for manual overrides."}
+                        {!newHasCustomTabAccess
+                          ? (isBangla ? "✓ রোলের ডিফল্ট মোড সক্রিয়: নির্বাচিত রোলের সব অনুমোদিত মেনু স্বয়ংক্রিয়ভাবে পাবে।" : "✓ Role Default active: automatically inherits all menus allowed for this role.")
+                          : (isBangla ? "⚠️ কাস্টম মোড সক্রিয়: এই কর্মীর জন্য মেনু ম্যানুয়ালি ওভাররাইড করা হয়েছে।" : "⚠️ Custom Override active: navigation tabs customized for this staff member.")}
                       </p>
                     </div>
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <button
                         type="button"
-                        onClick={() => setNewAllowedTabs(getDefaultTabsForRole(newRole, rolePermissions))}
+                        onClick={() => {
+                          setNewAllowedTabs(getDefaultTabsForRole(newRole, rolePermissions));
+                          setNewHasCustomTabAccess(false);
+                        }}
                         className="text-[10px] font-bold px-2 py-0.5 rounded bg-teal-500/10 text-teal-700 dark:text-teal-300 hover:bg-teal-500/20 flex items-center gap-1 cursor-pointer"
                         title="নির্বাচিত রোলের ডিফল্ট মেনু রিস্টোর করুন"
                       >
@@ -2570,14 +2585,20 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
                       </button>
                       <button
                         type="button"
-                        onClick={() => setNewAllowedTabs(APP_TAB_OPTIONS.map((t) => t.id))}
+                        onClick={() => {
+                          setNewAllowedTabs(APP_TAB_OPTIONS.map((t) => t.id));
+                          setNewHasCustomTabAccess(true);
+                        }}
                         className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-700 cursor-pointer"
                       >
                         {isBangla ? "সব মেনু" : "All Tabs"}
                       </button>
                       <button
                         type="button"
-                        onClick={() => setNewAllowedTabs(normalizeTabList(DEFAULT_EMPLOYEE_ALLOWED_TABS))}
+                        onClick={() => {
+                          setNewAllowedTabs(normalizeTabList(DEFAULT_EMPLOYEE_ALLOWED_TABS));
+                          setNewHasCustomTabAccess(true);
+                        }}
                         className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-700 cursor-pointer"
                       >
                         {isBangla ? "সাধারণ কর্মী" : "Standard"}
@@ -2601,6 +2622,7 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
                             type="checkbox"
                             checked={isChecked}
                             onChange={(e) => {
+                              setNewHasCustomTabAccess(true);
                               if (e.target.checked) {
                                 setNewAllowedTabs(normalizeTabList([...newAllowedTabs, tab.id]));
                               } else {
@@ -2897,6 +2919,7 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
                       setEditRole(selectedRoleKey as any);
                       const autoTabs = getDefaultTabsForRole(selectedRoleKey, rolePermissions);
                       setEditAllowedTabs(autoTabs);
+                      setEditHasCustomTabAccess(false);
                       if (selectedRoleKey === "SUPER_ADMIN") {
                         setEditIsSuperAdmin(true);
                       }
@@ -3312,15 +3335,18 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
                         {isBangla ? "দৃশ্যমান মেনু ও অ্যাক্সেস কন্ট্রোল (Allowed Navigation Tabs)" : "Allowed Navigation Tabs"}
                       </span>
                       <p className="text-[10px] text-slate-500">
-                        {isBangla
-                          ? "রোল পরিবর্তন করলে স্বয়ংক্রিয়ভাবে সেই রোলের মেনু সিলেক্ট হয়। নিচে ম্যানুয়ালি টিক দিয়ে এই কর্মীর জন্য এক্সেস কাস্টমাইজ করতে পারবেন।"
-                          : "Role changes automatically update allowed tabs. Customize per-employee access with checkboxes below."}
+                        {!editHasCustomTabAccess
+                          ? (isBangla ? "✓ রোলের ডিফল্ট মোড সক্রিয়: নির্বাচিত রোলের সব অনুমোদিত মেনু ড্যাশবোর্ডে স্বয়ংক্রিয়ভাবে পাবে।" : "✓ Role Default active: automatically inherits all menus allowed for this role.")
+                          : (isBangla ? "⚠️ কাস্টম মোড সক্রিয়: এই কর্মীর জন্য মেনু ম্যানুয়ালি ওভাররাইড করা হয়েছে।" : "⚠️ Custom Override active: navigation tabs customized for this staff member.")}
                       </p>
                     </div>
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <button
                         type="button"
-                        onClick={() => setEditAllowedTabs(getDefaultTabsForRole(editRole, rolePermissions))}
+                        onClick={() => {
+                          setEditAllowedTabs(getDefaultTabsForRole(editRole, rolePermissions));
+                          setEditHasCustomTabAccess(false);
+                        }}
                         className="text-[10px] font-bold px-2 py-0.5 rounded bg-teal-500/10 text-teal-700 dark:text-teal-300 hover:bg-teal-500/20 flex items-center gap-1 cursor-pointer"
                         title="নির্বাচিত রোলের ডিফল্ট মেনু রিস্টোর করুন"
                       >
@@ -3329,14 +3355,20 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
                       </button>
                       <button
                         type="button"
-                        onClick={() => setEditAllowedTabs(APP_TAB_OPTIONS.map((t) => t.id))}
+                        onClick={() => {
+                          setEditAllowedTabs(APP_TAB_OPTIONS.map((t) => t.id));
+                          setEditHasCustomTabAccess(true);
+                        }}
                         className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-700 cursor-pointer"
                       >
                         {isBangla ? "সব মেনু" : "All Tabs"}
                       </button>
                       <button
                         type="button"
-                        onClick={() => setEditAllowedTabs(normalizeTabList(DEFAULT_EMPLOYEE_ALLOWED_TABS))}
+                        onClick={() => {
+                          setEditAllowedTabs(normalizeTabList(DEFAULT_EMPLOYEE_ALLOWED_TABS));
+                          setEditHasCustomTabAccess(true);
+                        }}
                         className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-700 cursor-pointer"
                       >
                         {isBangla ? "সাধারণ কর্মী" : "Standard"}
@@ -3360,6 +3392,7 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
                             type="checkbox"
                             checked={isChecked}
                             onChange={(e) => {
+                              setEditHasCustomTabAccess(true);
                               if (e.target.checked) {
                                 setEditAllowedTabs(normalizeTabList([...editAllowedTabs, tab.id]));
                               } else {
