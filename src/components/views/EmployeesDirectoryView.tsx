@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import {
   Users,
   Search,
@@ -56,6 +56,13 @@ import { useCompanyBranding } from "../../context/CompanyBrandingContext";
 import { useThemeLanguage } from "../../context/ThemeLanguageContext";
 import { ViewA4ResumeModal } from "../modals/ViewA4ResumeModal";
 import { EditEmployeeCVModal } from "../modals/EditEmployeeCVModal";
+import { ProfileCompletionDetailsModal } from "../modals/ProfileCompletionDetailsModal";
+import {
+  calculateEmployeeProfileCompletion,
+  calculateEmployeesProfileStats,
+  generateEmployeeProfileReminderMessage,
+  ProfileCompletionReport,
+} from "../../utils/profileCompletion";
 import {
   getNextAvailableEmployeeCredentials,
   validateEmployeeIdAvailability,
@@ -278,6 +285,8 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
   const [viewingResumeEmployee, setViewingResumeEmployee] = useState<Employee | null>(null);
   const [editingCvEmployee, setEditingCvEmployee] = useState<Employee | null>(null);
+  const [auditingCompletionEmployee, setAuditingCompletionEmployee] = useState<Employee | null>(null);
+  const [filterCompletionRate, setFilterCompletionRate] = useState<"ALL" | "COMPLETE" | "ALMOST" | "MODERATE" | "CRITICAL">("ALL");
 
   // Edit Employee Form State
   const [editEmpCode, setEditEmpCode] = useState("");
@@ -867,6 +876,8 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
       )
     : { available: true };
 
+  const profileStats = useMemo(() => calculateEmployeesProfileStats(employees), [employees]);
+
   const filteredEmployees = employees.filter((emp) => {
     const matchesSearch =
       emp.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -878,7 +889,21 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
     const matchesDept = filterDept === "ALL" || emp.departmentId === filterDept;
     const matchesStatus = filterStatus === "ALL" || emp.status === filterStatus;
 
-    return matchesSearch && matchesBranch && matchesDept && matchesStatus;
+    let matchesCompletion = true;
+    if (filterCompletionRate !== "ALL") {
+      const rep = calculateEmployeeProfileCompletion(emp);
+      if (filterCompletionRate === "COMPLETE") {
+        matchesCompletion = rep.percentage === 100;
+      } else if (filterCompletionRate === "ALMOST") {
+        matchesCompletion = rep.percentage >= 75 && rep.percentage < 100;
+      } else if (filterCompletionRate === "MODERATE") {
+        matchesCompletion = rep.percentage >= 45 && rep.percentage < 75;
+      } else if (filterCompletionRate === "CRITICAL") {
+        matchesCompletion = rep.percentage < 45;
+      }
+    }
+
+    return matchesSearch && matchesBranch && matchesDept && matchesStatus && matchesCompletion;
   });
 
   const filteredDeletedEmployees = deletedEmployees.filter((emp) => {
@@ -1151,8 +1176,123 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
           </div>
         </div>
 
+        {/* Profile & CV Completion Audit Summary Bar (Super Admin & HR KPI) */}
+        {canAccessConfidentialEmployeeData(currentUser) && (
+          <div className="p-4 rounded-2xl bg-gradient-to-r from-teal-500/10 via-indigo-500/10 to-purple-500/10 border border-teal-500/20 dark:border-teal-500/30 space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-teal-500/20 text-teal-700 dark:text-teal-300">
+                  <Award className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                    <span>{isBangla ? "কর্মী প্রোফাইল ও সিভি কমপ্লিশন নিরীক্ষা (Audit Dashboard)" : "Workforce Profile & CV Completion Audit"}</span>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-teal-500/20 text-teal-800 dark:text-teal-200 border border-teal-500/30">
+                      {isBangla ? `গড় পূরণ হার: ${profileStats.averagePercentage}%` : `Average: ${profileStats.averagePercentage}%`}
+                    </span>
+                  </h3>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    {isBangla
+                      ? "কোন কোন কর্মী সিভি ও প্রয়োজনীয় তথ্য অসম্পূর্ণ রেখেছে তা দেখে নোটিশ ও তাগাদা দিন।"
+                      : "Monitor employee profile completeness, CV data, and send compliance reminders."}
+                  </p>
+                </div>
+              </div>
+
+              {filterCompletionRate !== "ALL" && (
+                <button
+                  type="button"
+                  onClick={() => setFilterCompletionRate("ALL")}
+                  className="text-xs font-bold text-rose-600 dark:text-rose-400 hover:underline flex items-center gap-1 cursor-pointer self-start sm:self-center"
+                >
+                  <X className="w-3.5 h-3.5" />
+                  <span>{isBangla ? "কমপ্লিশন ফিল্টার মুছুন" : "Reset Filter"}</span>
+                </button>
+              )}
+            </div>
+
+            {/* Quick KPI Filter Badges */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-2 text-xs">
+              <button
+                type="button"
+                onClick={() => setFilterCompletionRate("ALL")}
+                className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                  filterCompletionRate === "ALL"
+                    ? "bg-slate-900 text-white dark:bg-white dark:text-slate-900 border-slate-900 dark:border-white shadow-xs"
+                    : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:border-slate-300"
+                }`}
+              >
+                <span className="block text-[10px] opacity-75">{isBangla ? "মোট কর্মী" : "All Staff"}</span>
+                <span className="text-base font-black font-mono">{profileStats.totalEmployees}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setFilterCompletionRate("COMPLETE")}
+                className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                  filterCompletionRate === "COMPLETE"
+                    ? "bg-emerald-600 text-white border-emerald-600 shadow-md shadow-emerald-500/20"
+                    : "bg-white dark:bg-slate-900 border-emerald-500/30 text-emerald-800 dark:text-emerald-300 hover:bg-emerald-50/50 dark:hover:bg-emerald-950/30"
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="block text-[10px] opacity-90">{isBangla ? "১০০% সম্পূর্ণ" : "100% Done"}</span>
+                  <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+                </div>
+                <span className="text-base font-black font-mono">{profileStats.completeCount}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setFilterCompletionRate("ALMOST")}
+                className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                  filterCompletionRate === "ALMOST"
+                    ? "bg-teal-600 text-white border-teal-600 shadow-md shadow-teal-500/20"
+                    : "bg-white dark:bg-slate-900 border-teal-500/30 text-teal-800 dark:text-teal-300 hover:bg-teal-50/50 dark:hover:bg-teal-950/30"
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="block text-[10px] opacity-90">{isBangla ? "সন্তোষজনক (৭৫-৯৯%)" : "Good (75-99%)"}</span>
+                </div>
+                <span className="text-base font-black font-mono">{profileStats.almostCompleteCount}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setFilterCompletionRate("MODERATE")}
+                className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                  filterCompletionRate === "MODERATE"
+                    ? "bg-amber-600 text-white border-amber-600 shadow-md shadow-amber-500/20"
+                    : "bg-white dark:bg-slate-900 border-amber-500/30 text-amber-800 dark:text-amber-300 hover:bg-amber-50/50 dark:hover:bg-amber-950/30"
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="block text-[10px] opacity-90">{isBangla ? "অসম্পূর্ণ (৪৫-৭৪%)" : "Partial (45-74%)"}</span>
+                </div>
+                <span className="text-base font-black font-mono">{profileStats.moderateCount}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setFilterCompletionRate("CRITICAL")}
+                className={`col-span-2 sm:col-span-1 p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                  filterCompletionRate === "CRITICAL"
+                    ? "bg-rose-600 text-white border-rose-600 shadow-md shadow-rose-500/20"
+                    : "bg-rose-50/60 dark:bg-rose-950/30 border-rose-400 dark:border-rose-800 text-rose-800 dark:text-rose-300 hover:bg-rose-100/60"
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="block text-[10px] font-bold">{isBangla ? "অতি জরুরি (<৪৫%)" : "Urgent (<45%)"}</span>
+                  <AlertTriangle className="w-3.5 h-3.5 text-rose-500" />
+                </div>
+                <span className="text-base font-black font-mono">{profileStats.criticalIncompleteCount}</span>
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Filter Controls */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 text-xs">
           <div className="relative">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
             <input
@@ -1205,6 +1345,20 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
               <option value="ON_LEAVE">On Leave</option>
               <option value="PROBATION">Probation Period</option>
               <option value="TERMINATED">Terminated</option>
+            </select>
+          </div>
+
+          <div>
+            <select
+              value={filterCompletionRate}
+              onChange={(e) => setFilterCompletionRate(e.target.value as any)}
+              className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-slate-900 dark:text-white focus:outline-none focus:border-teal-500 font-medium"
+            >
+              <option value="ALL">{isBangla ? "সব প্রোফাইল রেট" : "All Completion Rates"}</option>
+              <option value="COMPLETE">{isBangla ? "১০০% সম্পূর্ণ প্রোফাইল" : "100% Completed"}</option>
+              <option value="ALMOST">{isBangla ? "সন্তোষজনক (৭৫-৯৯%)" : "Good (75-99%)"}</option>
+              <option value="MODERATE">{isBangla ? "মাঝামাঝি (৪৫-৭৪%)" : "Partial (45-74%)"}</option>
+              <option value="CRITICAL">{isBangla ? "অতি জরুরি (<৪৫%)" : "Urgent (<45%)"}</option>
             </select>
           </div>
         </div>
@@ -1308,11 +1462,59 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
                     </div>
                   </>
                 )}
+
+                {canAccessConfidentialEmployeeData(currentUser) && (() => {
+                  const rep = calculateEmployeeProfileCompletion(emp);
+                  return (
+                    <div
+                      onClick={() => setAuditingCompletionEmployee(emp)}
+                      className="p-2.5 rounded-xl bg-slate-100/70 dark:bg-slate-900 border border-slate-200 dark:border-slate-700/60 cursor-pointer space-y-1.5 hover:border-teal-500 transition-colors"
+                    >
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1">
+                          <Award className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
+                          <span>{isBangla ? "প্রোফাইল ও সিভি কমপ্লিশন" : "Profile & CV"}</span>
+                        </span>
+                        <span
+                          className={`px-2 py-0.2 rounded font-bold text-[10px] border ${rep.badgeBg} ${rep.badgeText} ${rep.badgeBorder}`}
+                        >
+                          {rep.percentage}% {isBangla ? rep.statusTextBn.split("(")[0].trim() : rep.statusTextEn.split("(")[0].trim()}
+                        </span>
+                      </div>
+                      <div className="w-full bg-slate-200 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden">
+                        <div className={`h-full ${rep.barColor}`} style={{ width: `${rep.percentage}%` }} />
+                      </div>
+                      <div className="flex items-center justify-between text-[10px]">
+                        {rep.missingItems.length > 0 ? (
+                          <span className="text-amber-700 dark:text-amber-400 font-semibold">
+                            {rep.missingItems.length} {isBangla ? "টি তথ্য বাকি (ক্লিক করুন)" : "items missing (click to audit)"}
+                          </span>
+                        ) : (
+                          <span className="text-emerald-700 dark:text-emerald-400 font-semibold flex items-center gap-1">
+                            <CheckCircle2 className="w-3 h-3 text-emerald-600" /> {isBangla ? "১০০% সম্পূর্ণ" : "100% Done"}
+                          </span>
+                        )}
+                        <span className="text-teal-600 dark:text-teal-400 font-bold underline">
+                          {isBangla ? "অডিট" : "Audit"}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })()}
+
               </div>
 
               <div className="flex items-center gap-1.5 pt-2 border-t border-slate-200/80 dark:border-slate-700/50">
                 {canAccessConfidentialEmployeeData(currentUser) ? (
                   <>
+                    <button
+                      type="button"
+                      onClick={() => setAuditingCompletionEmployee(emp)}
+                      className="p-2 rounded-lg bg-indigo-500/15 hover:bg-indigo-500/25 text-indigo-700 dark:text-indigo-300 border border-indigo-500/30 transition-colors cursor-pointer"
+                      title={isBangla ? "প্রোফাইল ও সিভি কমপ্লিশন অডিট" : "Audit Profile & CV Completion"}
+                    >
+                      <Award className="w-4 h-4" />
+                    </button>
                     {onOpenDigitalIdCard && (
                       <button
                         type="button"
@@ -1403,6 +1605,7 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
                 {canAccessConfidentialEmployeeData(currentUser) && (
                   <>
                     <th className="p-3">Biometrics & Device</th>
+                    <th className="p-3">Profile & CV Rate</th>
                     <th className="p-3">Gross Salary</th>
                     <th className="p-3">Status</th>
                   </>
@@ -1497,6 +1700,54 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
                         </div>
                       </td>
 
+                      <td className="p-3">
+                        {(() => {
+                          const rep = calculateEmployeeProfileCompletion(emp);
+                          return (
+                            <div
+                              onClick={() => setAuditingCompletionEmployee(emp)}
+                              className="cursor-pointer group flex flex-col gap-1 min-w-[140px] p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                              title={
+                                isBangla
+                                  ? "ক্লিক করে প্রোফাইল ও সিভির বিস্তারিত অডিট দেখুন ও নোটিশ কপি করুন"
+                                  : "Click to view full completion audit & copy reminder"
+                              }
+                            >
+                              <div className="flex items-center justify-between gap-1 text-[11px]">
+                                <span
+                                  className={`px-1.5 py-0.2 rounded font-bold text-[10px] border ${rep.badgeBg} ${rep.badgeText} ${rep.badgeBorder}`}
+                                >
+                                  {rep.percentage}%
+                                </span>
+                                <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">
+                                  {isBangla ? rep.statusTextBn.split("(")[0].trim() : rep.statusTextEn.split("(")[0].trim()}
+                                </span>
+                              </div>
+                              <div className="w-full bg-slate-200 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden">
+                                <div
+                                  className={`h-full ${rep.barColor} transition-all duration-300`}
+                                  style={{ width: `${rep.percentage}%` }}
+                                />
+                              </div>
+                              <div className="flex items-center justify-between text-[10px]">
+                                {rep.missingItems.length > 0 ? (
+                                  <span className="text-amber-700 dark:text-amber-400 font-semibold group-hover:underline">
+                                    {rep.missingItems.length} {isBangla ? "টি তথ্য বাকি" : "missing"}
+                                  </span>
+                                ) : (
+                                  <span className="text-emerald-700 dark:text-emerald-400 font-semibold flex items-center gap-0.5">
+                                    <CheckCircle2 className="w-3 h-3 text-emerald-600" /> {isBangla ? "১০০% সম্পন্ন" : "Complete"}
+                                  </span>
+                                )}
+                                <span className="text-teal-600 dark:text-teal-400 font-bold opacity-0 group-hover:opacity-100 transition-opacity text-[9px]">
+                                  {isBangla ? "অডিট" : "Audit"}
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        })()}
+                      </td>
+
                       <td className="p-3 font-mono">
                         <div className="flex items-center gap-1.5 font-semibold text-slate-900 dark:text-white">
                           <span>৳{(emp.salary?.grossSalary ?? 0).toLocaleString()}</span>
@@ -1534,6 +1785,13 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
                     <div className="flex items-center justify-end gap-1.5">
                       {canAccessConfidentialEmployeeData(currentUser) ? (
                         <>
+                          <button
+                            onClick={() => setAuditingCompletionEmployee(emp)}
+                            className="p-1.5 rounded-lg bg-indigo-500/10 hover:bg-indigo-500/25 text-indigo-700 dark:text-indigo-400 border border-indigo-500/30 transition-colors cursor-pointer"
+                            title={isBangla ? "প্রোফাইল ও সিভি কমপ্লিশন নিরীক্ষা (Audit Completion Rate)" : "Audit Profile & CV Completion"}
+                          >
+                            <Award className="w-4 h-4" />
+                          </button>
                           {onOpenDigitalIdCard && (
                             <button
                               onClick={() => onOpenDigitalIdCard(emp)}
@@ -1779,6 +2037,70 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
                 <X className="w-5 h-5" />
               </button>
             </div>
+
+            {/* Profile & CV Completion Status Banner */}
+            {(() => {
+              const rep = calculateEmployeeProfileCompletion(selectedEmployee);
+              return (
+                <div className="p-4 rounded-2xl bg-gradient-to-r from-teal-500/10 via-indigo-500/10 to-purple-500/10 border border-teal-500/25 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Award className="w-4 h-4 text-teal-600 dark:text-teal-400" />
+                      <h4 className="font-bold text-xs text-slate-900 dark:text-white">
+                        {isBangla ? "প্রোফাইল ও সিভি কমপ্লিশন হার" : "Profile & CV Completion Status"}
+                      </h4>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${rep.badgeBg} ${rep.badgeText} ${rep.badgeBorder}`}
+                      >
+                        {rep.percentage}% ({isBangla ? rep.statusTextBn : rep.statusTextEn})
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAuditingCompletionEmployee(selectedEmployee);
+                        }}
+                        className="text-xs text-teal-700 dark:text-teal-300 font-bold hover:underline cursor-pointer flex items-center gap-1"
+                      >
+                        <span>{isBangla ? "সম্পূর্ণ অডিট ও নোটিশ" : "Full Audit"}</span>
+                      </button>
+                    </div>
+                  </div>
+                  <div className="w-full bg-slate-200 dark:bg-slate-700 h-2 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full ${rep.barColor} transition-all duration-500`}
+                      style={{ width: `${rep.percentage}%` }}
+                    />
+                  </div>
+                  <div className="flex flex-wrap items-center justify-between text-[11px] gap-2">
+                    <span className="text-slate-600 dark:text-slate-400">
+                      {rep.missingItems.length > 0
+                        ? `${rep.missingItems.length} ${isBangla ? "টি তথ্য বাকি:" : "items missing:"} ${rep.missingItems
+                            .slice(0, 3)
+                            .map((m) => (isBangla ? m.labelBn : m.labelEn))
+                            .join(", ")}${rep.missingItems.length > 3 ? "..." : ""}`
+                        : isBangla
+                        ? "সব তথ্য ও সিভি ১০০% সম্পূর্ণ"
+                        : "100% complete"}
+                    </span>
+                    {rep.missingItems.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const msg = generateEmployeeProfileReminderMessage(selectedEmployee, rep, isBangla);
+                          navigator.clipboard.writeText(msg);
+                          alert(isBangla ? "কর্মীর জন্য রিমাইন্ডার নোটিশ ক্লিপবোর্ডে কপি হয়েছে!" : "Reminder notice copied to clipboard!");
+                        }}
+                        className="text-[11px] font-bold text-teal-700 dark:text-teal-300 hover:underline cursor-pointer"
+                      >
+                        {isBangla ? "রিমাইন্ডার কপি করুন" : "Copy Reminder"}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
 
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
               <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800">
@@ -3969,6 +4291,24 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
               setSelectedEmployee(updatedEmp);
             }
             setEditingCvEmployee(null);
+          }}
+        />
+      )}
+
+      {/* Profile & CV Completion Details & Reminder Modal */}
+      {auditingCompletionEmployee && (
+        <ProfileCompletionDetailsModal
+          employee={auditingCompletionEmployee}
+          isOpen={Boolean(auditingCompletionEmployee)}
+          isBangla={isBangla}
+          onClose={() => setAuditingCompletionEmployee(null)}
+          onOpenEditCV={(emp) => {
+            setAuditingCompletionEmployee(null);
+            setEditingCvEmployee(emp);
+          }}
+          onOpenEditProfile={(emp) => {
+            setAuditingCompletionEmployee(null);
+            openEditModal(emp);
           }}
         />
       )}
