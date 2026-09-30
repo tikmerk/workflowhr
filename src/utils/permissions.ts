@@ -96,6 +96,40 @@ export function isSuperAdminUser(user?: Employee | null): boolean {
   );
 }
 
+export function isCeoUser(user?: Employee | null): boolean {
+  if (!user) return false;
+  return Boolean(
+    user.role === "CEO" ||
+    user.isCeoOrOwner ||
+    user.designationTitle?.toLowerCase().includes("ceo") ||
+    user.designationTitle?.toLowerCase().includes("chief executive officer") ||
+    user.designationTitle?.toLowerCase().includes("সিইও")
+  );
+}
+
+/**
+ * Audit and full workforce profile completion access:
+ * Strictly limited to Super Admin and CEO only.
+ */
+export function canAccessProfileCompletionAudit(user?: Employee | null): boolean {
+  if (!user) return false;
+  return isSuperAdminUser(user) || isCeoUser(user);
+}
+
+/**
+ * Profile completion view access rule:
+ * - Super Admin and CEO: Can view any employee's completion rate and run full audit.
+ * - General Employee / Staff: Strictly can ONLY view their OWN completion rate (to see what info is missing).
+ */
+export function canViewEmployeeProfileCompletion(
+  currentUser?: Employee | null,
+  targetEmployee?: Employee | null
+): boolean {
+  if (!currentUser || !targetEmployee) return false;
+  if (canAccessProfileCompletionAudit(currentUser)) return true;
+  return currentUser.id === targetEmployee.id;
+}
+
 export function isExecutiveOrManagerUser(user?: Employee | null): boolean {
   if (!user) return false;
   if (isSuperAdminUser(user)) return true;

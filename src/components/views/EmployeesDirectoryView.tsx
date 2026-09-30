@@ -394,6 +394,21 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
     return isSuperAdminUser(user) || isCeoUser(user);
   };
 
+  // Only Super Admin and CEO can access the global workforce profile/CV completion audit and stats
+  const isSuperAdminOrCeo = (user?: Employee | null) => {
+    if (!user) return false;
+    return isSuperAdminUser(user) || isCeoUser(user);
+  };
+
+  // Profile completion status view permission:
+  // - Super Admin & CEO can view completion rate for EVERY employee.
+  // - General employees can strictly only view completion rate for their OWN profile.
+  const canViewTargetEmployeeCompletion = (targetEmp?: Employee | null) => {
+    if (!currentUser || !targetEmp) return false;
+    if (isSuperAdminOrCeo(currentUser)) return true;
+    return currentUser.id === targetEmp.id;
+  };
+
   const isBranchManagerOf = (user?: Employee, targetBranchId?: string) => {
     if (!user) return false;
     const isManagerRole =
@@ -890,7 +905,7 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
     const matchesStatus = filterStatus === "ALL" || emp.status === filterStatus;
 
     let matchesCompletion = true;
-    if (filterCompletionRate !== "ALL") {
+    if (isSuperAdminOrCeo(currentUser) && filterCompletionRate !== "ALL") {
       const rep = calculateEmployeeProfileCompletion(emp);
       if (filterCompletionRate === "COMPLETE") {
         matchesCompletion = rep.percentage === 100;
@@ -1176,8 +1191,8 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
           </div>
         </div>
 
-        {/* Profile & CV Completion Audit Summary Bar (Super Admin & HR KPI) */}
-        {canAccessConfidentialEmployeeData(currentUser) && (
+        {/* Profile & CV Completion Audit Summary Bar (Super Admin & CEO KPI) */}
+        {isSuperAdminOrCeo(currentUser) && (
           <div className="p-4 rounded-2xl bg-gradient-to-r from-teal-500/10 via-indigo-500/10 to-purple-500/10 border border-teal-500/20 dark:border-teal-500/30 space-y-3">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div className="flex items-center gap-2">
@@ -1292,7 +1307,7 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
         )}
 
         {/* Filter Controls */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 text-xs">
+        <div className={`grid grid-cols-1 sm:grid-cols-2 ${isSuperAdminOrCeo(currentUser) ? "lg:grid-cols-5" : "lg:grid-cols-4"} gap-3 text-xs`}>
           <div className="relative">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
             <input
@@ -1348,19 +1363,21 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
             </select>
           </div>
 
-          <div>
-            <select
-              value={filterCompletionRate}
-              onChange={(e) => setFilterCompletionRate(e.target.value as any)}
-              className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-slate-900 dark:text-white focus:outline-none focus:border-teal-500 font-medium"
-            >
-              <option value="ALL">{isBangla ? "সব প্রোফাইল রেট" : "All Completion Rates"}</option>
-              <option value="COMPLETE">{isBangla ? "১০০% সম্পূর্ণ প্রোফাইল" : "100% Completed"}</option>
-              <option value="ALMOST">{isBangla ? "সন্তোষজনক (৭৫-৯৯%)" : "Good (75-99%)"}</option>
-              <option value="MODERATE">{isBangla ? "মাঝামাঝি (৪৫-৭৪%)" : "Partial (45-74%)"}</option>
-              <option value="CRITICAL">{isBangla ? "অতি জরুরি (<৪৫%)" : "Urgent (<45%)"}</option>
-            </select>
-          </div>
+          {isSuperAdminOrCeo(currentUser) && (
+            <div>
+              <select
+                value={filterCompletionRate}
+                onChange={(e) => setFilterCompletionRate(e.target.value as any)}
+                className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-slate-900 dark:text-white focus:outline-none focus:border-teal-500 font-medium"
+              >
+                <option value="ALL">{isBangla ? "সব প্রোফাইল রেট" : "All Completion Rates"}</option>
+                <option value="COMPLETE">{isBangla ? "১০০% সম্পূর্ণ প্রোফাইল" : "100% Completed"}</option>
+                <option value="ALMOST">{isBangla ? "সন্তোষজনক (৭৫-৯৯%)" : "Good (75-99%)"}</option>
+                <option value="MODERATE">{isBangla ? "মাঝামাঝি (৪৫-৭৪%)" : "Partial (45-74%)"}</option>
+                <option value="CRITICAL">{isBangla ? "অতি জরুরি (<৪৫%)" : "Urgent (<45%)"}</option>
+              </select>
+            </div>
+          )}
         </div>
       </div>
 
@@ -1463,17 +1480,32 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
                   </>
                 )}
 
-                {canAccessConfidentialEmployeeData(currentUser) && (() => {
+                {canViewTargetEmployeeCompletion(emp) && (() => {
                   const rep = calculateEmployeeProfileCompletion(emp);
+                  const isOwnProfile = currentUser?.id === emp.id;
+                  const canAudit = isSuperAdminOrCeo(currentUser);
+
                   return (
                     <div
-                      onClick={() => setAuditingCompletionEmployee(emp)}
-                      className="p-2.5 rounded-xl bg-slate-100/70 dark:bg-slate-900 border border-slate-200 dark:border-slate-700/60 cursor-pointer space-y-1.5 hover:border-teal-500 transition-colors"
+                      onClick={() => {
+                        if (canAudit) {
+                          setAuditingCompletionEmployee(emp);
+                        } else if (isOwnProfile) {
+                          setEditingCvEmployee(emp);
+                        }
+                      }}
+                      className={`p-2.5 rounded-xl bg-slate-100/70 dark:bg-slate-900 border border-slate-200 dark:border-slate-700/60 space-y-1.5 transition-colors ${
+                        canAudit || isOwnProfile ? "cursor-pointer hover:border-teal-500" : ""
+                      }`}
                     >
                       <div className="flex items-center justify-between text-[11px]">
                         <span className="font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1">
                           <Award className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
-                          <span>{isBangla ? "প্রোফাইল ও সিভি কমপ্লিশন" : "Profile & CV"}</span>
+                          <span>
+                            {isOwnProfile
+                              ? (isBangla ? "আপনার প্রোফাইল ও সিভি" : "Your Profile & CV")
+                              : (isBangla ? "প্রোফাইল ও সিভি কমপ্লিশন" : "Profile & CV")}
+                          </span>
                         </span>
                         <span
                           className={`px-2 py-0.2 rounded font-bold text-[10px] border ${rep.badgeBg} ${rep.badgeText} ${rep.badgeBorder}`}
@@ -1487,7 +1519,10 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
                       <div className="flex items-center justify-between text-[10px]">
                         {rep.missingItems.length > 0 ? (
                           <span className="text-amber-700 dark:text-amber-400 font-semibold">
-                            {rep.missingItems.length} {isBangla ? "টি তথ্য বাকি (ক্লিক করুন)" : "items missing (click to audit)"}
+                            {rep.missingItems.length}{" "}
+                            {canAudit
+                              ? (isBangla ? "টি তথ্য বাকি (ক্লিক করে অডিট করুন)" : "items missing (click to audit)")
+                              : (isBangla ? "টি তথ্য বাকি (ক্লিক করে পূরণ করুন)" : "items missing (click to update)")}
                           </span>
                         ) : (
                           <span className="text-emerald-700 dark:text-emerald-400 font-semibold flex items-center gap-1">
@@ -1495,7 +1530,11 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
                           </span>
                         )}
                         <span className="text-teal-600 dark:text-teal-400 font-bold underline">
-                          {isBangla ? "অডিট" : "Audit"}
+                          {canAudit
+                            ? (isBangla ? "অডিট" : "Audit")
+                            : isOwnProfile
+                            ? (isBangla ? "তথ্য পূরণ" : "Update")
+                            : ""}
                         </span>
                       </div>
                     </div>
@@ -1507,14 +1546,16 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
               <div className="flex items-center gap-1.5 pt-2 border-t border-slate-200/80 dark:border-slate-700/50">
                 {canAccessConfidentialEmployeeData(currentUser) ? (
                   <>
-                    <button
-                      type="button"
-                      onClick={() => setAuditingCompletionEmployee(emp)}
-                      className="p-2 rounded-lg bg-indigo-500/15 hover:bg-indigo-500/25 text-indigo-700 dark:text-indigo-300 border border-indigo-500/30 transition-colors cursor-pointer"
-                      title={isBangla ? "প্রোফাইল ও সিভি কমপ্লিশন অডিট" : "Audit Profile & CV Completion"}
-                    >
-                      <Award className="w-4 h-4" />
-                    </button>
+                    {isSuperAdminOrCeo(currentUser) && (
+                      <button
+                        type="button"
+                        onClick={() => setAuditingCompletionEmployee(emp)}
+                        className="p-2 rounded-lg bg-indigo-500/15 hover:bg-indigo-500/25 text-indigo-700 dark:text-indigo-300 border border-indigo-500/30 transition-colors cursor-pointer"
+                        title={isBangla ? "প্রোফাইল ও সিভি কমপ্লিশন অডিট" : "Audit Profile & CV Completion"}
+                      >
+                        <Award className="w-4 h-4" />
+                      </button>
+                    )}
                     {onOpenDigitalIdCard && (
                       <button
                         type="button"
@@ -1785,13 +1826,15 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
                     <div className="flex items-center justify-end gap-1.5">
                       {canAccessConfidentialEmployeeData(currentUser) ? (
                         <>
-                          <button
-                            onClick={() => setAuditingCompletionEmployee(emp)}
-                            className="p-1.5 rounded-lg bg-indigo-500/10 hover:bg-indigo-500/25 text-indigo-700 dark:text-indigo-400 border border-indigo-500/30 transition-colors cursor-pointer"
-                            title={isBangla ? "প্রোফাইল ও সিভি কমপ্লিশন নিরীক্ষা (Audit Completion Rate)" : "Audit Profile & CV Completion"}
-                          >
-                            <Award className="w-4 h-4" />
-                          </button>
+                          {isSuperAdminOrCeo(currentUser) && (
+                            <button
+                              onClick={() => setAuditingCompletionEmployee(emp)}
+                              className="p-1.5 rounded-lg bg-indigo-500/10 hover:bg-indigo-500/25 text-indigo-700 dark:text-indigo-400 border border-indigo-500/30 transition-colors cursor-pointer"
+                              title={isBangla ? "প্রোফাইল ও সিভি কমপ্লিশন নিরীক্ষা (Audit Completion Rate)" : "Audit Profile & CV Completion"}
+                            >
+                              <Award className="w-4 h-4" />
+                            </button>
+                          )}
                           {onOpenDigitalIdCard && (
                             <button
                               onClick={() => onOpenDigitalIdCard(emp)}
@@ -2038,16 +2081,21 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
               </button>
             </div>
 
-            {/* Profile & CV Completion Status Banner */}
-            {(() => {
+            {/* Profile & CV Completion Status Banner - ONLY for Super Admin, CEO, or when viewing OWN profile */}
+            {canViewTargetEmployeeCompletion(selectedEmployee) && (() => {
               const rep = calculateEmployeeProfileCompletion(selectedEmployee);
+              const isOwnProfile = currentUser?.id === selectedEmployee.id;
+              const hasAdminAuditAccess = isSuperAdminOrCeo(currentUser);
+
               return (
                 <div className="p-4 rounded-2xl bg-gradient-to-r from-teal-500/10 via-indigo-500/10 to-purple-500/10 border border-teal-500/25 space-y-2.5">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <Award className="w-4 h-4 text-teal-600 dark:text-teal-400" />
                       <h4 className="font-bold text-xs text-slate-900 dark:text-white">
-                        {isBangla ? "প্রোফাইল ও সিভি কমপ্লিশন হার" : "Profile & CV Completion Status"}
+                        {isOwnProfile
+                          ? (isBangla ? "আপনার প্রোফাইল ও সিভি কমপ্লিশন হার" : "Your Profile & CV Completion Status")
+                          : (isBangla ? "প্রোফাইল ও সিভি কমপ্লিশন হার" : "Profile & CV Completion Status")}
                       </h4>
                     </div>
                     <div className="flex items-center gap-2">
@@ -2056,15 +2104,17 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
                       >
                         {rep.percentage}% ({isBangla ? rep.statusTextBn : rep.statusTextEn})
                       </span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setAuditingCompletionEmployee(selectedEmployee);
-                        }}
-                        className="text-xs text-teal-700 dark:text-teal-300 font-bold hover:underline cursor-pointer flex items-center gap-1"
-                      >
-                        <span>{isBangla ? "সম্পূর্ণ অডিট ও নোটিশ" : "Full Audit"}</span>
-                      </button>
+                      {hasAdminAuditAccess && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAuditingCompletionEmployee(selectedEmployee);
+                          }}
+                          className="text-xs text-teal-700 dark:text-teal-300 font-bold hover:underline cursor-pointer flex items-center gap-1"
+                        >
+                          <span>{isBangla ? "সম্পূর্ণ অডিট ও নোটিশ" : "Full Audit"}</span>
+                        </button>
+                      )}
                     </div>
                   </div>
                   <div className="w-full bg-slate-200 dark:bg-slate-700 h-2 rounded-full overflow-hidden">
@@ -2084,7 +2134,7 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
                         ? "সব তথ্য ও সিভি ১০০% সম্পূর্ণ"
                         : "100% complete"}
                     </span>
-                    {rep.missingItems.length > 0 && (
+                    {hasAdminAuditAccess && rep.missingItems.length > 0 && (
                       <button
                         type="button"
                         onClick={() => {
@@ -2096,6 +2146,21 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
                       >
                         {isBangla ? "রিমাইন্ডার কপি করুন" : "Copy Reminder"}
                       </button>
+                    )}
+                    {isOwnProfile && rep.missingItems.length > 0 && (
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedEmployee(null);
+                            setEditingCvEmployee(selectedEmployee);
+                          }}
+                          className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer flex items-center gap-1"
+                        >
+                          <FileText className="w-3.5 h-3.5" />
+                          <span>{isBangla ? "সিভি পূরণ / এডিট করুন" : "Fill CV Details"}</span>
+                        </button>
+                      </div>
                     )}
                   </div>
                 </div>
@@ -4296,9 +4361,10 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
       )}
 
       {/* Profile & CV Completion Details & Reminder Modal */}
-      {auditingCompletionEmployee && (
+      {auditingCompletionEmployee && isSuperAdminOrCeo(currentUser) && (
         <ProfileCompletionDetailsModal
           employee={auditingCompletionEmployee}
+          currentUser={currentUser}
           isOpen={Boolean(auditingCompletionEmployee)}
           isBangla={isBangla}
           onClose={() => setAuditingCompletionEmployee(null)}

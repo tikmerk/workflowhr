@@ -15,6 +15,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { Employee } from "../../types";
+import { canAccessProfileCompletionAudit } from "../../utils/permissions";
 import {
   calculateEmployeeProfileCompletion,
   generateEmployeeProfileReminderMessage,
@@ -24,6 +25,7 @@ import {
 interface ProfileCompletionDetailsModalProps {
   employee: Employee;
   isOpen: boolean;
+  currentUser?: Employee | null;
   isBangla?: boolean;
   onClose: () => void;
   onOpenEditCV?: (emp: Employee) => void;
@@ -33,6 +35,7 @@ interface ProfileCompletionDetailsModalProps {
 export const ProfileCompletionDetailsModal: React.FC<ProfileCompletionDetailsModalProps> = ({
   employee,
   isOpen,
+  currentUser,
   isBangla = true,
   onClose,
   onOpenEditCV,
@@ -42,6 +45,8 @@ export const ProfileCompletionDetailsModal: React.FC<ProfileCompletionDetailsMod
   const [filterTab, setFilterTab] = useState<"all" | "missing" | "completed">("missing");
 
   if (!isOpen) return null;
+  // Audit modal is strictly restricted to Super Admin and CEO
+  if (currentUser && !canAccessProfileCompletionAudit(currentUser)) return null;
 
   const report: ProfileCompletionReport = calculateEmployeeProfileCompletion(employee);
 
