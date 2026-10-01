@@ -78,11 +78,8 @@ export const SmartAttendanceModal: React.FC<SmartAttendanceModalProps> = ({
     branchList[0] ||
     DEFAULT_FALLBACK_BRANCH;
 
-  // Mobile, Tablet, PC all default to AUTO_KIOSK unless super admin enforces ONE_TO_ONE_ONLY
-  const initialMode =
-    biometricSettings?.modeAvailability === "ONE_TO_ONE_ONLY"
-      ? "ONE_TO_ONE"
-      : "AUTO_KIOSK";
+  // Mobile, Tablet, PC all use AUTO_KIOSK
+  const initialMode = "AUTO_KIOSK";
 
   return (
     <>
@@ -103,9 +100,7 @@ export const SmartAttendanceModal: React.FC<SmartAttendanceModalProps> = ({
           onAttendanceSuccess(record);
         }}
         onOpenEnrollmentModal={(emp) => {
-          if (emp) {
-            setEnrollingEmployee(emp);
-          }
+          setEnrollingEmployee(emp || initialEmployee || staffList[0] || null);
         }}
       />
 

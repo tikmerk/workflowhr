@@ -45,6 +45,7 @@ import {
   invalidateEmployeeFaceCache,
   resetBilateralBlinkState,
   loadFaceApiModels,
+  prewarmAndCacheEmployeeDescriptors,
 } from "../../utils/faceRecognitionEngine";
 import { requestUserMediaStream } from "../../utils/faceUtils";
 import {
@@ -428,118 +429,72 @@ export const RealtimeFaceRecognitionView: React.FC<RealtimeFaceRecognitionViewPr
 
         const now = Date.now();
 
-        // Multi-Vector Liveness Anti-Spoofing Verification
-        // Accepts:
-        // 1. Adaptive relative blink
-        // 2. Natural smile
-        // 3. Steady gaze fallback
+        // Multi-Vector Liveness Anti-Spoofing Verification (Fully Automatic: natural blink, gentle smile, or steady gaze)
         let livenessDetectedThisFrame = false;
-        let livenessReasonDetected: "blink" | "smile" | "steady" = "blink";
 
-        if (livenessMode === "BILATERAL_BLINK") {
-          if (liveFace.blinkDetected) {
-            livenessDetectedThisFrame = true;
-            livenessReasonDetected = "blink";
-          } else if (liveFace.smileDetected || (liveFace.smileScore && liveFace.smileScore >= 40)) {
-            livenessDetectedThisFrame = true;
-            livenessReasonDetected = "smile";
+        if (liveFace.blinkDetected) {
+          livenessDetectedThisFrame = true;
+        } else if (liveFace.smileDetected || (liveFace.smileScore && liveFace.smileScore >= 36)) {
+          livenessDetectedThisFrame = true;
+        } else if (liveFace.hasFace) {
+          if (!steadyGazeStartRef.current) {
+            steadyGazeStartRef.current = now;
           }
-        } else if (livenessMode === "SMILE") {
-          if (liveFace.smileDetected || (liveFace.smileScore && liveFace.smileScore >= 38)) {
+          const elapsed = now - steadyGazeStartRef.current;
+          const progress = Math.min(100, Math.round((elapsed / 1000) * 100));
+          setSteadyGazeProgress(progress);
+          if (progress >= 100) {
             livenessDetectedThisFrame = true;
-            livenessReasonDetected = "smile";
           }
-        } else if (livenessMode === "STEADY_GAZE") {
-          if (liveFace.hasFace) {
-            if (!steadyGazeStartRef.current) {
-              steadyGazeStartRef.current = now;
-            }
-            const elapsed = now - steadyGazeStartRef.current;
-            const progress = Math.min(100, Math.round((elapsed / 1000) * 100));
-            setSteadyGazeProgress(progress);
-            if (progress >= 100) {
-              livenessDetectedThisFrame = true;
-              livenessReasonDetected = "steady";
-            }
-          } else {
-            steadyGazeStartRef.current = null;
-            setSteadyGazeProgress(0);
-          }
+        } else {
+          steadyGazeStartRef.current = null;
+          setSteadyGazeProgress(0);
         }
 
         if (livenessDetectedThisFrame && !blinkCompleted) {
           setBlinkCompleted(true);
           setLastBlinkTime(now);
-          playSound(livenessReasonDetected === "smile" ? "smile" : "blink");
           setLivenessStage("VERIFIED");
-          playSound("success");
         }
 
-        // Run Periodic 1:N or 1:1 Matching Loop (throttled to every 400ms)
-        // Must NOT be blocked if user blinks or verifies liveness early!
+        // Run Periodic 1:N Face Matching Loop (throttled to every 300ms)
         const hasMatchedTarget = Boolean(
-          matchResult?.matched &&
-            (matchResult.matchedEmployee || (activeMode === "ONE_TO_ONE" && selectedTargetEmp))
+          matchResult?.matched && matchResult.matchedEmployee
         );
 
         if (
           liveFace.hasFace &&
           !isProcessingMatch &&
-          now - lastScanTimestamp >= 400 &&
+          now - lastScanTimestamp >= 300 &&
           !hasMatchedTarget
         ) {
           lastScanTimestamp = now;
           setIsProcessingMatch(true);
 
           try {
-            if (activeMode === "AUTO_KIOSK") {
-              const res = await autoIdentifyLiveFaceFromAllEmployees(videoRef.current, employees);
+            const res = await autoIdentifyLiveFaceFromAllEmployees(
+              videoRef.current,
+              employees,
+              undefined
+            );
 
-              if (res.matched && res.matchedEmployee) {
-                matchLockedUntilRef.current = now + 4000;
-                consecutiveMissesRef.current = 0;
-                setMatchResult(res);
-                playSound("match");
+            if (res.matched && res.matchedEmployee) {
+              matchLockedUntilRef.current = now + 4000;
+              consecutiveMissesRef.current = 0;
+              setMatchResult(res);
 
-                if (blinkCompleted || livenessDetectedThisFrame) {
-                  setLivenessStage("VERIFIED");
-                } else {
-                  setLivenessStage("BLINK");
-                }
+              if (blinkCompleted || livenessDetectedThisFrame) {
+                setLivenessStage("VERIFIED");
               } else {
-                if (now < matchLockedUntilRef.current) {
-                  // Retain locked match to prevent flickering
-                } else {
-                  consecutiveMissesRef.current += 1;
-                  if (consecutiveMissesRef.current >= 7) {
-                    setMatchResult(res);
-                  }
-                }
+                setLivenessStage("BLINK");
               }
-            } else if (activeMode === "ONE_TO_ONE") {
-              const targetEmp = employees.find((e) => e.id === selected1to1EmployeeId);
-              if (targetEmp) {
-                const res = await verifyLiveFaceWithEmployee(videoRef.current, targetEmp);
-                if (res.matched) {
-                  matchLockedUntilRef.current = now + 4000;
-                  consecutiveMissesRef.current = 0;
+            } else {
+              if (now < matchLockedUntilRef.current) {
+                // Retain locked match to prevent flickering
+              } else {
+                consecutiveMissesRef.current += 1;
+                if (consecutiveMissesRef.current >= 4) {
                   setMatchResult(res);
-                  playSound("match");
-
-                  if (blinkCompleted || livenessDetectedThisFrame) {
-                    setLivenessStage("VERIFIED");
-                  } else {
-                    setLivenessStage("BLINK");
-                  }
-                } else {
-                  if (now < matchLockedUntilRef.current) {
-                    // Retain locked match
-                  } else {
-                    consecutiveMissesRef.current += 1;
-                    if (consecutiveMissesRef.current >= 7) {
-                      setMatchResult(res);
-                    }
-                  }
                 }
               }
             }
@@ -897,8 +852,8 @@ export const RealtimeFaceRecognitionView: React.FC<RealtimeFaceRecognitionViewPr
                   <h2 className="text-base sm:text-lg font-black tracking-tight text-white">
                     {isBangla ? "লাইভ বায়োমেট্রিক হাজিরা ও ফেস রিকগনিশন" : "Live Biometric Attendance & Face Kiosk"}
                   </h2>
-                  <span className="bg-teal-500/20 text-teal-300 text-[10px] font-mono px-2 py-0.5 rounded-full border border-teal-500/40">
-                    AI 128D Multi-Factor
+                  <span className="bg-teal-500/20 text-teal-300 text-[10px] font-bold px-2 py-0.5 rounded-full border border-teal-500/40">
+                    AI Biometrics
                   </span>
                 </div>
                 <p className="text-xs text-slate-400">
@@ -922,16 +877,6 @@ export const RealtimeFaceRecognitionView: React.FC<RealtimeFaceRecognitionViewPr
                 title={isBangla ? "ফিল-লাইট অন/অফ করুন" : "Toggle Screen Fill-Light"}
               >
                 <Sun className={`w-4 h-4 ${screenFillLight ? "text-slate-950 fill-slate-950" : "text-amber-400"}`} />
-              </button>
-
-              {/* Audio Toggle */}
-              <button
-                type="button"
-                onClick={() => setSoundEnabled(!soundEnabled)}
-                title={soundEnabled ? (isBangla ? "মিউট করুন" : "Mute Sound") : (isBangla ? "সাউন্ড অন করুন" : "Enable Sound")}
-                className="p-2 rounded-xl border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors cursor-pointer"
-              >
-                {soundEnabled ? <Volume2 className="w-4 h-4 text-teal-400" /> : <VolumeX className="w-4 h-4 text-slate-400" />}
               </button>
 
               {/* Admin Biometric Policy (Super Admin Only) */}
@@ -965,33 +910,6 @@ export const RealtimeFaceRecognitionView: React.FC<RealtimeFaceRecognitionViewPr
               )}
             </div>
           </div>
-
-          {/* Modal Mode Selector */}
-          <div className="flex items-center gap-2 mt-3 pt-3 border-t border-slate-800">
-            <button
-              onClick={() => setActiveMode("AUTO_KIOSK")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                activeMode === "AUTO_KIOSK"
-                  ? "bg-teal-500 text-slate-950 shadow-md shadow-teal-500/20"
-                  : "bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-700/60"
-              }`}
-            >
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>{isBangla ? "স্বয়ংক্রিয় কিওস্ক (1:N)" : "Auto Kiosk (1:N)"}</span>
-            </button>
-
-            <button
-              onClick={() => setActiveMode("ONE_TO_ONE")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                activeMode === "ONE_TO_ONE"
-                  ? "bg-teal-500 text-slate-950 shadow-md shadow-teal-500/20"
-                  : "bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-700/60"
-              }`}
-            >
-              <UserCheck className="w-3.5 h-3.5" />
-              <span>{isBangla ? "ম্যানুয়াল নির্বাচন (1:1)" : "1:1 Staff Verify"}</span>
-            </button>
-          </div>
         </div>
       ) : (
         <div className="hidden lg:block bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl text-white">
@@ -1007,8 +925,8 @@ export const RealtimeFaceRecognitionView: React.FC<RealtimeFaceRecognitionViewPr
                       ? "রিয়েল-টাইম ফেস ডিটেকশন ও রিকগনাইজেশন কিওস্ক"
                       : "Real-Time Face Detection & Recognition Kiosk"}
                   </h1>
-                  <span className="bg-teal-500/20 text-teal-300 text-xs font-mono px-2.5 py-0.5 rounded-full border border-teal-500/40">
-                    AI 128D Multi-Factor
+                  <span className="bg-teal-500/20 text-teal-300 text-xs font-bold px-2.5 py-0.5 rounded-full border border-teal-500/40">
+                    AI Biometrics
                   </span>
                 </div>
                 <p className="text-xs sm:text-sm text-slate-400 mt-1">
@@ -1034,15 +952,6 @@ export const RealtimeFaceRecognitionView: React.FC<RealtimeFaceRecognitionViewPr
               >
                 <Sun className={`w-4 h-4 ${screenFillLight ? "text-slate-950 fill-slate-950" : "text-amber-400"}`} />
                 <span>{screenFillLight ? "💡 ফিল-লাইট অন" : "ফিল-লাইট অফ"}</span>
-              </button>
-
-              {/* Audio Toggle */}
-              <button
-                onClick={() => setSoundEnabled(!soundEnabled)}
-                title={soundEnabled ? "মিউট করুন" : "সাউন্ড অন করুন"}
-                className="p-2.5 rounded-xl border border-slate-700 bg-slate-800/80 hover:bg-slate-700 text-slate-300 transition-colors cursor-pointer"
-              >
-                {soundEnabled ? <Volume2 className="w-4 h-4 text-teal-400" /> : <VolumeX className="w-4 h-4 text-slate-400" />}
               </button>
 
               {/* Admin Biometric Policy Button (Super Admin Only) */}
@@ -1087,19 +996,7 @@ export const RealtimeFaceRecognitionView: React.FC<RealtimeFaceRecognitionViewPr
               }`}
             >
               <Sparkles className="w-4 h-4" />
-              <span>{isBangla ? "স্বয়ংক্রিয় কিওস্ক মোড (1:N Auto Detect)" : "Auto Kiosk Mode (1:N)"}</span>
-            </button>
-
-            <button
-              onClick={() => setActiveMode("ONE_TO_ONE")}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
-                activeMode === "ONE_TO_ONE"
-                  ? "bg-teal-500 text-slate-950 shadow-lg shadow-teal-500/20"
-                  : "bg-slate-800/80 text-slate-300 hover:bg-slate-700 border border-slate-700/60"
-              }`}
-            >
-              <UserCheck className="w-4 h-4" />
-              <span>{isBangla ? "ম্যানুয়াল নির্বাচন ও ভেরিফাই (1:1 Verify)" : "1:1 Staff Verification"}</span>
+              <span>{isBangla ? "স্বয়ংক্রিয় কিওস্ক মোড (Auto Kiosk)" : "Auto Kiosk Mode"}</span>
             </button>
 
             <button
@@ -1169,169 +1066,43 @@ export const RealtimeFaceRecognitionView: React.FC<RealtimeFaceRecognitionViewPr
                         : "bg-slate-500"
                     }`}
                   />
-                  <span className="font-semibold text-white">
-                    {activeMode === "AUTO_KIOSK"
-                      ? isBangla
-                        ? "স্বয়ংক্রিয় ফেস ট্র্যাকার"
-                        : "Live Auto Biometric Scanner"
-                      : isBangla
-                      ? "১:১ কর্মচারী ভেরিফিকেশন"
-                      : "1:1 Verification Scanner"}
+                  <span className="font-bold text-white text-xs sm:text-sm">
+                    {isBangla ? "লাইভ ফেস অ্যাটেন্ডেন্স" : "Live Face Attendance"}
                   </span>
-
-                  {liveFaceAnalysis?.glassesDetected && (
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/40">
-                      {isBangla ? "👓 চশমা" : "👓 Glasses"}
-                    </span>
-                  )}
                 </div>
 
-                <div className="flex items-center flex-wrap gap-2">
-                  {/* Low-Light Status & Toggle */}
-                  {(liveFaceAnalysis?.isLowLight || lowLightBoostEnabled) && (
-                    <div
-                      className={`flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                        liveFaceAnalysis?.isLowLight
-                          ? "bg-amber-500/20 text-amber-300 border-amber-500/50 animate-pulse"
-                          : "bg-slate-800 text-slate-300 border-slate-700"
-                      }`}
-                      title={isBangla ? "অটোমেটিক লো-লাইট বুস্ট সক্রিয়" : "Low light adaptive gain active"}
-                    >
-                      <Moon className="w-3 h-3 text-amber-400" />
-                      <span>{isBangla ? "🌙 কম আলো" : "🌙 Low Light"}</span>
-                    </div>
-                  )}
-
-                  <button
-                    type="button"
-                    onClick={() => setLowLightBoostEnabled((prev) => !prev)}
-                    className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-colors cursor-pointer ${
-                      lowLightBoostEnabled
-                        ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
-                        : "bg-slate-800 text-slate-400 border-slate-700 hover:text-slate-200"
-                    }`}
-                    title={isBangla ? "অটো লো-লাইট সেন্সর বুস্ট অন/অফ" : "Toggle Low-Light Gain"}
-                  >
-                    {lowLightBoostEnabled ? (isBangla ? "বুস্ট অন" : "Gain On") : (isBangla ? "বুস্ট অফ" : "Gain Off")}
-                  </button>
-
-                  {/* Anti-spoofing verification method selector */}
-                  <div className="flex items-center bg-slate-950/80 border border-slate-700/80 rounded-lg p-0.5">
-                    <button
-                      onClick={() => {
-                        setLivenessMode("BILATERAL_BLINK");
-                        resetBilateralBlinkState();
-                        setSteadyGazeProgress(0);
-                      }}
-                      className={`px-2 py-1 rounded text-[10px] font-bold transition-all ${
-                        livenessMode === "BILATERAL_BLINK"
-                          ? "bg-teal-500 text-slate-950"
-                          : "text-slate-400 hover:text-white"
-                      }`}
-                      title={isBangla ? "অ্যাডাপ্টিভ চোখের পলক অথবা হালকা হাসি উভয় পদ্ধতিতেই স্বয়ংক্রিয় লাইভনেস নিশ্চিত" : "Bilateral natural blink or subtle smile"}
-                    >
-                      {isBangla ? "স্মার্ট / পলক" : "Smart Blink"}
-                    </button>
-                    <button
-                      onClick={() => {
-                        setLivenessMode("SMILE");
-                        setSteadyGazeProgress(0);
-                      }}
-                      className={`px-2 py-1 rounded text-[10px] font-bold transition-all ${
-                        livenessMode === "SMILE"
-                          ? "bg-teal-500 text-slate-950"
-                          : "text-slate-400 hover:text-white"
-                      }`}
-                      title={isBangla ? "ক্যামেরার দিকে তাকিয়ে মুখে হালকা হাসি দিয়ে যাচাই" : "Gentle smile verification"}
-                    >
-                      {isBangla ? "হালকা হাসি" : "Smile"}
-                    </button>
-                    <button
-                      onClick={() => {
-                        setLivenessMode("STEADY_GAZE");
-                        setSteadyGazeProgress(0);
-                      }}
-                      className={`px-2 py-1 rounded text-[10px] font-bold transition-all ${
-                        livenessMode === "STEADY_GAZE"
-                          ? "bg-teal-500 text-slate-950"
-                          : "text-slate-400 hover:text-white"
-                      }`}
-                      title={isBangla ? "১ সেকেন্ড ফ্রেমের মধ্যে স্থির দৃষ্টি রেখে যাচাই (চশমা পরা বা চোখে সমস্যা থাকলে উত্তম)" : "Steady frontal face gaze (1.0s)"}
-                    >
-                      {isBangla ? "স্থির দৃষ্টি" : "Steady Gaze"}
-                    </button>
-                  </div>
-
-                  {liveFaceAnalysis?.hasFace && (
-                    <span className="text-[11px] font-mono text-teal-400 bg-teal-950/60 px-2 py-0.5 rounded border border-teal-800/60">
-                      128D
-                    </span>
-                  )}
-
-                  {/* Screen Fill Light Quick Toggle */}
+                <div className="flex items-center gap-2">
+                  {/* 1. Brightness / Screen Fill-Light Button */}
                   <button
                     type="button"
                     onClick={() => setScreenFillLight((prev) => !prev)}
-                    className={`p-1.5 rounded-lg text-xs font-bold transition-all border cursor-pointer ${
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all border cursor-pointer flex items-center gap-1.5 shadow-sm ${
                       screenFillLight
-                        ? "bg-amber-400 text-slate-950 border-amber-300"
-                        : "bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700"
+                        ? "bg-amber-400 text-slate-950 border-amber-300 ring-2 ring-amber-400/50"
+                        : "bg-slate-800 text-slate-200 border-slate-700 hover:bg-slate-700"
                     }`}
-                    title={isBangla ? "ফিল-লাইট অন/অফ" : "Fill-Light"}
+                    title={isBangla ? "ব্রাইটনেস ও ফিল-লাইট অন/অফ করুন" : "Toggle Brightness / Fill-Light"}
                   >
-                    <Sun className={`w-3.5 h-3.5 ${screenFillLight ? "text-slate-950 fill-slate-950" : "text-amber-400"}`} />
+                    <Sun className={`w-4 h-4 ${screenFillLight ? "text-slate-950 fill-slate-950" : "text-amber-400"}`} />
+                    <span>{screenFillLight ? (isBangla ? "ব্রাইটনেস অন" : "Brightness On") : (isBangla ? "ব্রাইটনেস" : "Brightness")}</span>
                   </button>
 
-                  {/* Audio Toggle */}
-                  <button
-                    type="button"
-                    onClick={() => setSoundEnabled(!soundEnabled)}
-                    title={soundEnabled ? (isBangla ? "সাউন্ড মিউট" : "Mute") : (isBangla ? "সাউন্ড অন" : "Unmute")}
-                    className="p-1.5 rounded-lg border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors cursor-pointer"
-                  >
-                    {soundEnabled ? <Volume2 className="w-3.5 h-3.5 text-teal-400" /> : <VolumeX className="w-3.5 h-3.5 text-slate-400" />}
-                  </button>
-
-                  {/* Super Admin Quick Policy Button */}
-                  {isSuperAdmin && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setTempModeAvailability(biometricSettings?.modeAvailability || "BOTH");
-                        setShowAdminSettingsModal(true);
-                      }}
-                      title={isBangla ? "সুপার অ্যাডমিন: কিওস্ক মোড পলিসি পরিবর্তন" : "Super Admin: Kiosk Mode Policy"}
-                      className="p-1.5 rounded-lg border border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 transition-colors cursor-pointer"
-                    >
-                      <Settings className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-
-                  {/* Close button if in modal */}
-                  {isModal && onClose && (
+                  {/* 2. Close Button */}
+                  {(isModal || onClose) && (
                     <button
                       type="button"
                       onClick={onClose}
-                      className="p-1.5 rounded-lg border border-slate-700 bg-slate-800 hover:bg-red-950/50 hover:border-red-500/50 text-slate-400 hover:text-red-300 transition-colors cursor-pointer"
-                      title="Close"
+                      className="p-1.5 rounded-xl border border-slate-700 bg-slate-800 hover:bg-red-950/60 hover:border-red-500/60 text-slate-300 hover:text-red-300 transition-colors cursor-pointer"
+                      title={isBangla ? "বন্ধ করুন" : "Close"}
                     >
-                      <X className="w-3.5 h-3.5" />
+                      <X className="w-4 h-4" />
                     </button>
                   )}
-
-                  <button
-                    onClick={handleResetScan}
-                    title="রিসেট"
-                    className="flex items-center gap-1 text-[11px] text-slate-400 hover:text-white transition-colors cursor-pointer"
-                  >
-                    <RefreshCw className="w-3.5 h-3.5" />
-                    <span>{isBangla ? "রিসেট" : "Reset"}</span>
-                  </button>
                 </div>
               </div>
 
               {/* Video Viewport Container */}
-              <div className="relative aspect-[4/3] bg-slate-950 flex items-center justify-center overflow-hidden">
+              <div className="relative aspect-[3/4] sm:aspect-[4/3] bg-black flex items-center justify-center overflow-hidden rounded-2xl">
                 {isCameraActive && !cameraError ? (
                   <video
                     ref={videoRef}
@@ -1339,7 +1110,7 @@ export const RealtimeFaceRecognitionView: React.FC<RealtimeFaceRecognitionViewPr
                     playsInline
                     muted
                     style={{
-                      filter: (screenFillLight || lowLightBoostEnabled || liveFaceAnalysis?.isLowLight)
+                      filter: screenFillLight
                         ? "brightness(1.36) contrast(1.22) saturate(1.15)"
                         : "none",
                     }}
@@ -1453,60 +1224,30 @@ export const RealtimeFaceRecognitionView: React.FC<RealtimeFaceRecognitionViewPr
                       )}
                     </div>
                     <div>
-                      <p className="font-bold text-white">
+                      <p className="font-bold text-white text-xs sm:text-sm">
                         {livenessStage === "VERIFIED"
                           ? isBangla
-                            ? "✓ অ্যান্টি-স্পুফিং সফল ও চেহারা নিশ্চিত"
-                            : "✓ Anti-Spoofing Verified"
-                          : livenessStage === "BLINK"
-                          ? livenessMode === "STEADY_GAZE"
-                            ? isBangla
-                              ? `ক্যামেরার দিকে স্থির তাকিয়ে থাকুন... (${steadyGazeProgress}%)`
-                              : `Hold steady gaze into camera... (${steadyGazeProgress}%)`
-                            : livenessMode === "SMILE"
-                            ? isBangla
-                              ? "মুখে হালকা হাসি দিন (Gentle Smile)"
-                              : "Please Smile at the Camera"
-                            : isBangla
-                            ? "চোখের পলক ফেলুন অথবা মুখে হালকা হাসি দিন (Smile)"
-                            : "Please Blink Naturally or Smile Gently"
+                            ? "✓ ভেরিফাইড • ব্যক্তি শনাক্ত করা হয়েছে"
+                            : "✓ Verified • Identity Confirmed"
                           : liveFaceAnalysis?.hasFace
                           ? isBangla
-                            ? "ক্যামেরার মাঝখানে সোজা তাকিয়ে থাকুন..."
-                            : "Keep face centered in the guide..."
+                            ? "চোখের পলক ফেলুন অথবা একটু হাসুন (Blink or Smile)"
+                            : "Please Blink Naturally or Smile Gently"
                           : isBangla
-                          ? "ফ্রেমের মধ্যে মুখ সোজা রাখুন"
+                          ? "ক্যামেরার সামনে মুখ সোজা রাখুন"
                           : "Align face inside the oval guide"}
                       </p>
-                      {livenessStage === "BLINK" && livenessMode === "STEADY_GAZE" && (
-                        <div className="w-48 bg-slate-800 h-1.5 rounded-full overflow-hidden mt-1.5">
-                          <div
-                            className="bg-teal-400 h-full transition-all duration-100"
-                            style={{ width: `${steadyGazeProgress}%` }}
-                          />
-                        </div>
-                      )}
                       <p className="text-[11px] text-slate-400 mt-0.5">
-                        {liveFaceAnalysis?.skinToneProfile?.description ||
-                          (isBangla ? "ক্যামেরা রেডি" : "Camera Ready")}
+                        {livenessStage === "VERIFIED"
+                          ? isBangla
+                            ? "উপস্থিতি নিশ্চিত করতে নিচের বাটনে চাপুন"
+                            : "Ready for attendance"
+                          : isBangla
+                          ? "স্বয়ংক্রিয় এআই স্ক্যানার সক্রিয়"
+                          : "Automatic AI scanner active"}
                       </p>
                     </div>
                   </div>
-
-                  {/* Manual trigger if lighting is bad or employee has glare/glasses */}
-                  {livenessStage === "BLINK" && (
-                    <button
-                      onClick={() => {
-                        setBlinkCompleted(true);
-                        setLivenessStage("VERIFIED");
-                        playSound("blink");
-                      }}
-                      className="text-[11px] px-3 py-1.5 bg-teal-600/30 hover:bg-teal-600/50 border border-teal-500/50 rounded-lg text-teal-200 font-bold whitespace-nowrap transition-colors cursor-pointer"
-                      title={isBangla ? "প্রতিকূল আলো বা ক্যামেরার ক্ষেত্রে সুপারভাইজার কর্তৃক সরাসরি উপস্থিতি অনুমোদন" : "Supervisor quick verify in low light"}
-                    >
-                      {isBangla ? "সুপারভাইজার ভেরিফাই" : "Supervisor Verify"}
-                    </button>
-                  )}
                 </div>
               </div>
 
@@ -1529,8 +1270,8 @@ export const RealtimeFaceRecognitionView: React.FC<RealtimeFaceRecognitionViewPr
                               : `✓ Biometric Match Confirmed (${matchResult.matchScore}%)`}
                           </span>
                         </div>
-                        <span className="bg-emerald-500/20 text-emerald-300 text-[10px] font-mono px-2 py-0.5 rounded-full border border-emerald-500/40">
-                          AI 128D Multi-Factor
+                        <span className="bg-emerald-500/20 text-emerald-300 text-[10px] font-bold px-2.5 py-0.5 rounded-full border border-emerald-500/40">
+                          {isBangla ? "বায়োমেট্রিক ভেরিফাইড" : "Biometric Verified"}
                         </span>
                       </div>
 
@@ -1647,24 +1388,46 @@ export const RealtimeFaceRecognitionView: React.FC<RealtimeFaceRecognitionViewPr
                     </div>
                   );
                 })()
-              ) : matchResult?.reason === "MISMATCH_LOW_CONFIDENCE" ? (
+              ) : matchResult?.reason === "MISMATCH_LOW_CONFIDENCE" || matchResult?.reason === "NO_PHOTO_ENROLLED" ? (
                 <div className="bg-slate-900/95 border-t border-red-500/50 backdrop-blur-md p-3 sm:p-4 space-y-2">
                   <div className="flex items-center justify-between text-xs text-red-400 font-bold">
                     <span className="flex items-center gap-1.5">
                       <AlertTriangle className="w-4 h-4 text-red-400" />
-                      <span>{isBangla ? `চেহারা মেলেনি (${matchResult.matchScore}%)` : `Mismatch (${matchResult.matchScore}%)`}</span>
+                      <span>
+                        {matchResult.reason === "NO_PHOTO_ENROLLED"
+                          ? isBangla
+                            ? "কোনো ফেস নিবন্ধিত নেই"
+                            : "No Enrolled Faces"
+                          : isBangla
+                          ? `চেহারা মেলেনি (${matchResult.matchScore}%)`
+                          : `Mismatch (${matchResult.matchScore}%)`}
+                      </span>
                     </span>
-                    <button
-                      onClick={handleResetScan}
-                      className="px-2.5 py-1 bg-red-600/30 hover:bg-red-600/50 border border-red-500/40 rounded-lg text-red-200 text-[11px] cursor-pointer"
-                    >
-                      {isBangla ? "পুনরায় চেষ্টা" : "Retry"}
-                    </button>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={handleResetScan}
+                        className="px-2.5 py-1 bg-red-600/30 hover:bg-red-600/50 border border-red-500/40 rounded-lg text-red-200 text-[11px] cursor-pointer"
+                      >
+                        {isBangla ? "পুনরায় চেষ্টা" : "Retry"}
+                      </button>
+                      {onOpenEnrollmentModal && (
+                        <button
+                          onClick={() => onOpenEnrollmentModal(currentEmployee || undefined)}
+                          className="px-2.5 py-1 bg-teal-600 hover:bg-teal-500 text-white rounded-lg text-[11px] font-semibold cursor-pointer shadow-sm"
+                        >
+                          {isBangla ? "এনরোল করুন" : "Enroll Face"}
+                        </button>
+                      )}
+                    </div>
                   </div>
                   <p className="text-[11px] text-slate-400">
-                    {isBangla
-                      ? "তালিকাভুক্ত কর্মচারীর সাথে কোনো মিল পাওয়া যায়নি। ফ্রেমের মাঝখানে সোজা দাঁড়ান অথবা সুপারভাইজারের সাহায্য নিন।"
-                      : "No enrolled match found. Re-align face or request supervisor assistance."}
+                    {matchResult.reason === "NO_PHOTO_ENROLLED"
+                      ? isBangla
+                        ? "ডাটাবেসে কোনো কর্মীর ফেস ডাটা নেই। আপনার চেহারা রেজিস্টার করতে 'এনরোল করুন' বাটনে চাপুন।"
+                        : "No biometric face data found. Click 'Enroll Face' to register your profile."
+                      : isBangla
+                      ? "তালিকাভুক্ত কর্মচারীর সাথে কোনো মিল পাওয়া যায়নি। ফ্রেমের মাঝখানে সোজা দাঁড়ান অথবা প্রোফাইলে ফেস এনরোল করুন।"
+                      : "No enrolled match found. Re-align face or register your face in profile."}
                   </p>
                 </div>
               ) : null}
@@ -1673,76 +1436,13 @@ export const RealtimeFaceRecognitionView: React.FC<RealtimeFaceRecognitionViewPr
 
           {/* 2. RECOGNITION RESULTS & ACTIONS: lg:col-span-5 space-y-4 */}
           <div className="order-2 lg:order-2 lg:col-span-5 space-y-4">
-            {/* Mode Specific Selector Toolbar for 1:1 Verification */}
-            {activeMode === "ONE_TO_ONE" && (
-              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-sm space-y-3">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                    {isBangla ? "ভেরিফাইয়ের জন্য কর্মচারী সিলেক্ট করুন" : "Select Target Employee to Verify"}
-                  </h3>
-                  <span className="text-xs text-teal-600 dark:text-teal-400 font-semibold">1:1 Mode</span>
-                </div>
-
-                {/* Employee Search */}
-                <div className="relative">
-                  <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
-                  <input
-                    type="text"
-                    value={employeeSearchQuery}
-                    onChange={(e) => setEmployeeSearchQuery(e.target.value)}
-                    placeholder={isBangla ? "নাম বা আইডি দিয়ে খুঁজুন..." : "Search name or code..."}
-                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl pl-9 pr-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-teal-500"
-                  />
-                </div>
-
-                {/* Dropdown Selector */}
-                <select
-                  value={selected1to1EmployeeId}
-                  onChange={(e) => setSelected1to1EmployeeId(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl p-2.5 text-xs text-slate-900 dark:text-white focus:outline-none cursor-pointer"
-                >
-                  {filteredEmployees1to1.map((emp) => (
-                    <option key={emp.id} value={emp.id}>
-                      {emp.fullName} ({emp.employeeCode}) - {emp.designationTitle}
-                    </option>
-                  ))}
-                </select>
-
-                {/* Target Employee Registered Photo Preview */}
-                {selectedTargetEmp && (
-                  <div className="flex items-center gap-3 p-3 bg-slate-100 dark:bg-slate-950/70 border border-slate-200 dark:border-slate-800/80 rounded-xl">
-                    <img
-                      src={selectedTargetEmp.faceRegisteredPhoto || selectedTargetEmp.avatarUrl}
-                      alt={selectedTargetEmp.fullName}
-                      className="w-12 h-12 rounded-xl object-cover border border-slate-300 dark:border-slate-700"
-                    />
-                    <div className="text-xs">
-                      <p className="font-bold text-slate-900 dark:text-white">{selectedTargetEmp.fullName}</p>
-                      <p className="text-slate-500 dark:text-slate-400 font-mono text-[11px]">
-                        {selectedTargetEmp.employeeCode} | {selectedTargetEmp.departmentName}
-                      </p>
-                      <span className="text-[10px] text-teal-600 dark:text-teal-400 font-medium">
-                        {selectedTargetEmp.faceRegisteredPhoto ? "✓ রেজিস্টার্ড ফেস ফটো অন-ফাইল" : "অবতার ফটো"}
-                      </span>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
             {/* RECOGNITION STATUS & IDENTITY CARD (Desktop full-view, hidden on mobile since mobile shows in-camera profile) */}
             <div className="hidden lg:block bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm space-y-4">
               <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
                 <h2 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
                   <ScanFace className="w-4 h-4 text-teal-500" />
                   <span>
-                    {activeMode === "AUTO_KIOSK"
-                      ? isBangla
-                        ? "স্বয়ংক্রিয় শনাক্তকরণ ফলাফল"
-                        : "Auto-Recognition Result"
-                      : isBangla
-                      ? "ভেরিফিকেশন যাচাই ফলাফল"
-                      : "Verification Result"}
+                    {isBangla ? "স্বয়ংক্রিয় শনাক্তকরণ ফলাফল" : "Auto-Recognition Result"}
                   </span>
                 </h2>
                 <span
@@ -1769,9 +1469,9 @@ export const RealtimeFaceRecognitionView: React.FC<RealtimeFaceRecognitionViewPr
               </div>
 
               {/* CASE 1: MATCH SUCCESS */}
-              {matchResult?.matched && (matchResult.matchedEmployee || selectedTargetEmp) ? (
+              {matchResult?.matched && matchResult.matchedEmployee ? (
                 (() => {
-                  const emp = matchResult.matchedEmployee || selectedTargetEmp!;
+                  const emp = matchResult.matchedEmployee;
                   return (
                     <div className="space-y-4 animate-in fade-in zoom-in duration-200">
                       {/* Employee Profile Preview */}
@@ -1972,25 +1672,37 @@ export const RealtimeFaceRecognitionView: React.FC<RealtimeFaceRecognitionViewPr
                     </div>
                   );
                 })()
-              ) : matchResult?.reason === "MISMATCH_LOW_CONFIDENCE" ? (
-                /* CASE 2: UNRECOGNIZED PERSON / MISMATCH */
+              ) : matchResult?.reason === "MISMATCH_LOW_CONFIDENCE" || matchResult?.reason === "NO_PHOTO_ENROLLED" ? (
+                /* CASE 2: UNRECOGNIZED PERSON / MISMATCH / NO ENROLLED */
                 <div className="space-y-4 animate-in fade-in zoom-in duration-200">
                   <div className="p-4 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/40 rounded-xl space-y-2">
                     <div className="flex items-center gap-2 text-red-600 dark:text-red-400 font-bold text-xs">
                       <AlertTriangle className="w-4 h-4" />
-                      <span>{isBangla ? "চেহারা ম্যাচ হয়নি / অচেনা ব্যক্তি" : "Face Mismatch / Unknown Person"}</span>
+                      <span>
+                        {matchResult.reason === "NO_PHOTO_ENROLLED"
+                          ? isBangla
+                            ? "ডাটাবেসে কোনো ফেস নিবন্ধিত নেই"
+                            : "No Enrolled Face Templates"
+                          : isBangla
+                          ? `চেহারা ম্যাচ হয়নি / অচেনা ব্যক্তি (${matchResult.matchScore}%)`
+                          : `Face Mismatch / Unknown Person (${matchResult.matchScore}%)`}
+                      </span>
                     </div>
                     <p className="text-xs text-slate-600 dark:text-slate-300">
-                      {isBangla
+                      {matchResult.reason === "NO_PHOTO_ENROLLED"
+                        ? isBangla
+                          ? "ডাটাবেসে এখনো কোনো কর্মীর ফেস নিবন্ধিত নেই। অনুগ্রহ করে প্রথমে আপনার প্রোফাইলে ফেস এনরোল করুন।"
+                          : "No enrolled face templates exist in database. Please enroll your face first."
+                        : isBangla
                         ? "ক্যামেরার সামনে থাকা ব্যক্তির চেহারার সাথে ডাটাবেজের নিবন্ধিত কোনো কর্মচারীর মিল পাওয়া যায়নি।"
                         : "Live face does not match any enrolled employee profile in the database."}
                     </p>
                     <div className="text-[11px] text-slate-500 dark:text-slate-400 bg-red-100/50 dark:bg-red-950/40 p-2.5 rounded-lg border border-red-200/50 dark:border-red-900/30">
                       <p>
-                        <strong>{isBangla ? "নিরাপত্তা কারণ:" : "Safety Filter:"}</strong>{" "}
+                        <strong>{isBangla ? "নিরাপত্তা নীতি:" : "Biometric Safety Policy:"}</strong>{" "}
                         {isBangla
-                          ? "স্কিন টোন বা ফেসিয়াল হেয়ারের পার্থক্য (যেমন: সাদা দাড়ি বনাম ক্লিন-শেভড) থাকায় ভুল প্রোফাইলে মিল ঘটানো প্রতিরোধ করা হয়েছে।"
-                          : "Strict multi-factor checks prevented false matches against non-identical staff."}
+                          ? "ফেস-এপিআই এর কঠোর গাণিতিক ভেক্টর বিশ্লেষণ (Euclidean Distance <= 0.48) দ্বারা ভুল প্রোফাইলে মিল ঘটানো শতভাগ প্রতিরোধ করা হয়।"
+                          : "Strict neural vector distance checks (Euclidean Distance <= 0.48) prevent false positive identifications."}
                       </p>
                     </div>
                   </div>
@@ -1998,14 +1710,14 @@ export const RealtimeFaceRecognitionView: React.FC<RealtimeFaceRecognitionViewPr
                   <div className="flex items-center gap-2">
                     <button
                       onClick={handleResetScan}
-                      className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-semibold text-xs rounded-xl transition-colors"
+                      className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-semibold text-xs rounded-xl transition-colors cursor-pointer"
                     >
                       {isBangla ? "পুনরায় স্ক্যান করুন" : "Rescan Camera"}
                     </button>
                     {onOpenEnrollmentModal && (
                       <button
-                        onClick={() => onOpenEnrollmentModal()}
-                        className="flex-1 py-2.5 bg-teal-600 hover:bg-teal-500 text-white font-semibold text-xs rounded-xl shadow transition-colors"
+                        onClick={() => onOpenEnrollmentModal(currentEmployee || undefined)}
+                        className="flex-1 py-2.5 bg-teal-600 hover:bg-teal-500 text-white font-semibold text-xs rounded-xl shadow transition-colors cursor-pointer"
                       >
                         {isBangla ? "নতুন ফেস এনরোল করুন" : "Enroll Face Photo"}
                       </button>
@@ -2298,17 +2010,17 @@ export const RealtimeFaceRecognitionView: React.FC<RealtimeFaceRecognitionViewPr
   if (isModal) {
     return (
       <div
-        className={`fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 overflow-y-auto transition-colors duration-300 ${
+        className={`fixed inset-0 z-50 flex flex-col items-center justify-center p-0 sm:p-4 overflow-y-auto transition-colors duration-300 ${
           screenFillLight
             ? "bg-white text-slate-900 shadow-[inset_0_0_200px_rgba(255,255,255,1)]"
-            : "bg-slate-950/85 backdrop-blur-md"
+            : "bg-slate-950 sm:bg-slate-950/85 sm:backdrop-blur-md"
         }`}
       >
         <div
-          className={`relative w-full max-w-7xl max-h-[96dvh] overflow-y-auto rounded-3xl shadow-2xl p-3 sm:p-5 pb-28 sm:pb-5 space-y-4 transition-all duration-300 touch-pan-y ${
+          className={`relative w-full h-full sm:h-auto sm:max-w-4xl sm:max-h-[94vh] overflow-y-auto sm:rounded-3xl shadow-2xl p-2 sm:p-4 space-y-3 transition-all duration-300 ${
             screenFillLight
-              ? "bg-slate-900 border-4 border-amber-300 ring-8 ring-amber-300/30"
-              : "bg-slate-900 border border-slate-800"
+              ? "bg-white text-slate-900 border-0 sm:border-4 sm:border-amber-300 sm:ring-8 sm:ring-amber-300/30"
+              : "bg-slate-950 sm:bg-slate-900 border-0 sm:border sm:border-slate-800 text-white"
           }`}
         >
           {mainContent}

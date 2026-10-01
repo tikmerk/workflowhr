@@ -59,7 +59,7 @@ import {
   subscribeToDeletedEmployees,
 } from "./services/firestoreService";
 import { compressAndOptimizeImage } from "./utils/imageCompression";
-import { invalidateEmployeeFaceCache } from "./utils/faceRecognitionEngine";
+import { invalidateEmployeeFaceCache, loadFaceApiModels } from "./utils/faceRecognitionEngine";
 
 // Views
 import { LoginView } from "./components/views/LoginView";
@@ -492,6 +492,11 @@ function AppContent() {
     initializeFirestoreDatabase().catch((err) => {
       console.warn("Firestore database initialization notice:", err);
     });
+
+    // 2. Pre-warm AI face recognition models in background immediately for instant camera startup
+    setTimeout(() => {
+      loadFaceApiModels().catch(() => {});
+    }, 400);
 
     // 2. Realtime Subscriptions
     const unsubEmployees = subscribeToEmployees((updatedEmps) => {

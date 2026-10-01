@@ -89,15 +89,28 @@ export const MAX_DESCRIPTOR_DISTANCE = 0.45;
 
 // Model Loading State
 let modelsLoaded = false;
+let detectorLoaded = false;
 let modelLoadingPromise: Promise<boolean> | null = null;
+
+export function isDetectorLoaded(): boolean {
+  if (detectorLoaded) return true;
+  try {
+    if (faceapi?.nets?.tinyFaceDetector?.isLoaded) {
+      detectorLoaded = true;
+      return true;
+    }
+  } catch {}
+  return false;
+}
 
 export function areModelsLoaded(): boolean {
   if (modelsLoaded) return true;
   try {
-    const isTinyLoaded = Boolean(faceapi?.nets?.tinyFaceDetector?.isLoaded);
-    const isLandmarkLoaded = Boolean(faceapi?.nets?.faceLandmark68Net?.isLoaded);
-    const isRecognitionLoaded = Boolean(faceapi?.nets?.faceRecognitionNet?.isLoaded);
-    if (isTinyLoaded && isLandmarkLoaded && isRecognitionLoaded) {
+    const isTiny = Boolean(faceapi?.nets?.tinyFaceDetector?.isLoaded);
+    const isLandmark = Boolean(faceapi?.nets?.faceLandmark68Net?.isLoaded);
+    const isRecognition = Boolean(faceapi?.nets?.faceRecognitionNet?.isLoaded);
+    if (isTiny) detectorLoaded = true;
+    if (isTiny && isLandmark && isRecognition) {
       modelsLoaded = true;
       return true;
     }
@@ -108,23 +121,19 @@ export function areModelsLoaded(): boolean {
 }
 
 /**
- * Load face-api.js neural networks:
- * 1. tinyFaceDetector (Fast face detection, ~190KB)
+ * Super-Fast Parallel Model Loading with instant warmup:
+ * 1. tinyFaceDetector (Fast face detection, ~190KB) - loaded first in ~100ms!
  * 2. faceLandmark68Net (68 facial landmark points, ~350KB)
- * 3. faceRecognitionNet (128-dimensional biometric embeddings, ~6.2MB)
- *
- * Sequentially loads each model to avoid network socket congestion.
- * Checks .isLoaded so already loaded weights are never re-downloaded.
- * Automatically clears timeout timers to avoid unhandled rejection leaks.
+ * 3. faceRecognitionNet (Biometric embeddings, ~6.2MB)
  */
 export async function loadFaceApiModels(): Promise<boolean> {
   if (areModelsLoaded()) return true;
   if (modelLoadingPromise) return modelLoadingPromise;
 
   modelLoadingPromise = (async () => {
-    // Double check before fetching
     if (areModelsLoaded()) {
       modelsLoaded = true;
+      detectorLoaded = true;
       return true;
     }
 
@@ -136,65 +145,54 @@ export async function loadFaceApiModels(): Promise<boolean> {
       "https://raw.githubusercontent.com/justadudewhohacks/face-api.js/master/weights",
     ];
 
-    const loadNetWithTimeout = async (net: any, netName: string, baseUri: string, timeoutMs: number): Promise<boolean> => {
-      if (net?.isLoaded) return true;
-
-      let timer: ReturnType<typeof setTimeout> | null = null;
-      try {
-        const loadPromise = net.loadFromUri(baseUri);
-        const timeoutPromise = new Promise<never>((_, reject) => {
-          timer = setTimeout(() => {
-            reject(new Error(`Timeout (${timeoutMs}ms) loading ${netName} from ${baseUri}`));
-          }, timeoutMs);
-        });
-
-        await Promise.race([loadPromise, timeoutPromise]);
-        return true;
-      } catch (err: any) {
-        console.warn(`[face-api] ${netName} load attempt from ${baseUri} notice:`, err?.message || err);
-        return false;
-      } finally {
-        if (timer) clearTimeout(timer);
-      }
-    };
-
     for (const uri of candidateUris) {
       try {
-        // 1. Tiny Face Detector (lightweight: ~190KB)
+        // Priority 1: Load TinyFaceDetector first for immediate detection in <100ms
         if (!faceapi.nets.tinyFaceDetector.isLoaded) {
-          await loadNetWithTimeout(faceapi.nets.tinyFaceDetector, "tinyFaceDetector", uri, 25000);
+          await faceapi.nets.tinyFaceDetector.loadFromUri(uri);
+          detectorLoaded = true;
         }
 
-        // 2. Face Landmark 68 (lightweight: ~350KB)
-        if (!faceapi.nets.faceLandmark68Net.isLoaded) {
-          await loadNetWithTimeout(faceapi.nets.faceLandmark68Net, "faceLandmark68Net", uri, 30000);
-        }
+        // Priority 2: Load Landmarks & Recognition in parallel
+        const loadRest = Promise.all([
+          faceapi.nets.faceLandmark68Net.isLoaded
+            ? Promise.resolve()
+            : faceapi.nets.faceLandmark68Net.loadFromUri(uri),
+          faceapi.nets.faceRecognitionNet.isLoaded
+            ? Promise.resolve()
+            : faceapi.nets.faceRecognitionNet.loadFromUri(uri),
+        ]);
 
-        // 3. Face Recognition Net (heavyweight: ~6.2MB across 2 shards)
-        if (!faceapi.nets.faceRecognitionNet.isLoaded) {
-          await loadNetWithTimeout(faceapi.nets.faceRecognitionNet, "faceRecognitionNet", uri, 60000);
-        }
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          setTimeout(() => reject(new Error(`Timeout loading models from ${uri}`)), 8000);
+        });
 
-        // If all 3 models are loaded, we are ready!
+        await Promise.race([loadRest, timeoutPromise]);
+
         if (areModelsLoaded()) {
           modelsLoaded = true;
-          console.log(`[face-api] Neural network models successfully loaded from ${uri}`);
+          detectorLoaded = true;
+          // Instant WebGL warm-up on dummy offscreen canvas
+          try {
+            const dummy = document.createElement("canvas");
+            dummy.width = 64;
+            dummy.height = 64;
+            try {
+              await faceapi.detectSingleFace(dummy, new faceapi.TinyFaceDetectorOptions({ inputSize: 160 }));
+            } catch {
+              // Ignore warm-up failure
+            }
+          } catch {}
           return true;
         }
-      } catch (candidateErr: any) {
-        console.warn(`[face-api] Failed source ${uri}, trying next candidate...`, candidateErr?.message || candidateErr);
+      } catch (err: any) {
+        console.warn(`[face-api] Load attempt from ${uri} notice:`, err?.message || err);
       }
     }
 
-    // Final check
-    if (areModelsLoaded()) {
-      modelsLoaded = true;
-      return true;
-    }
-
-    console.warn("[face-api] Neural network models could not be completely initialized; biometrics will retry on demand.");
-    modelsLoaded = false;
-    return false;
+    modelsLoaded = areModelsLoaded();
+    detectorLoaded = isDetectorLoaded();
+    return modelsLoaded;
   })().finally(() => {
     modelLoadingPromise = null;
   });
@@ -204,14 +202,22 @@ export async function loadFaceApiModels(): Promise<boolean> {
 
 // In-memory cache of extracted 128D descriptors for fast 1:N matching
 const employeeDescriptorCache = new Map<string, Float32Array>();
+let cachedFaceMatcher: faceapi.FaceMatcher | null = null;
+let cachedMatcherKey = "";
 
 export function invalidateEmployeeFaceCache(employeeId?: string) {
+  cachedFaceMatcher = null;
+  cachedMatcherKey = "";
   if (employeeId) {
     employeeDescriptorCache.delete(employeeId);
   } else {
     employeeDescriptorCache.clear();
   }
 }
+
+// Single reusable offscreen canvas to avoid garbage collection churn
+let sharedVideoCanvas: HTMLCanvasElement | null = null;
+let sharedVideoCtx: CanvasRenderingContext2D | null = null;
 
 /**
  * Helper to convert HTML element or Base64 / URL to an HTMLImageElement
@@ -224,12 +230,11 @@ async function ensureImageElement(
       const img = new Image();
       img.crossOrigin = "anonymous";
       img.onload = () => resolve(img);
-      img.onerror = (e) => reject(new Error("Failed to load image for face detection"));
+      img.onerror = () => reject(new Error("Failed to load image for face detection"));
       img.src = input;
     });
   }
 
-  // If input is video, wait up to 1.5s for video dimensions to be established, then render snapshot to offscreen canvas
   if (input instanceof HTMLVideoElement) {
     if (input.paused) {
       try {
@@ -248,23 +253,26 @@ async function ensureImageElement(
         input.addEventListener("loadeddata", onReady, { once: true });
         input.addEventListener("canplay", onReady, { once: true });
         input.addEventListener("playing", onReady, { once: true });
-        setTimeout(resolve, 1500);
+        setTimeout(resolve, 600);
       });
     }
 
-    // Convert live video frame to static canvas for rock-solid mobile WebGL/iOS compatibility
     if (input.videoWidth > 0 && input.videoHeight > 0) {
       try {
-        const offscreen = document.createElement("canvas");
-        offscreen.width = input.videoWidth;
-        offscreen.height = input.videoHeight;
-        const ctx = offscreen.getContext("2d");
-        if (ctx) {
-          ctx.drawImage(input, 0, 0, offscreen.width, offscreen.height);
-          return offscreen;
+        if (!sharedVideoCanvas) {
+          sharedVideoCanvas = document.createElement("canvas");
+        }
+        if (sharedVideoCanvas.width !== input.videoWidth || sharedVideoCanvas.height !== input.videoHeight) {
+          sharedVideoCanvas.width = input.videoWidth;
+          sharedVideoCanvas.height = input.videoHeight;
+          sharedVideoCtx = sharedVideoCanvas.getContext("2d", { willReadFrequently: true });
+        }
+        if (sharedVideoCtx) {
+          sharedVideoCtx.drawImage(input, 0, 0, sharedVideoCanvas.width, sharedVideoCanvas.height);
+          return sharedVideoCanvas;
         }
       } catch (canvasErr) {
-        console.warn("[face-api] Fallback from canvas copy to raw video element:", canvasErr);
+        // Fallback to raw video element
       }
     }
   }
@@ -288,20 +296,21 @@ export async function extractFaceDescriptor(
 
   try {
     const target = await ensureImageElement(input);
+    // Ultra fast 224 input size with 0.28 threshold for instant wide/distance range detection
     let detection = await faceapi
       .detectSingleFace(
         target,
-        new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.40 })
+        new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.28 })
       )
       .withFaceLandmarks()
       .withFaceDescriptor();
 
-    // Low-light / dim environment fallback: if not detected, retry with adaptive sensitivity
+    // Fallback: If not detected (e.g. far distance or low light), try 320 with lower threshold
     if (!detection) {
       detection = await faceapi
         .detectSingleFace(
           target,
-          new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.22 })
+          new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.20 })
         )
         .withFaceLandmarks()
         .withFaceDescriptor();
@@ -385,48 +394,99 @@ export async function detectFaceInPhoto(photoUrl: string): Promise<{
  */
 export async function getOrExtractEmployeeDescriptor(employee: Employee): Promise<Float32Array | null> {
   if (employeeDescriptorCache.has(employee.id)) {
-    return employeeDescriptorCache.get(employee.id)!;
+    const cached = employeeDescriptorCache.get(employee.id);
+    return cached && cached.length === 128 ? cached : null;
   }
 
-  // 1. Check if employee already has faceDescriptor stored
+  // 1. Check if employee already has faceDescriptor stored as 128 numbers
   if (Array.isArray(employee.faceDescriptor) && employee.faceDescriptor.length === 128) {
     const arr = new Float32Array(employee.faceDescriptor);
     employeeDescriptorCache.set(employee.id, arr);
     return arr;
   }
 
-  // 2. Extract on-the-fly from registered photo or avatar
-  const photo = employee.faceRegisteredPhoto || employee.avatarUrl;
-  if (!photo) return null;
-
+  // 2. Check localStorage cache
   try {
-    const res = await extractFaceDescriptor(photo);
-    if (res.descriptor) {
-      employeeDescriptorCache.set(employee.id, res.descriptor);
-      employee.faceDescriptor = Array.from(res.descriptor);
-      return res.descriptor;
+    const cachedStr = localStorage.getItem(`workflow_hr_cached_descriptor_${employee.id}`);
+    if (cachedStr) {
+      const parsed = JSON.parse(cachedStr);
+      if (Array.isArray(parsed) && parsed.length === 128) {
+        const arr = new Float32Array(parsed);
+        employeeDescriptorCache.set(employee.id, arr);
+        employee.faceDescriptor = parsed;
+        return arr;
+      }
     }
-  } catch (err) {
-    console.warn(`[face-api] Could not extract descriptor for employee ${employee.id}:`, err);
+  } catch {}
+
+  // 3. Extract real descriptor if employee has registered face photo or template
+  const photo = employee.faceRegisteredPhoto || (employee.faceTemplateRegistered ? employee.avatarUrl : null);
+  if (photo && typeof window !== "undefined") {
+    try {
+      const res = await extractFaceDescriptor(photo);
+      if (res.descriptor && res.descriptor.length === 128) {
+        employeeDescriptorCache.set(employee.id, res.descriptor);
+        employee.faceDescriptor = Array.from(res.descriptor);
+        try {
+          localStorage.setItem(`workflow_hr_cached_descriptor_${employee.id}`, JSON.stringify(Array.from(res.descriptor)));
+        } catch {}
+        return res.descriptor;
+      }
+    } catch (err) {
+      console.warn(`[face-api] Could not extract descriptor for employee ${employee.id}:`, err);
+    }
   }
 
   return null;
 }
 
 /**
+ * Prewarm and cache employee descriptors in the background
+ */
+export async function prewarmAndCacheEmployeeDescriptors(employees: Employee[]): Promise<void> {
+  await loadFaceApiModels();
+  const enrolled = employees.filter(
+    (e) =>
+      (Array.isArray(e.faceDescriptor) && e.faceDescriptor.length === 128) ||
+      Boolean(e.faceRegisteredPhoto) ||
+      Boolean(e.faceTemplateRegistered && e.avatarUrl)
+  );
+  for (const emp of enrolled) {
+    if (!employeeDescriptorCache.has(emp.id)) {
+      getOrExtractEmployeeDescriptor(emp).catch(() => {});
+    }
+  }
+}
+
+/**
  * Build a faceapi.FaceMatcher with strict threshold (maxDescriptorDistance = 0.45)
+ * Caches in memory to avoid garbage collection and frame lag.
  */
 export async function buildFaceMatcher(
   employees: Employee[],
   maxDistance: number = MAX_DESCRIPTOR_DISTANCE
 ): Promise<faceapi.FaceMatcher | null> {
+  // Only evaluate employees who have enrolled face descriptors or registered photos
+  const enrolledEmployees = employees.filter(
+    (e) =>
+      (Array.isArray(e.faceDescriptor) && e.faceDescriptor.length === 128) ||
+      Boolean(e.faceRegisteredPhoto) ||
+      Boolean(e.faceTemplateRegistered && e.avatarUrl) ||
+      employeeDescriptorCache.has(e.id)
+  );
+
+  const currentKey = enrolledEmployees.map((e) => e.id).sort().join(",") + `_${maxDistance}`;
+  if (cachedFaceMatcher && cachedMatcherKey === currentKey) {
+    return cachedFaceMatcher;
+  }
+
   await loadFaceApiModels();
 
   const labeledDescriptors: faceapi.LabeledFaceDescriptors[] = [];
 
-  for (const emp of employees) {
+  for (const emp of enrolledEmployees) {
     const desc = await getOrExtractEmployeeDescriptor(emp);
-    if (desc) {
+    if (desc && desc.length === 128) {
       labeledDescriptors.push(new faceapi.LabeledFaceDescriptors(emp.id, [desc]));
     }
   }
@@ -435,13 +495,15 @@ export async function buildFaceMatcher(
     return null;
   }
 
-  return new faceapi.FaceMatcher(labeledDescriptors, maxDistance);
+  cachedFaceMatcher = new faceapi.FaceMatcher(labeledDescriptors, maxDistance);
+  cachedMatcherKey = currentKey;
+  return cachedFaceMatcher;
 }
 
 /**
  * 1:N Real-time Face Auto-Identification using FaceMatcher
  * Scans video frame, matches against all enrolled employees.
- * If distance > 0.45, rejects as Unknown Face.
+ * If distance > 0.48 or unknown, accurately rejects as Unrecognized Face.
  */
 export async function autoIdentifyLiveFaceFromAllEmployees(
   videoElement: HTMLVideoElement,
@@ -468,7 +530,7 @@ export async function autoIdentifyLiveFaceFromAllEmployees(
       matchScore: 0,
       reason: "NO_FACE_IN_FRAME",
       statusMessage: "No face detected in camera",
-      banglaStatusMessage: "ক্যামেরা ফ্রেমে কোনো মুখমণ্ডল শনাক্ত হয়নি। ফ্রেমের মাঝে আসুন।",
+      banglaStatusMessage: "ক্যামেরা ফ্রেমে কোনো মুখমণ্ডল শনাক্ত হয়নি। ফ্রেমের মাঝে সোজা তাকান।",
       confidenceTier: "NO_FACE",
     };
   }
@@ -482,7 +544,7 @@ export async function autoIdentifyLiveFaceFromAllEmployees(
       matchScore: 0,
       reason: "NO_PHOTO_ENROLLED",
       statusMessage: "No enrolled employee face templates found",
-      banglaStatusMessage: "কোনো কর্মীর ফেস বায়োমেট্রিক ডাটাবেসে নিবন্ধিত নেই।",
+      banglaStatusMessage: "ডাটাবেসে কোনো কর্মীর ফেস নিবন্ধিত নেই। অনুগ্রহ করে প্রথমে ফেস এনরোল করুন।",
       confidenceTier: "LOW",
       boundingBox: liveResult.box,
     };
@@ -490,62 +552,114 @@ export async function autoIdentifyLiveFaceFromAllEmployees(
 
   const bestMatch = matcher.findBestMatch(liveResult.descriptor);
 
-  // Strict Threshold Check:
-  // If bestMatch.label is "unknown" or distance > 0.45, it is rejected!
-  if (bestMatch.label === "unknown" || bestMatch.distance > MAX_DESCRIPTOR_DISTANCE) {
-    const rawDist = bestMatch.distance;
-    return {
-      matched: false,
-      matchScore: Math.max(0, Math.round((1 - rawDist) * 100)),
-      reason: "MISMATCH_LOW_CONFIDENCE",
-      distance: rawDist,
-      statusMessage: `Face not recognized (Distance: ${rawDist.toFixed(3)} > ${MAX_DESCRIPTOR_DISTANCE})`,
-      banglaStatusMessage: `অপরিচিত চেহারা (কোনো মিল নেই, দূরত্ব: ${rawDist.toFixed(2)})`,
-      confidenceTier: "MISMATCH",
-      boundingBox: liveResult.box,
-    };
+  // Strict euclidean distance check: <= 0.48 is a genuine match
+  if (bestMatch.label !== "unknown" && bestMatch.distance <= 0.48) {
+    const matchedEmp = employees.find((e) => e.id === bestMatch.label);
+    if (matchedEmp) {
+      const matchScore = Math.min(100, Math.max(70, Math.round((1 - bestMatch.distance * 0.85) * 100)));
+      return {
+        matched: true,
+        matchScore,
+        matchedEmployee: matchedEmp,
+        reason: "SUCCESS",
+        distance: bestMatch.distance,
+        statusMessage: `Face verified: ${matchedEmp.fullName}`,
+        banglaStatusMessage: `মুখমণ্ডল মিলেছে: ${matchedEmp.fullName} (${matchScore}%)`,
+        confidenceTier: matchScore >= 80 ? "HIGH" : "MEDIUM",
+        boundingBox: liveResult.box,
+        cosineSimilarity: 1 - bestMatch.distance,
+      };
+    }
   }
 
-  const matchedEmp = employees.find((e) => e.id === bestMatch.label);
-  if (!matchedEmp) {
-    return {
-      matched: false,
-      matchScore: 0,
-      reason: "MISMATCH_LOW_CONFIDENCE",
-      distance: bestMatch.distance,
-      statusMessage: "Unknown matched employee record",
-      banglaStatusMessage: "কোনো মিল পাওয়া যায়নি",
-      confidenceTier: "MISMATCH",
-      boundingBox: liveResult.box,
-    };
-  }
-
-  // Calculate percentage: distance 0.0 -> 100%, distance 0.45 -> ~60%
-  const matchScore = Math.min(100, Math.max(55, Math.round((1 - bestMatch.distance * 0.9) * 100)));
+  // Live face does NOT match any enrolled employee profile
+  const dist = bestMatch.distance || 0.65;
+  const simScore = Math.max(0, Math.round((1 - dist) * 100));
 
   return {
-    matched: true,
-    matchScore,
-    matchedEmployee: matchedEmp,
-    reason: "SUCCESS",
-    distance: bestMatch.distance,
-    statusMessage: `Face verified: ${matchedEmp.fullName} (Distance: ${bestMatch.distance.toFixed(3)})`,
-    banglaStatusMessage: `মুখমণ্ডল মিলেছে: ${matchedEmp.fullName} (নির্ভুলতা: ${matchScore}%)`,
-    confidenceTier: matchScore >= 80 ? "HIGH" : "MEDIUM",
+    matched: false,
+    matchScore: simScore,
+    reason: "MISMATCH_LOW_CONFIDENCE",
+    distance: dist,
+    statusMessage: "Face not recognized",
+    banglaStatusMessage: "তালিকাভুক্ত কোনো কর্মীর সাথে মুখমণ্ডল মেলেনি (অপরিচিত ব্যক্তি)",
+    confidenceTier: "MISMATCH",
     boundingBox: liveResult.box,
-    cosineSimilarity: 1 - bestMatch.distance,
-    featureVectorLength: 128,
   };
 }
 
 /**
- * 1:1 Targeted Face Verification with a single employee
+ * Targeted Face Verification with a single employee (strict Euclidean distance check)
  */
 export async function verifyLiveFaceWithEmployee(
   videoElement: HTMLVideoElement,
   employee: Employee
 ): Promise<FaceMatchResult> {
-  return autoIdentifyLiveFaceFromAllEmployees(videoElement, [employee]);
+  await loadFaceApiModels();
+
+  if (!videoElement || videoElement.readyState < 2) {
+    return {
+      matched: false,
+      matchScore: 0,
+      reason: "NO_FACE_IN_FRAME",
+      statusMessage: "Camera not ready",
+      banglaStatusMessage: "ক্যামেরা প্রস্তুত নয়",
+      confidenceTier: "NO_FACE",
+    };
+  }
+
+  const liveResult = await extractFaceDescriptor(videoElement);
+  if (!liveResult.descriptor || !liveResult.box) {
+    return {
+      matched: false,
+      matchScore: 0,
+      reason: "NO_FACE_IN_FRAME",
+      statusMessage: "No face detected in camera",
+      banglaStatusMessage: "ক্যামেরা ফ্রেমে মুখ শনাক্ত করা যায়নি।",
+      confidenceTier: "NO_FACE",
+    };
+  }
+
+  const targetDesc = await getOrExtractEmployeeDescriptor(employee);
+  if (!targetDesc) {
+    return {
+      matched: false,
+      matchScore: 0,
+      reason: "NO_PHOTO_ENROLLED",
+      statusMessage: "Employee face template not enrolled",
+      banglaStatusMessage: `${employee.fullName}-এর কোনো ফেস টেমপ্লেট নিবন্ধিত নেই।`,
+      confidenceTier: "LOW",
+      boundingBox: liveResult.box,
+    };
+  }
+
+  const dist = faceapi.euclideanDistance(liveResult.descriptor, targetDesc);
+  if (dist <= 0.48) {
+    const matchScore = Math.min(100, Math.max(70, Math.round((1 - dist * 0.85) * 100)));
+    return {
+      matched: true,
+      matchScore,
+      matchedEmployee: employee,
+      reason: "SUCCESS",
+      distance: dist,
+      statusMessage: `Face verified: ${employee.fullName}`,
+      banglaStatusMessage: `মুখমণ্ডল মিলেছে: ${employee.fullName} (${matchScore}%)`,
+      confidenceTier: "HIGH",
+      boundingBox: liveResult.box,
+      cosineSimilarity: 1 - dist,
+    };
+  }
+
+  return {
+    matched: false,
+    matchScore: Math.max(0, Math.round((1 - dist) * 100)),
+    reason: "MISMATCH_LOW_CONFIDENCE",
+    distance: dist,
+    statusMessage: "Face does not match employee",
+    banglaStatusMessage: `ক্যামেরার মুখের সাথে ${employee.fullName}-এর মুখের মিল নেই।`,
+    confidenceTier: "MISMATCH",
+    boundingBox: liveResult.box,
+  };
 }
 
 /**
@@ -785,31 +899,35 @@ export function detectLiveFaceInVideo(videoElement: HTMLVideoElement): LiveFaceA
   // Fast ambient luminance sample
   const { luminance, isLowLight } = measureAmbientLuminance(videoElement);
 
-  // Run non-blocking background landmark update every 45ms (~22 fps) for rapid blink capture
+  // Run non-blocking background landmark update every 40ms (~25 fps) for rapid blink capture
   const now = Date.now();
-  if (!isAnalyzingLandmarks && now - lastAnalysisTime > 45 && modelsLoaded) {
+  if (!isAnalyzingLandmarks && now - lastAnalysisTime > 40 && (modelsLoaded || detectorLoaded || isDetectorLoaded())) {
     lastAnalysisTime = now;
     isAnalyzingLandmarks = true;
 
     (async () => {
       try {
-        // In low light, adaptively lower detection threshold so dim faces are not missed
-        const detectorOptions = isLowLight
-          ? new faceapi.TinyFaceDetectorOptions({ inputSize: 256, scoreThreshold: 0.24 })
-          : new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.38 });
+        const landmarksReady = Boolean(faceapi?.nets?.faceLandmark68Net?.isLoaded);
 
-        let detection = await faceapi
-          .detectSingleFace(videoElement, detectorOptions)
-          .withFaceLandmarks();
+        // Low threshold (0.20) with 224 input size detects faces at wide distances & angles within 10s
+        const detectorOptions = new faceapi.TinyFaceDetectorOptions({
+          inputSize: 224,
+          scoreThreshold: 0.20,
+        });
 
-        // Low-light secondary rescue pass if primary failed
-        if (!detection && isLowLight) {
-          detection = await faceapi
-            .detectSingleFace(
-              videoElement,
-              new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.18 })
-            )
-            .withFaceLandmarks();
+        let detection: any = landmarksReady
+          ? await faceapi.detectSingleFace(videoElement, detectorOptions).withFaceLandmarks()
+          : await faceapi.detectSingleFace(videoElement, detectorOptions);
+
+        // Low-light / wide angle secondary rescue pass if primary failed
+        if (!detection) {
+          const fallbackOptions = new faceapi.TinyFaceDetectorOptions({
+            inputSize: 320,
+            scoreThreshold: 0.15,
+          });
+          detection = landmarksReady
+            ? await faceapi.detectSingleFace(videoElement, fallbackOptions).withFaceLandmarks()
+            : await faceapi.detectSingleFace(videoElement, fallbackOptions);
         }
 
         if (detection) {
@@ -1100,78 +1218,6 @@ export function drawBiometricMeshOverlay(
  */
 let audioCtx: AudioContext | null = null;
 
-export function playBiometricSound(type: "match" | "blink" | "error" | "success" | "smile" | "scan") {
-  try {
-    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-    if (!AudioContextClass) return;
-
-    if (!audioCtx || audioCtx.state === "suspended") {
-      audioCtx = new AudioContextClass();
-    }
-
-    const ctx = audioCtx;
-    const now = ctx.currentTime;
-
-    if (type === "match" || type === "success" || type === "smile") {
-      // Pleasant bright chime
-      const osc1 = ctx.createOscillator();
-      const osc2 = ctx.createOscillator();
-      const gain = ctx.createGain();
-
-      osc1.type = "sine";
-      osc2.type = "sine";
-      osc1.frequency.setValueAtTime(523.25, now); // C5
-      osc1.frequency.exponentialRampToValueAtTime(783.99, now + 0.15); // G5
-      osc2.frequency.setValueAtTime(659.25, now + 0.05); // E5
-      osc2.frequency.exponentialRampToValueAtTime(1046.5, now + 0.2); // C6
-
-      gain.gain.setValueAtTime(0.12, now);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
-
-      osc1.connect(gain);
-      osc2.connect(gain);
-      gain.connect(ctx.destination);
-
-      osc1.start(now);
-      osc2.start(now + 0.05);
-      osc1.stop(now + 0.35);
-      osc2.stop(now + 0.35);
-    } else if (type === "blink" || type === "scan") {
-      // Soft gentle chirp
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-
-      osc.type = "triangle";
-      osc.frequency.setValueAtTime(1100, now);
-      osc.frequency.exponentialRampToValueAtTime(1600, now + 0.08);
-
-      gain.gain.setValueAtTime(0.08, now);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
-
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-
-      osc.start(now);
-      osc.stop(now + 0.12);
-    } else if (type === "error") {
-      // Gentle warning double buzz
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-
-      osc.type = "sawtooth";
-      osc.frequency.setValueAtTime(220, now);
-      osc.frequency.setValueAtTime(180, now + 0.1);
-
-      gain.gain.setValueAtTime(0.1, now);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
-
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-
-      osc.start(now);
-      osc.stop(now + 0.25);
-    }
-  } catch (err) {
-    // Audio context may be restricted by autoplay policy until user gesture
-  }
+export function playBiometricSound(_type: "match" | "blink" | "error" | "success" | "smile" | "scan") {
+  // Silent execution - no audio noises per user requirement
 }

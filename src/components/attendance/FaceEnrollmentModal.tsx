@@ -405,7 +405,7 @@ export const FaceEnrollmentModal: React.FC<FaceEnrollmentModalProps> = ({
         } catch {}
       }
 
-      setVerificationProgressText("128D বায়োমেট্রিক ভেক্টর বিশ্লেষণ করা হচ্ছে...");
+      setVerificationProgressText("বায়োমেট্রিক বিশ্লেষণ করা হচ্ছে...");
 
       // Convert live frame to canvas to ensure 100% stable face detection on iOS/Android
       let inputTarget: HTMLVideoElement | HTMLCanvasElement = activeVideo;
@@ -666,8 +666,8 @@ export const FaceEnrollmentModal: React.FC<FaceEnrollmentModalProps> = ({
             <div>
               <h3 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
                 <span>বায়োমেট্রিক ফেস আপলোড ও ভেরিফিকেশন</span>
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-teal-500/20 text-teal-300 font-mono font-bold border border-teal-500/40">
-                  128D AI Biometrics
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-teal-500/20 text-teal-300 font-bold border border-teal-500/40">
+                  AI Biometrics
                 </span>
               </h3>
               <p className="text-xs text-slate-400">
@@ -726,7 +726,7 @@ export const FaceEnrollmentModal: React.FC<FaceEnrollmentModalProps> = ({
               </div>
               <h4 className="text-xl font-bold text-white">{successMessage}</h4>
               <p className="text-xs sm:text-sm text-slate-300 max-w-md mx-auto">
-                ছবিটি ক্লাউড ডাটাবেজ (Firestore) ও 128D ভেক্টরে সংরক্ষিত হয়েছে। আগামীতে যেকোনো ডিভাইসে ফেস অ্যাটেন্ডেন্স দেওয়ার সময় এই ভেরিফাইড ছবি কার্যকর থাকবে।
+                ছবিটি ক্লাউড ডাটাবেজ (Firestore) ও বায়োমেট্রিক সিস্টেমে সংরক্ষিত হয়েছে। আগামীতে যেকোনো ডিভাইসে ফেস অ্যাটেন্ডেন্স দেওয়ার সময় এই ভেরিফাইড ছবি কার্যকর থাকবে।
               </p>
             </div>
           ) : (
@@ -1034,7 +1034,7 @@ export const FaceEnrollmentModal: React.FC<FaceEnrollmentModalProps> = ({
                         {isVerifying ? (
                           <>
                             <RefreshCw className="w-4 h-4 animate-spin shrink-0" />
-                            <span className="truncate">{verificationProgressText || "128D ফেস ভেক্টর তুলনা করা হচ্ছে..."}</span>
+                            <span className="truncate">{verificationProgressText || "ফেস ভেরিফিকেশন চলছে..."}</span>
                           </>
                         ) : isLiveVerified ? (
                           <>
