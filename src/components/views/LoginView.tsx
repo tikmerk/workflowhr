@@ -27,7 +27,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
   onLoginSuccess,
   onOpenAttendance,
 }) => {
-  const { branding, softwareBranding, getCompanyDisplayName, getCompanyTagline, isDemoModeEnabled } = useCompanyBranding();
+  const { branding, softwareBranding, getCompanyDisplayName, getCompanyTagline } = useCompanyBranding();
   const { t, isBangla, toggleLanguage, theme, toggleTheme } = useThemeLanguage();
 
   const [emailOrCode, setEmailOrCode] = useState("");
@@ -35,58 +35,6 @@ export const LoginView: React.FC<LoginViewProps> = ({
   const [showPassword, setShowPassword] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-
-  // Group demo accounts by role category for easy exploration
-  const demoRolePresets = [
-    {
-      empId: "emp-01",
-      titleEn: "Super Administrator (Full Access)",
-      titleBn: "সুপার অ্যাডমিন (পূর্ণ ক্ষমতা)",
-      descEn: "Full access to all multi-branch settings, user credentials & permissions",
-      descBn: "সকল ব্রাঞ্চ, ইউজার আইডি/পাসওয়ার্ড ও সিস্টেমের পূর্ণ নিয়ন্ত্রণ",
-      badgeColor: "bg-purple-500/15 text-purple-700 dark:text-purple-300 border-purple-500/30",
-    },
-    {
-      empId: "emp-ceo",
-      titleEn: "Chief Executive Officer (CEO)",
-      titleBn: "প্রতিষ্ঠান প্রধান / সিইও (CEO)",
-      descEn: "Executive governance, corporate leadership & institutional authority",
-      descBn: "প্রতিষ্ঠানের সর্বোচ্চ নির্বাহী প্রধান ও প্রাতিষ্ঠানিক ক্ষমতা",
-      badgeColor: "bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30",
-    },
-    {
-      empId: "emp-02",
-      titleEn: "Head of HR (HR Manager)",
-      titleBn: "হেড অব এইচআর (এইচআর ম্যানেজার)",
-      descEn: "Employees, attendance, payroll & leave approval management",
-      descBn: "কর্মচারী, ছুটি অনুমোদন ও বেতন ব্যবস্থাপনা",
-      badgeColor: "bg-teal-500/15 text-teal-700 dark:text-teal-300 border-teal-500/30",
-    },
-    {
-      empId: "emp-05",
-      titleEn: "Finance & Accounts Lead",
-      titleBn: "ফিন্যান্স ও অ্যাকাউন্টস লিড",
-      descEn: "Payroll disbursements, bank transfers, loans & payslips",
-      descBn: "বেতন প্রক্রিয়াকরণ, ঋণ ও পে-স্লিপ অডিট",
-      badgeColor: "bg-blue-500/15 text-blue-700 dark:text-blue-300 border-blue-500/30",
-    },
-    {
-      empId: "emp-06",
-      titleEn: "Branch General Manager",
-      titleBn: "ব্রাঞ্চ জেনারেল ম্যানেজার",
-      descEn: "Chittagong branch workforce, shifts & local operations",
-      descBn: "চট্টগ্রাম আঞ্চলিক ব্রাঞ্চ ও কর্মীবাহিনী পরিচালনা",
-      badgeColor: "bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30",
-    },
-    {
-      empId: "emp-04",
-      titleEn: "Senior Software Engineer (Employee)",
-      titleBn: "সিনিয়র সফটওয়্যার ইঞ্জিনিয়ার (স্টাফ)",
-      descEn: "Employee self-service, leave requests & payslip download",
-      descBn: "সেলফ-সার্ভিস পোর্টাল, ছুটির আবেদন ও ব্যক্তিগত পে-স্লিপ",
-      badgeColor: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30",
-    },
-  ];
 
   const handleFormLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -106,10 +54,10 @@ export const LoginView: React.FC<LoginViewProps> = ({
           emp.phone.replace(/[\s-]/g, "") === searchKey.replace(/[\s-]/g, "")
       );
 
-      // Dedicated presets for convenient access
+      // Dedicated aliases for administrator
       if (!matched) {
-        if (searchKey === "admin" || searchKey === "superadmin" || searchKey === "ibrahim") {
-          matched = employees.find((e) => e.role === "SUPER_ADMIN" || e.isSuperAdmin);
+        if (searchKey === "admin" || searchKey === "superadmin" || searchKey === "ibrahim" || searchKey === "mwo1001") {
+          matched = employees.find((e) => e.role === "SUPER_ADMIN" || e.isSuperAdmin || e.employeeCode === "MWO1001" || e.username === "mwo1001");
         } else if (searchKey === "ceo" || searchKey === "owner") {
           matched = employees.find((e) => e.isCeoOrOwner || e.role === "CEO");
         }
@@ -137,25 +85,12 @@ export const LoginView: React.FC<LoginViewProps> = ({
       } else {
         setErrorMessage(
           isBangla
-            ? "অ্যাকাউন্ট পাওয়া যায়নি! সঠিক ইউজার আইডি (যেমন: admin, ceo, MWO-1001) বা ইমেইল লিখুন।"
-            : "Account not found! Enter a valid User ID (e.g. admin, ceo, MWO-1001) or work email."
+            ? "অ্যাকাউন্ট পাওয়া যায়নি! সঠিক ইউজার আইডি (যেমন: admin, mwo1001, MWO1001) বা ইমেইল লিখুন।"
+            : "Account not found! Enter a valid User ID (e.g. admin, mwo1001, MWO1001) or work email."
         );
       }
       setIsLoading(false);
     }, 300);
-  };
-
-  const handleQuickDemoLogin = (empId: string) => {
-    const target = employees.find((e) => e.id === empId);
-    if (target) {
-      onLoginSuccess(target);
-    } else {
-      setErrorMessage(
-        isBangla
-          ? "উক্ত অ্যাকাউন্টের তথ্য লোড হতে বিলম্ব হচ্ছে। অনুগ্রহ করে কিছুক্ষণ পর চেষ্টা করুন।"
-          : "Account profile is still syncing. Please retry shortly."
-      );
-    }
   };
 
   return (
@@ -317,58 +252,6 @@ export const LoginView: React.FC<LoginViewProps> = ({
             </button>
           </div>
         </div>
-
-        {/* Demo Mode Section - Only visible when enabled from Super Admin Board */}
-        {isDemoModeEnabled && (
-          <div className="w-full max-w-2xl mt-8 space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-200">
-            <div className="flex items-center justify-between px-2">
-              <div className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-teal-400 animate-pulse" />
-                <span className="text-xs font-bold text-slate-300">
-                  {t("সুপার অ্যাডমিন ডেমো এক্সেস পোর্টাল (সক্রিয়)", "Super Admin Demo Portals (Active)")}
-                </span>
-              </div>
-              <span className="text-[10px] text-teal-400/90 font-mono bg-teal-500/10 border border-teal-500/20 px-2 py-0.5 rounded-md">
-                1-click test
-              </span>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-              {demoRolePresets.map((preset) => {
-                const emp = employees.find((e) => e.id === preset.empId);
-                if (!emp) return null;
-                return (
-                  <button
-                    key={preset.empId}
-                    type="button"
-                    onClick={() => handleQuickDemoLogin(preset.empId)}
-                    className="p-3 rounded-2xl bg-slate-900/80 hover:bg-slate-900 border border-slate-800 hover:border-teal-500/50 text-left transition-all group cursor-pointer flex items-center justify-between gap-3 shadow-sm"
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <img
-                        src={emp.avatarUrl}
-                        alt={emp.fullName}
-                        className="w-10 h-10 rounded-xl object-cover border border-slate-700 shrink-0 group-hover:border-teal-500 transition-colors"
-                      />
-                      <div className="min-w-0">
-                        <div className="text-xs font-black text-white truncate group-hover:text-teal-300 transition-colors">
-                          {isBangla ? preset.titleBn : preset.titleEn}
-                        </div>
-                        <div className="text-[11px] text-slate-400 truncate">
-                          {emp.fullName} • {emp.employeeCode}
-                        </div>
-                        <div className="text-[10px] text-slate-500 truncate mt-0.5">
-                          {isBangla ? preset.descBn : preset.descEn}
-                        </div>
-                      </div>
-                    </div>
-                    <ChevronRight className="w-4 h-4 text-slate-600 group-hover:text-teal-400 group-hover:translate-x-0.5 transition-all shrink-0" />
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
       </main>
 
       {/* Permanent Software & Vendor Attribution Footer */}

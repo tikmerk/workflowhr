@@ -727,7 +727,7 @@ export const RealtimeFaceRecognitionView: React.FC<RealtimeFaceRecognitionViewPr
 
   const isReadyToSubmit = Boolean(
     matchResult?.matched &&
-      (matchResult.matchedEmployee || (activeMode === "ONE_TO_ONE" && selectedTargetEmp)) &&
+      matchResult.matchedEmployee &&
       (livenessStage === "VERIFIED" || blinkCompleted) &&
       !justCheckedInEmployee
   );

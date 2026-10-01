@@ -2149,7 +2149,7 @@ export const EmployeeSelfServiceView: React.FC<EmployeeSelfServiceViewProps> = (
                           type="text"
                           value={editBankAccountHolderName}
                           onChange={(e) => setEditBankAccountHolderName(e.target.value)}
-                          placeholder="যেমন: MD. RABBI SARKAR"
+                          placeholder="যেমন: MD. IBRAHIM HOSSAIN"
                           className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-white font-medium focus:outline-none focus:border-teal-500"
                         />
                       </div>

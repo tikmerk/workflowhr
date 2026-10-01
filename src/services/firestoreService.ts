@@ -178,11 +178,26 @@ export async function initializeFirestoreDatabase() {
    EMPLOYEES FIRESTORE APIS
    ============================================================ */
 
+const DEMO_EMPLOYEE_IDS = new Set([
+  "emp-ceo",
+  "emp-02",
+  "emp-03",
+  "emp-04",
+  "emp-05",
+  "emp-06",
+  "emp-07",
+  "emp-08",
+  "emp-ex-01",
+  "emp-ex-02",
+]);
+
 export async function fetchEmployeesFromFirestore(): Promise<Employee[]> {
   try {
     const snap = await getDocs(collection(db, COL_EMPLOYEES));
     if (!snap.empty) {
-      return snap.docs.map((d) => d.data() as Employee);
+      return snap.docs
+        .map((d) => d.data() as Employee)
+        .filter((emp) => !DEMO_EMPLOYEE_IDS.has(emp.id));
     }
   } catch (err) {
     console.warn("Firestore fetch employees error:", err);
@@ -196,7 +211,9 @@ export function subscribeToEmployees(onUpdate: (employees: Employee[]) => void) 
       collection(db, COL_EMPLOYEES),
       (snap) => {
         if (!snap.empty) {
-          const list = snap.docs.map((d) => d.data() as Employee);
+          const list = snap.docs
+            .map((d) => d.data() as Employee)
+            .filter((emp) => !DEMO_EMPLOYEE_IDS.has(emp.id));
           onUpdate(list);
         }
       },
@@ -211,6 +228,23 @@ export function subscribeToEmployees(onUpdate: (employees: Employee[]) => void) 
 export async function saveEmployeeToFirestore(employee: Employee) {
   try {
     let empToSave = { ...employee };
+    // Block saving demo accounts
+    if (DEMO_EMPLOYEE_IDS.has(empToSave.id)) {
+      console.warn(`Prevented saving legacy demo account: ${empToSave.id}`);
+      return false;
+    }
+
+    // Safeguard master super admin account from accidental credential change
+    if (empToSave.id === "emp-01") {
+      empToSave.employeeCode = "MWO1001";
+      empToSave.username = "mwo1001";
+      empToSave.isSuperAdmin = true;
+      empToSave.isCeoOrOwner = true;
+      if (!empToSave.fullName || empToSave.fullName.trim() === "") {
+        empToSave.fullName = "Md. Ibrahim Hossain";
+      }
+    }
+
     // Optimize avatar and face photo if base64 to avoid Firestore document 1MB limit
     if (empToSave.avatarUrl && empToSave.avatarUrl.startsWith("data:")) {
       empToSave.avatarUrl = await compressAndOptimizeImage(empToSave.avatarUrl);
@@ -238,6 +272,12 @@ export async function saveEmployeeToFirestore(employee: Employee) {
 
 export async function deleteEmployeeFromFirestore(employeeId: string): Promise<boolean> {
   try {
+    // Never allow deletion of master Super Admin account
+    if (employeeId === "emp-01") {
+      console.warn("Master Super Admin account emp-01 cannot be deleted.");
+      return false;
+    }
+
     await deleteDoc(doc(db, COL_EMPLOYEES, employeeId));
     try {
       localStorage.removeItem(`workflow_hr_cached_avatar_${employeeId}`);

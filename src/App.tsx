@@ -211,7 +211,39 @@ function AppContent() {
       return [5, 6];
     }
   });
-  const [employees, setEmployees] = useState<Employee[]>(mockEmployees);
+  const [employees, setEmployees] = useState<Employee[]>(() => {
+    try {
+      const saved = localStorage.getItem("workflow_hr_employees_local");
+      if (saved) {
+        const parsed: Employee[] = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          // Filter out unwanted legacy demo users and normalize emp-01 to MWO1001 Md. Ibrahim Hossain
+          const cleaned = parsed
+            .filter((e) => !["emp-ceo", "emp-02", "emp-03", "emp-04", "emp-05", "emp-06", "emp-07", "emp-08", "emp-ex-01", "emp-ex-02"].includes(e.id))
+            .map((e) => {
+              if (e.id === "emp-01") {
+                return {
+                  ...e,
+                  employeeCode: "MWO1001",
+                  username: "mwo1001",
+                  fullName: "Md. Ibrahim Hossain",
+                  designationTitle: "IT & MIS Officer (আইটি ও এমআইএস কর্মকর্তা)",
+                  departmentName: "আইটি, এমআইএস ও টেকনিক্যাল সাপোর্ট (IT, MIS & Database Support)",
+                  role: "SUPER_ADMIN",
+                  isSuperAdmin: true,
+                  isCeoOrOwner: true,
+                };
+              }
+              return e;
+            });
+          if (cleaned.length >= 18) {
+            return cleaned;
+          }
+        }
+      }
+    } catch {}
+    return mockEmployees;
+  });
   const [attendanceLogs, setAttendanceLogs] = useState<AttendanceRecord[]>(mockAttendanceRecords);
   const [leaves, setLeaves] = useState<LeaveApplication[]>(mockLeaves);
   const [payslips, setPayslips] = useState<Payslip[]>(mockPayslips);
@@ -368,16 +400,12 @@ function AppContent() {
             const cachedAvatar = localStorage.getItem(`workflow_hr_cached_avatar_${parsed.id}`);
             const cachedScore = localStorage.getItem(`workflow_hr_cached_score_${parsed.id}`);
             const cachedVerified = localStorage.getItem(`workflow_hr_cached_verified_${parsed.id}`);
-            const isVerified =
-              parsed.id === "emp-01"
-                ? true
-                : Boolean(
-                    cachedVerified !== "false" &&
-                    parsed.faceVerified &&
-                    parsed.faceTemplateRegistered &&
-                    typeof parsed.faceVerificationScore === "number" &&
-                    parsed.faceVerificationScore > 0
-                  );
+            const isVerified = Boolean(
+              cachedVerified !== "false" &&
+              parsed.faceVerified &&
+              parsed.faceTemplateRegistered &&
+              (Boolean(parsed.faceRegisteredPhoto) || (Array.isArray(parsed.faceDescriptor) && parsed.faceDescriptor.length === 128))
+            );
             const score =
               typeof parsed.faceVerificationScore === "number" && parsed.faceVerificationScore > 0
                 ? parsed.faceVerificationScore
@@ -486,6 +514,16 @@ function AppContent() {
     }
   });
 
+  useEffect(() => {
+    if (employees && employees.length > 0) {
+      try {
+        localStorage.setItem("workflow_hr_employees_local", JSON.stringify(employees));
+      } catch (e) {
+        console.warn("Could not save employees locally:", e);
+      }
+    }
+  }, [employees]);
+
   // Realtime Firestore Database Subscriptions & Initialization
   useEffect(() => {
     // 1. Initialize Firestore collections if empty
@@ -506,16 +544,12 @@ function AppContent() {
           const cached = localStorage.getItem(`workflow_hr_cached_avatar_${emp.id}`);
           const cachedScore = localStorage.getItem(`workflow_hr_cached_score_${emp.id}`);
           const cachedVerified = localStorage.getItem(`workflow_hr_cached_verified_${emp.id}`);
-          const isVerified =
-            emp.id === "emp-01"
-              ? true
-              : Boolean(
-                  cachedVerified !== "false" &&
-                  emp.faceVerified &&
-                  emp.faceTemplateRegistered &&
-                  typeof emp.faceVerificationScore === "number" &&
-                  emp.faceVerificationScore > 0
-                );
+          const isVerified = Boolean(
+            cachedVerified !== "false" &&
+            emp.faceVerified &&
+            emp.faceTemplateRegistered &&
+            (Boolean(emp.faceRegisteredPhoto) || (Array.isArray(emp.faceDescriptor) && emp.faceDescriptor.length === 128))
+          );
           const score =
             typeof emp.faceVerificationScore === "number" && emp.faceVerificationScore > 0
               ? emp.faceVerificationScore
@@ -564,6 +598,11 @@ function AppContent() {
       });
 
       setEmployees(hydrated);
+      try {
+        localStorage.setItem("workflow_hr_employees_local", JSON.stringify(hydrated));
+      } catch (e) {
+        console.warn(e);
+      }
 
       // ALWAYS respect the verified authenticated session from localStorage
       const savedLoggedId = localStorage.getItem("workflow_hr_logged_user_id");

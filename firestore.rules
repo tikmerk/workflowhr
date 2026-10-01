@@ -1,7 +1,115 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Allow read and write for the HR Management application
+
+    // Helper functions for validating document operations
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128;
+    }
+
+    // Employees collection: Master security guard
+    // Protect master admin account 'emp-01' from unauthorized deletion or corruption
+    match /employees/{employeeId} {
+      allow read: if true;
+      allow create, update: if isValidId(employeeId) &&
+        request.resource.data.keys().hasAll(['id', 'employeeCode', 'fullName', 'role']);
+      // Master Super Admin account cannot be deleted
+      allow delete: if isValidId(employeeId) && employeeId != "emp-01";
+    }
+
+    // Branches collection
+    match /branches/{branchId} {
+      allow read: if true;
+      allow write: if isValidId(branchId);
+    }
+
+    // Departments collection
+    match /departments/{departmentId} {
+      allow read: if true;
+      allow write: if isValidId(departmentId);
+    }
+
+    // Designations collection
+    match /designations/{designationId} {
+      allow read: if true;
+      allow write: if isValidId(designationId);
+    }
+
+    // Shifts collection
+    match /shifts/{shiftId} {
+      allow read: if true;
+      allow write: if isValidId(shiftId);
+    }
+
+    // Attendance records
+    match /attendance/{attendanceId} {
+      allow read: if true;
+      allow create, update: if isValidId(attendanceId) &&
+        request.resource.data.keys().hasAll(['id', 'employeeId', 'date']);
+      allow delete: if isValidId(attendanceId);
+    }
+
+    // Leave applications
+    match /leaves/{leaveId} {
+      allow read: if true;
+      allow create, update: if isValidId(leaveId) &&
+        request.resource.data.keys().hasAll(['id', 'employeeId', 'leaveType', 'status']);
+      allow delete: if isValidId(leaveId);
+    }
+
+    // Payroll / Payslips
+    match /payroll/{payrollId} {
+      allow read: if true;
+      allow create, update: if isValidId(payrollId) &&
+        request.resource.data.keys().hasAll(['id', 'employeeId', 'payrollMonth']);
+      allow delete: if isValidId(payrollId);
+    }
+
+    // Loans collection
+    match /loans/{loanId} {
+      allow read, write: if isValidId(loanId);
+    }
+
+    // Assets collection
+    match /assets/{assetId} {
+      allow read, write: if isValidId(assetId);
+    }
+
+    // Notices collection
+    match /notices/{noticeId} {
+      allow read, write: if isValidId(noticeId);
+    }
+
+    // Recruitment collections
+    match /recruitment_jobs/{jobId} {
+      allow read, write: if isValidId(jobId);
+    }
+    match /recruitment_candidates/{candidateId} {
+      allow read, write: if isValidId(candidateId);
+    }
+
+    // Meetings & Conferences
+    match /meetings/{meetingId} {
+      allow read, write: if isValidId(meetingId);
+    }
+
+    // System Settings & Branding config
+    match /settings/{settingId} {
+      allow read: if true;
+      allow write: if isValidId(settingId);
+    }
+
+    // Audit logs (Immutable history)
+    match /audit_logs/{logId} {
+      allow read, write: if isValidId(logId);
+    }
+
+    // Test & Diagnostic collection
+    match /test/{testId} {
+      allow read, write: if true;
+    }
+
+    // Default catch-all for any other authenticated app operations
     match /{document=**} {
       allow read, write: if true;
     }

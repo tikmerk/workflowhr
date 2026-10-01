@@ -2,7 +2,7 @@
   "entities": {
     "Employee": {
       "title": "Employee",
-      "description": "Employee record including photo and biometrics",
+      "description": "Employee record including profile, department, designation, and biometric data",
       "type": "object",
       "properties": {
         "id": { "type": "string" },
@@ -24,9 +24,46 @@
       },
       "required": ["id", "employeeCode", "fullName", "role"]
     },
+    "Branch": {
+      "title": "Branch",
+      "description": "Branch location and geofence configuration",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "code": { "type": "string" },
+        "address": { "type": "string" },
+        "totalEmployees": { "type": "number" }
+      },
+      "required": ["id", "name", "code"]
+    },
+    "Department": {
+      "title": "Department",
+      "description": "Organizational department structure",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "code": { "type": "string" },
+        "totalEmployees": { "type": "number" }
+      },
+      "required": ["id", "name", "code"]
+    },
+    "Designation": {
+      "title": "Designation",
+      "description": "Job titles and salary grading",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "code": { "type": "string" },
+        "departmentId": { "type": "string" }
+      },
+      "required": ["id", "title", "code"]
+    },
     "AttendanceRecord": {
       "title": "AttendanceRecord",
-      "description": "Clock in / Clock out attendance record",
+      "description": "Clock in / Clock out biometric attendance record",
       "type": "object",
       "properties": {
         "id": { "type": "string" },
@@ -53,6 +90,22 @@
       },
       "required": ["id", "employeeId", "leaveType", "status"]
     },
+    "Payslip": {
+      "title": "Payslip",
+      "description": "Monthly payroll disbursement document",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "employeeId": { "type": "string" },
+        "employeeCode": { "type": "string" },
+        "employeeName": { "type": "string" },
+        "payrollMonth": { "type": "string" },
+        "basicSalary": { "type": "number" },
+        "grossEarnings": { "type": "number" },
+        "netSalary": { "type": "number" }
+      },
+      "required": ["id", "employeeId", "payrollMonth"]
+    },
     "CompanyBranding": {
       "title": "CompanyBranding",
       "description": "Company white-label branding, logo, and system settings",
@@ -73,6 +126,18 @@
       "schema": "Employee",
       "description": "All organization employees and staff records"
     },
+    "/branches/{branchId}": {
+      "schema": "Branch",
+      "description": "Regional and head office branch locations"
+    },
+    "/departments/{departmentId}": {
+      "schema": "Department",
+      "description": "Organizational department structures"
+    },
+    "/designations/{designationId}": {
+      "schema": "Designation",
+      "description": "Job designations and titles"
+    },
     "/attendance/{attendanceId}": {
       "schema": "AttendanceRecord",
       "description": "Daily biometric attendance logs"
@@ -80,6 +145,10 @@
     "/leaves/{leaveId}": {
       "schema": "LeaveApplication",
       "description": "Employee leave applications"
+    },
+    "/payroll/{payrollId}": {
+      "schema": "Payslip",
+      "description": "Monthly salary slips and records"
     },
     "/settings/{settingId}": {
       "schema": "CompanyBranding",

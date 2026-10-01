@@ -65,6 +65,7 @@ export interface Branch {
   id: string;
   companyId: string;
   name: string;
+  nameBn?: string;
   code: string;
   isHeadOffice: boolean;
   address: string;
@@ -93,6 +94,7 @@ export interface Branch {
 export interface Department {
   id: string;
   name: string;
+  nameBn?: string;
   code: string;
   branchId?: string;
   headEmployeeId?: string;
@@ -796,6 +798,7 @@ export interface ChatMessage {
 export type CertificateType =
   | "NOC"
   | "NOC_LETTER"
+  | "EXPERIENCE"
   | "EXPERIENCE_CERTIFICATE"
   | "APPOINTMENT_LETTER"
   | "OFFER_LETTER"
