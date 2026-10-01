@@ -43,6 +43,7 @@ import {
   saveDesignationToFirestore,
   deleteDesignationFromFirestore,
   saveAttendanceRecordToFirestore,
+  deleteAttendanceRecordFromFirestore,
   saveLeaveApplicationToFirestore,
   updateLeaveStatusInFirestore,
   deleteLeaveFromFirestore,
@@ -217,9 +218,17 @@ function AppContent() {
       if (saved) {
         const parsed: Employee[] = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          // Filter out unwanted legacy demo users and normalize emp-01 to MWO1001 Md. Ibrahim Hossain
+          const forbidden = ["sharmin", "tariqul", "tareq", "kamrun", "nafis", "rafiqul", "anika", "tanvir", "nusrat", "shafiullah", "demo"];
+          const demoIds = new Set(["emp-ceo", "emp-02", "emp-03", "emp-04", "emp-05", "emp-06", "emp-07", "emp-08", "emp-ex-01", "emp-ex-02"]);
           const cleaned = parsed
-            .filter((e) => !["emp-ceo", "emp-02", "emp-03", "emp-04", "emp-05", "emp-06", "emp-07", "emp-08", "emp-ex-01", "emp-ex-02"].includes(e.id))
+            .filter((e) => {
+              if (demoIds.has(e.id)) return false;
+              const name = (e.fullName || "").toLowerCase();
+              const code = (e.employeeCode || "").toLowerCase();
+              const id = (e.id || "").toLowerCase();
+              if (forbidden.some((fn) => name.includes(fn) || code.includes(fn) || id.includes(fn))) return false;
+              return true;
+            })
             .map((e) => {
               if (e.id === "emp-01") {
                 return {
@@ -236,7 +245,7 @@ function AppContent() {
               }
               return e;
             });
-          if (cleaned.length >= 18) {
+          if (cleaned.length === 18) {
             return cleaned;
           }
         }
@@ -244,7 +253,18 @@ function AppContent() {
     } catch {}
     return mockEmployees;
   });
-  const [attendanceLogs, setAttendanceLogs] = useState<AttendanceRecord[]>(mockAttendanceRecords);
+  const [attendanceLogs, setAttendanceLogs] = useState<AttendanceRecord[]>(() => {
+    const forbidden = ["sharmin", "tariqul", "tareq", "kamrun", "nafis", "rafiqul", "anika", "tanvir", "nusrat", "shafiullah", "demo"];
+    const demoIds = new Set(["emp-ceo", "emp-02", "emp-03", "emp-04", "emp-05", "emp-06", "emp-07", "emp-08", "emp-ex-01", "emp-ex-02"]);
+    return mockAttendanceRecords.filter(
+      (a) =>
+        !demoIds.has(a.employeeId) &&
+        !forbidden.some((fn) =>
+          (a.employeeName || "").toLowerCase().includes(fn) ||
+          (a.employeeCode || "").toLowerCase().includes(fn)
+        )
+    );
+  });
   const [leaves, setLeaves] = useState<LeaveApplication[]>(mockLeaves);
   const [payslips, setPayslips] = useState<Payslip[]>(mockPayslips);
   const [loans, setLoans] = useState<EmployeeLoan[]>(mockLoans);
@@ -639,7 +659,53 @@ function AppContent() {
     });
 
     const unsubAttendance = subscribeToAttendance((updatedAtt) => {
-      setAttendanceLogs(updatedAtt);
+      const demoNames = [
+        "sharmin",
+        "tariqul",
+        "tareq",
+        "kamrun",
+        "nafis",
+        "rafiqul",
+        "anika",
+        "tanvir",
+        "nusrat",
+        "shafiullah",
+        "demo",
+      ];
+      const demoIds = new Set([
+        "emp-ceo",
+        "emp-02",
+        "emp-03",
+        "emp-04",
+        "emp-05",
+        "emp-06",
+        "emp-07",
+        "emp-08",
+        "emp-ex-01",
+        "emp-ex-02",
+      ]);
+      const cleaned = updatedAtt.filter((a) => {
+        if (!a) return false;
+        const name = (a.employeeName || "").toLowerCase();
+        const code = (a.employeeCode || "").toLowerCase();
+        const id = (a.id || "").toLowerCase();
+        const empId = (a.employeeId || "").toLowerCase();
+        const isDemo =
+          demoIds.has(a.employeeId) ||
+          demoNames.some(
+            (dn) =>
+              name.includes(dn) ||
+              code.includes(dn) ||
+              id.includes(dn) ||
+              empId.includes(dn)
+          );
+        if (isDemo) {
+          deleteAttendanceRecordFromFirestore(a.id).catch(() => {});
+          return false;
+        }
+        return true;
+      });
+      setAttendanceLogs(cleaned);
     });
 
     const unsubLeaves = subscribeToLeaves((updatedLeaves) => {

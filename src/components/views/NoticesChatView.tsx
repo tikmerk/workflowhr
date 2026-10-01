@@ -93,9 +93,9 @@ export const NoticesChatView: React.FC<NoticesChatViewProps> = ({
       name: "Fintech Core Banking Architecture Migration",
       description: "Cloud-native microservices infrastructure for digital payments and core ledger.",
       branchId: "branch-01",
-      branchName: "Head Office (Gulshan Corporate Hub)",
-      managerId: "emp-03",
-      managerName: "Tariqul Hasan",
+      branchName: "Head Office (Baridhara Branch)",
+      managerId: "emp-01",
+      managerName: "Md. Ibrahim Hossain",
       status: "IN_PROGRESS",
       priority: "HIGH",
       startDate: "2026-06-01",
@@ -103,19 +103,19 @@ export const NoticesChatView: React.FC<NoticesChatViewProps> = ({
       budget: 8500000,
       spentBudget: 3400000,
       progressPercentage: 58,
-      teamMemberIds: ["emp-03", "emp-05"],
+      teamMemberIds: ["emp-01", "emp-1789299237059"],
       totalTasks: 24,
       completedTasks: 14,
     },
     {
       id: "proj-02",
       code: "PRJ-CTG-DC-02",
-      name: "Chittagong Regional Cloud Data Center Migration",
-      description: "Disaster recovery data center and distributed edge servers deployment in CTG.",
+      name: "Mymensingh Regional Digital Labs & Edge Network Setup",
+      description: "Disaster recovery data center and distributed edge servers deployment in Mymensingh.",
       branchId: "branch-02",
-      branchName: "Chittagong Regional Technology Center",
-      managerId: "emp-06",
-      managerName: "Rafiqul Islam",
+      branchName: "Mymensingh Regional Office (Dhobaura)",
+      managerId: "emp-1789301659078",
+      managerName: "Asaduzzaman",
       status: "IN_PROGRESS",
       priority: "HIGH",
       startDate: "2026-07-15",
@@ -123,7 +123,7 @@ export const NoticesChatView: React.FC<NoticesChatViewProps> = ({
       budget: 5200000,
       spentBudget: 2100000,
       progressPercentage: 42,
-      teamMemberIds: ["emp-06", "emp-07"],
+      teamMemberIds: ["emp-1789301659078", "emp-1789300888577"],
       totalTasks: 18,
       completedTasks: 8,
     },
@@ -1529,7 +1529,7 @@ export const NoticesChatView: React.FC<NoticesChatViewProps> = ({
                             <div className="flex items-center gap-2.5 min-w-0">
                               <div className="relative shrink-0">
                                 <img
-                                  src={emp.avatarUrl || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100"}
+                                  src={emp.avatarUrl || "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%230d9488'%3E%3Cpath d='M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z'/%3E%3C/svg%3E"}
                                   alt={emp.fullName}
                                   className="w-7 h-7 rounded-full object-cover border border-slate-300 dark:border-slate-700"
                                 />
@@ -1626,7 +1626,7 @@ export const NoticesChatView: React.FC<NoticesChatViewProps> = ({
                       }`}
                     >
                       <img
-                        src={msg.senderAvatar || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100"}
+                        src={msg.senderAvatar || "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%230d9488'%3E%3Cpath d='M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z'/%3E%3C/svg%3E"}
                         alt={msg.senderName}
                         className="w-8 h-8 rounded-full object-cover shrink-0 mt-0.5 border border-teal-500/40 shadow-2xs"
                       />
@@ -1837,7 +1837,7 @@ export const NoticesChatView: React.FC<NoticesChatViewProps> = ({
                             className="rounded border-slate-300 text-teal-600 focus:ring-teal-500"
                           />
                           <img
-                            src={emp.avatarUrl || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100"}
+                            src={emp.avatarUrl || "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%230d9488'%3E%3Cpath d='M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z'/%3E%3C/svg%3E"}
                             alt={emp.fullName}
                             className="w-6 h-6 rounded-full object-cover"
                           />

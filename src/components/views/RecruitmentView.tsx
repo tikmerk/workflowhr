@@ -1964,7 +1964,7 @@ export const RecruitmentView: React.FC<RecruitmentViewProps> = ({
                 rows={10}
                 value={rawPastedText}
                 onChange={(e) => setRawPastedText(e.target.value)}
-                placeholder={`Name\tPhone\tEmail\tSSC GPA\tHSC GPA\tHonors CGPA\tUniversity\tDepartment\tExperience\nTanvir Ahmed\t+8801711223344\ttanvir@gmail.com\t5.00\t4.80\t3.75\tBUET\tCSE\t4`}
+                placeholder={`Name\tPhone\tEmail\tSSC GPA\tHSC GPA\tHonors CGPA\tUniversity\tDepartment\tExperience\nMd. Shamim Reza\t+8801711223344\tshamim@gmail.com\t5.00\t4.80\t3.75\tBUET\tCSE\t4`}
                 className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-2xl p-3 font-mono text-xs text-slate-900 dark:text-white focus:outline-none focus:border-teal-500"
                 required
               />

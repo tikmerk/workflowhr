@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import {
   Users,
   Clock,
@@ -76,57 +76,127 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const activeBranch: Branch =
     selectedBranch ||
     branchList.find((b) => b.id === selectedBranchId) ||
+    branchList.find((b) => b.isHeadOffice) ||
     branchList[0] || {
-      id: "ALL",
+      id: "branch-01",
       companyId: "comp-01",
-      name: "All Regional Branches (Global)",
-      code: "GLOBAL",
+      name: "Head Office (Baridhara Branch)",
+      code: "HQ-BARIDHARA",
       isHeadOffice: true,
-      address: "Gulshan-2 Corporate Avenue",
+      address: "House- 39, Road- 12, Baridhara Diplomatic Zone, Baridhara, Dhaka-1212",
       city: "Dhaka",
       state: "Dhaka Division",
       country: "Bangladesh",
-      phone: "+880 1700-000000",
-      email: "corporate@muslimwelfare.org",
-      latitude: 23.7925,
-      longitude: 90.4078,
+      phone: "+880 2-9887766, +880 1700-112233",
+      email: "info@mwo.org.bd",
+      latitude: 23.7985,
+      longitude: 90.4215,
       geofenceRadiusMeters: 150,
-      totalEmployees: staffList.length || 48,
+      totalEmployees: staffList.length || 18,
       activeStatus: "ACTIVE",
       managerName: "Md. Ibrahim Hossain",
     };
 
+  const masterAdmin = staffList.find((e) => e.id === "emp-01" || e.isSuperAdmin);
+
   const activeUser: Employee =
     currentEmployee ||
+    masterAdmin ||
     staffList[0] || ({
-      id: "emp-001",
+      id: "emp-01",
       fullName: "Md. Ibrahim Hossain",
-      role: "CEO",
-      employeeCode: "MWO-001",
-      avatarUrl: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80",
-      branchName: "Dhaka HQ",
-      departmentName: "Executive Leadership",
-      designationTitle: "Chief Executive Officer & Founder",
-      joiningDate: "2020-01-01",
+      role: "SUPER_ADMIN",
+      employeeCode: "MWO1001",
+      avatarUrl: masterAdmin?.avatarUrl || "",
+      branchName: "Head Office (Baridhara Branch)",
+      departmentName: "আইটি, এমআইএস ও টেকনিক্যাল সাপোর্ট (IT, MIS & Database Support)",
+      designationTitle: "IT & MIS Officer (আইটি ও এমআইএস কর্মকর্তা)",
+      joiningDate: "2018-01-01",
       gender: "MALE",
       status: "ACTIVE",
       companyId: "comp-01",
-      branchId: "branch-dhaka",
-      departmentId: "dept-exec",
-      designationId: "desig-ceo",
-      email: "ibrahim@muslimwelfare.org",
-      phone: "+880 1700-111222",
+      branchId: "branch-01",
+      departmentId: "dept-06",
+      designationId: "desig-09",
+      email: "ibrahim@tikmerk.com",
+      phone: "+880 1711-987654",
+      isSuperAdmin: true,
+      isCeoOrOwner: true,
       salary: {
         basic: 180000,
-        houseRent: 80000,
-        medicalAllowance: 20000,
-        transportAllowance: 20000,
-        specialAllowance: 30000,
+        houseRent: 72000,
+        medicalAllowance: 21600,
+        transportAllowance: 21600,
+        specialAllowance: 23400,
         providentFundPercentage: 10,
-        taxDeductionPercentage: 15,
-        grossSalary: 330000,
+        taxDeductionPercentage: 10,
+        grossSalary: 318600,
       },
     } as Employee);
+
+  // Demo blacklist filter constants
+  const FORBIDDEN_DEMO_NAMES = [
+    "sharmin", "tariqul", "tareq", "kamrun", "nafis", "rafiqul",
+    "anika", "tanvir", "nusrat", "shafiullah", "demo"
+  ];
+  const DEMO_EMPLOYEE_IDS = new Set([
+    "emp-ceo", "emp-02", "emp-03", "emp-04", "emp-05", "emp-06",
+    "emp-07", "emp-08", "emp-ex-01", "emp-ex-02"
+  ]);
+
+  // Map real workforce by ID and Normalized Code
+  const realStaffMap = useMemo(() => {
+    const map = new Map<string, Employee>();
+    for (const s of staffList) {
+      if (s.id && !DEMO_EMPLOYEE_IDS.has(s.id)) {
+        map.set(s.id, s);
+        if (s.employeeCode) {
+          map.set(s.employeeCode.toUpperCase().replace(/[^A-Z0-9]/g, ""), s);
+        }
+      }
+    }
+    return map;
+  }, [staffList]);
+
+  // Clean, validate, and enrich attendance logs against real workforce only
+  const cleanAttendanceLogs = useMemo(() => {
+    return (attendanceLogs || [])
+      .filter((a) => {
+        if (!a) return false;
+        if (DEMO_EMPLOYEE_IDS.has(a.employeeId)) return false;
+        const name = (a.employeeName || "").toLowerCase();
+        const code = (a.employeeCode || "").toLowerCase();
+        const id = (a.id || "").toLowerCase();
+        if (FORBIDDEN_DEMO_NAMES.some((fn) => name.includes(fn) || code.includes(fn) || id.includes(fn))) {
+          return false;
+        }
+        // Strictly validate against verified active staff list
+        const normCode = (a.employeeCode || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+        const matched = realStaffMap.get(a.employeeId) || realStaffMap.get(normCode);
+        return Boolean(matched);
+      })
+      .map((a) => {
+        const normCode = (a.employeeCode || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+        const emp = realStaffMap.get(a.employeeId) || realStaffMap.get(normCode);
+        return {
+          ...a,
+          employeeName: emp?.fullName || a.employeeName,
+          employeeCode: emp?.employeeCode || a.employeeCode,
+          avatarUrl: emp?.avatarUrl || a.avatarUrl,
+          checkInSelfieUrl: emp?.avatarUrl || a.checkInSelfieUrl || a.avatarUrl,
+          departmentName: emp?.departmentName || a.departmentName,
+          branchName: emp?.branchName || a.branchName,
+        };
+      });
+  }, [attendanceLogs, realStaffMap]);
+
+  // Real today date string
+  const systemTodayStr = new Date().toISOString().split("T")[0];
+
+  // Today's Biometric Attendance Feed strictly shows today's verified biometric clock-ins
+  const todayAttendance = useMemo(() => {
+    return cleanAttendanceLogs.filter((a) => a.date === systemTodayStr);
+  }, [cleanAttendanceLogs, systemTodayStr]);
 
   // Statistics Calculations
   const branchEmployees = (staffList || []).filter(
@@ -134,12 +204,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   );
   const totalStaffCount = branchEmployees.length || staffList.length;
 
-  const todayStr = "2026-08-30";
-  const todayAttendance = (attendanceLogs || []).filter((a) => a.date === todayStr);
   const presentCount = todayAttendance.filter((a) => a.status === "PRESENT").length;
   const lateCount = todayAttendance.filter((a) => a.status === "LATE").length;
   const onLeaveCount = (leaveList || []).filter(
-    (l) => l.status === "APPROVED" && l.startDate <= todayStr && l.endDate >= todayStr
+    (l) => l.status === "APPROVED" && l.startDate <= systemTodayStr && l.endDate >= systemTodayStr
   ).length;
   const pendingLeaves = (leaveList || []).filter((l) => l.status === "PENDING").length;
 
@@ -421,7 +489,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   Today's Biometric Attendance Feed
                 </h3>
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping"></span> Live
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping"></span> Live ({todayAttendance.length})
                 </span>
               </div>
               <button
@@ -432,63 +500,75 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               </button>
             </div>
 
-            <div className="space-y-2.5">
-              {(todayAttendance || []).map((rec) => (
-                <div
-                  key={rec.id}
-                  className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="relative">
-                      <img
-                        src={rec.checkInSelfieUrl || rec.avatarUrl}
-                        alt={rec.employeeName}
-                        className="w-10 h-10 rounded-xl object-cover border-2 border-emerald-500/40"
-                      />
-                      <div className="absolute -bottom-1 -right-1 bg-white dark:bg-slate-900 rounded-full p-0.5 border border-slate-200 dark:border-slate-700">
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 dark:text-emerald-400" />
+            {todayAttendance.length === 0 ? (
+              <div className="p-8 text-center rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 text-slate-500 dark:text-slate-400 text-xs space-y-2">
+                <ScanFace className="w-8 h-8 text-teal-500 mx-auto opacity-70" />
+                <p className="font-semibold text-slate-700 dark:text-slate-200">
+                  আজকের কোনো বায়োমেট্রিক হাজিরা রেকর্ড পাওয়া যায়নি
+                </p>
+                <p className="text-[11px] text-slate-400">
+                  কর্মীরা স্মার্ট কিওস্ক বা মোবাইল থেকে লাইভ ক্যামেরা ক্লক-ইন করলে তাৎক্ষণিকভাবে এখানে প্রতিফলিত হবে।
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-2.5">
+                {todayAttendance.map((rec) => (
+                  <div
+                    key={rec.id}
+                    className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="relative">
+                        <img
+                          src={rec.checkInSelfieUrl || rec.avatarUrl}
+                          alt={rec.employeeName}
+                          className="w-10 h-10 rounded-xl object-cover border-2 border-emerald-500/40"
+                        />
+                        <div className="absolute -bottom-1 -right-1 bg-white dark:bg-slate-900 rounded-full p-0.5 border border-slate-200 dark:border-slate-700">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 dark:text-emerald-400" />
+                        </div>
+                      </div>
+
+                      <div>
+                        <div className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                          <span>{rec.employeeName}</span>
+                          <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400">
+                            ({rec.employeeCode})
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-2 mt-0.5">
+                          <span className="text-teal-700 dark:text-teal-300 font-medium">{rec.departmentName}</span>
+                          <span>•</span>
+                          <span>{(rec.branchName || "Headquarters").split("(")[0]}</span>
+                        </div>
                       </div>
                     </div>
 
-                    <div>
-                      <div className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                        <span>{rec.employeeName}</span>
-                        <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400">
-                          ({rec.employeeCode})
-                        </span>
+                    <div className="flex items-center justify-between sm:justify-end gap-3 text-right">
+                      <div>
+                        <div className="font-mono font-bold text-slate-800 dark:text-slate-200">
+                          {rec.checkInTime}
+                        </div>
+                        <div className="text-[10px] text-slate-500 dark:text-slate-400 flex items-center gap-1">
+                          <MapPin className="w-3 h-3 text-emerald-500 dark:text-emerald-400" />
+                          <span>{rec.checkInDistanceMeters || 12}m from beacon</span>
+                        </div>
                       </div>
-                      <div className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-2 mt-0.5">
-                        <span className="text-teal-700 dark:text-teal-300 font-medium">{rec.departmentName}</span>
-                        <span>•</span>
-                        <span>{(rec.branchName || "Headquarters").split("(")[0]}</span>
-                      </div>
+
+                      <span
+                        className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
+                          rec.status === "PRESENT"
+                            ? "bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 border border-emerald-500/30"
+                            : "bg-amber-500/15 text-amber-800 dark:text-amber-300 border border-amber-500/30"
+                        }`}
+                      >
+                        {rec.status === "PRESENT" ? "On Time" : `Late (${rec.lateMinutes || 15}m)`}
+                      </span>
                     </div>
                   </div>
-
-                  <div className="flex items-center justify-between sm:justify-end gap-3 text-right">
-                    <div>
-                      <div className="font-mono font-bold text-slate-800 dark:text-slate-200">
-                        {rec.checkInTime}
-                      </div>
-                      <div className="text-[10px] text-slate-500 dark:text-slate-400 flex items-center gap-1">
-                        <MapPin className="w-3 h-3 text-emerald-500 dark:text-emerald-400" />
-                        <span>{rec.checkInDistanceMeters || 12}m from beacon</span>
-                      </div>
-                    </div>
-
-                    <span
-                      className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
-                        rec.status === "PRESENT"
-                          ? "bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 border border-emerald-500/30"
-                          : "bg-amber-500/15 text-amber-800 dark:text-amber-300 border border-amber-500/30"
-                      }`}
-                    >
-                      {rec.status === "PRESENT" ? "On Time" : `Late (${rec.lateMinutes || 15}m)`}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 

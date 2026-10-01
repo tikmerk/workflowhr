@@ -77,7 +77,7 @@ export const NgoProgramsTrainingView: React.FC<NgoProgramsTrainingViewProps> = (
   const [newProgUnits, setNewProgUnits] = useState(100);
   const [newProgUnitLabel, setNewProgUnitLabel] = useState("টি নলকূপ");
   const [newProgManager, setNewProgManager] = useState("Md. Ibrahim Hossain");
-  const [newProgFieldLead, setNewProgFieldLead] = useState("Tariqul Hasan");
+  const [newProgFieldLead, setNewProgFieldLead] = useState("Asaduzzaman");
   const [newProgDescription, setNewProgDescription] = useState("");
 
   // New Training Center Form State
@@ -86,7 +86,7 @@ export const NgoProgramsTrainingView: React.FC<NgoProgramsTrainingViewProps> = (
   const [newCenterDistrict, setNewCenterDistrict] = useState("সিলেট");
   const [newCenterPhone, setNewCenterPhone] = useState("+880 1700-000000");
   const [newCenterAddress, setNewCenterAddress] = useState("");
-  const [newCenterLead, setNewCenterLead] = useState("Anika Tabassum");
+  const [newCenterLead, setNewCenterLead] = useState("Khaleda Begum");
 
   // Summary Metrics
   const totalBeneficiaries = reliefPrograms.reduce((acc, p) => acc + (p.servedBeneficiaries || 0), 0);
@@ -734,7 +734,7 @@ export const NgoProgramsTrainingView: React.FC<NgoProgramsTrainingViewProps> = (
                   দায়িত্বপ্রাপ্ত হিসাব ও ঋণ তত্ত্বাবধায়ক (Multi-Role Allocation):
                 </span>
                 <p className="text-xs text-teal-700 dark:text-teal-300">
-                  <strong>Tariqul Hasan</strong> (প্রজেক্ট ম্যানেজার + একাউন্টস সমন্বয়ক) এবং হেড অফিসের একাউন্টস টিম সরাসরি তদারকি করছেন।
+                  <strong>মোঃ ইব্রাহিম হোসেন ও আসাদুজ্জামান</strong> (প্রজেক্ট ম্যানেজার + একাউন্টস সমন্বয়ক) এবং হেড অফিসের একাউন্টস টিম সরাসরি তদারকি করছেন।
                 </p>
               </div>
               <span className="text-xs text-slate-500 dark:text-slate-400 shrink-0">

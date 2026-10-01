@@ -451,11 +451,39 @@ export async function manualVerifyEmployeeFaceInFirestore(
    ATTENDANCE FIRESTORE APIS
    ============================================================ */
 
+const FORBIDDEN_DEMO_NAMES = [
+  "sharmin",
+  "tariqul",
+  "tareq",
+  "kamrun",
+  "nafis",
+  "rafiqul",
+  "anika",
+  "tanvir",
+  "nusrat",
+  "shafiullah",
+  "demo",
+];
+
+function isDemoAttendanceRecord(data: AttendanceRecord): boolean {
+  if (!data) return true;
+  if (data.employeeId && DEMO_EMPLOYEE_IDS.has(data.employeeId)) return true;
+  const name = (data.employeeName || "").toLowerCase();
+  const code = (data.employeeCode || "").toLowerCase();
+  const id = (data.id || "").toLowerCase();
+  if (FORBIDDEN_DEMO_NAMES.some((dn) => name.includes(dn) || code.includes(dn) || id.includes(dn))) {
+    return true;
+  }
+  return false;
+}
+
 export async function fetchAttendanceFromFirestore(): Promise<AttendanceRecord[]> {
   try {
     const snap = await getDocs(collection(db, COL_ATTENDANCE));
     if (!snap.empty) {
-      return snap.docs.map((d) => d.data() as AttendanceRecord);
+      return snap.docs
+        .map((d) => d.data() as AttendanceRecord)
+        .filter((rec) => !isDemoAttendanceRecord(rec));
     }
   } catch (err) {
     console.warn("Firestore fetch attendance error:", err);
@@ -469,7 +497,15 @@ export function subscribeToAttendance(onUpdate: (logs: AttendanceRecord[]) => vo
       collection(db, COL_ATTENDANCE),
       (snap) => {
         if (!snap.empty) {
-          const list = snap.docs.map((d) => d.data() as AttendanceRecord);
+          const list: AttendanceRecord[] = [];
+          for (const d of snap.docs) {
+            const data = d.data() as AttendanceRecord;
+            if (isDemoAttendanceRecord(data)) {
+              deleteDoc(doc(db, COL_ATTENDANCE, d.id)).catch(() => {});
+            } else {
+              list.push(data);
+            }
+          }
           // sort descending by date / checkIn
           list.sort((a, b) => b.id.localeCompare(a.id));
           onUpdate(list);
@@ -485,9 +521,18 @@ export function subscribeToAttendance(onUpdate: (logs: AttendanceRecord[]) => vo
 
 export async function saveAttendanceRecordToFirestore(record: AttendanceRecord) {
   try {
+    if (isDemoAttendanceRecord(record)) return;
     await setDoc(doc(db, COL_ATTENDANCE, record.id), cleanForFirestore(record), { merge: true });
   } catch (err) {
     console.error("Failed to save attendance record in Firestore:", err);
+  }
+}
+
+export async function deleteAttendanceRecordFromFirestore(attendanceId: string) {
+  try {
+    await deleteDoc(doc(db, COL_ATTENDANCE, attendanceId));
+  } catch (err) {
+    console.error("Failed to delete attendance record from Firestore:", err);
   }
 }
 

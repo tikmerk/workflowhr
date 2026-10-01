@@ -368,7 +368,7 @@ export interface AttendanceRecord {
   employeeId: string;
   employeeCode: string;
   employeeName: string;
-  avatarUrl: string;
+  avatarUrl?: string;
   branchId: string;
   branchName: string;
   departmentName: string;
@@ -401,9 +401,9 @@ export interface AttendanceRecord {
   checkOutSnapshotUrl?: string;
   
   // Calculated Work Times
-  totalWorkMinutes: number;
-  totalBreakMinutes: number;
-  overtimeMinutes: number;
+  totalWorkMinutes?: number;
+  totalBreakMinutes?: number;
+  overtimeMinutes?: number;
   status: "PRESENT" | "LATE" | "HALF_DAY" | "ABSENT" | "ON_LEAVE" | "HOLIDAY" | "WEEKEND";
   lateMinutes: number;
   earlyExitMinutes: number;

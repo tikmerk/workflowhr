@@ -80,39 +80,27 @@ export const CompanyBrandingProvider: React.FC<{ children: React.ReactNode }> = 
   });
 
   const [isBrandingModalOpen, setIsBrandingModalOpen] = useState<boolean>(false);
-  const [isDemoModeEnabled, setIsDemoModeEnabled] = useState<boolean>(() => {
-    try {
-      const saved = localStorage.getItem("workflow_hr_demo_mode");
-      if (saved !== null) {
-        return saved === "true";
-      }
-    } catch (e) {
-      console.warn(e);
-    }
-    return true; // Default ON as requested
-  });
+  const [isDemoModeEnabled, setIsDemoModeEnabled] = useState<boolean>(false);
 
   // Sync from Firestore on mount & subscribe to real-time updates
   useEffect(() => {
+    try {
+      localStorage.setItem("workflow_hr_demo_mode", "false");
+    } catch (e) {}
+
     fetchBrandingSettingsFromFirestore()
-      .then(({ branding: fbBranding, isDemoModeEnabled: fbDemo }) => {
+      .then(({ branding: fbBranding }) => {
         if (fbBranding) {
           setBrandingState((prev) => ({ ...prev, ...fbBranding }));
-        }
-        if (fbDemo !== null) {
-          setIsDemoModeEnabled(fbDemo);
         }
       })
       .catch((err) => {
         console.warn("Branding fetch fallback:", err);
       });
 
-    const unsubscribe = subscribeToBrandingSettings((fbBranding, fbDemo) => {
+    const unsubscribe = subscribeToBrandingSettings((fbBranding) => {
       if (fbBranding) {
         setBrandingState((prev) => ({ ...prev, ...fbBranding }));
-      }
-      if (fbDemo !== undefined && fbDemo !== null) {
-        setIsDemoModeEnabled(fbDemo);
       }
     });
 
@@ -121,7 +109,7 @@ export const CompanyBrandingProvider: React.FC<{ children: React.ReactNode }> = 
 
   useEffect(() => {
     try {
-      localStorage.setItem("workflow_hr_demo_mode", String(isDemoModeEnabled));
+      localStorage.setItem("workflow_hr_demo_mode", "false");
     } catch (e) {
       console.warn(e);
     }

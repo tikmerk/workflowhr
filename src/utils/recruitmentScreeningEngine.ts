@@ -44,7 +44,7 @@ export const RECRUITMENT_METADATA_FIELDS: MetadataFieldDefinition[] = [
       "নাম", "প্রার্থীর নাম", "আবেদনকারীর নাম", "পূর্ণ নাম", "ক্যান্ডিডেট নাম", "applicant"
     ],
     dataType: "string",
-    sampleValue: "Tariqul Islam / তারিকুল ইসলাম",
+    sampleValue: "Tahmid Hasan / তাহমিদ হাসান",
     description: "প্রার্থীর অফিসিয়াল বা পূর্ণ নাম",
     isKeyCriteria: true
   },
@@ -95,7 +95,7 @@ export const RECRUITMENT_METADATA_FIELDS: MetadataFieldDefinition[] = [
       "father", "father name", "father's name", "fathers name", "পিতার নাম", "বাবার নাম", "পিতা", "বাবা"
     ],
     dataType: "string",
-    sampleValue: "Md. Rafiqul Islam",
+    sampleValue: "Md. Jahangir Alam",
     description: "প্রার্থীর পিতার নাম"
   },
   {
@@ -696,10 +696,10 @@ export const evaluateCandidateScreening = (
 export const downloadCandidateExcelTemplate = () => {
   const sampleHeaders = [
     {
-      "Full Name (প্রার্থীর নাম)": "Tariqul Islam",
+      "Full Name (প্রার্থীর নাম)": "Tahmid Hasan",
       "Phone Number (মোবাইল)": "+880 1711-223344",
-      "Email Address (ইমেইল)": "tariqul.candidate@gmail.com",
-      "Father's Name (পিতার নাম)": "Md. Rafiqul Islam",
+      "Email Address (ইমেইল)": "tahmid.candidate@gmail.com",
+      "Father's Name (পিতার নাম)": "Md. Jahangir Alam",
       "Mother's Name (মাতার নাম)": "Rokeya Begum",
       "NID Number (জাতীয় পরিচয়পত্র)": "19952691122334455",
       "Address (বর্তমান ঠিকানা)": "Dhanmondi 27, Dhaka",
@@ -760,9 +760,9 @@ export const downloadCandidateExcelTemplate = () => {
       "Expected Salary (প্রত্যাশিত বেতন)": 85000,
     },
     {
-      "Full Name (প্রার্থীর নাম)": "Tanvir Ahmed",
+      "Full Name (প্রার্থীর নাম)": "Fahim Shahriar",
       "Phone Number (মোবাইল)": "+880 1912-334455",
-      "Email Address (ইমেইল)": "tanvir.eng@yahoo.com",
+      "Email Address (ইমেইল)": "fahim.eng@yahoo.com",
       "Father's Name (পিতার নাম)": "Siraj Uddin",
       "Mother's Name (মাতার নাম)": "Nargis Akhter",
       "NID Number (জাতীয় পরিচয়পত্র)": "19982693344556677",
@@ -899,11 +899,11 @@ export const getDemoExternalCandidates = (jobCircularId: string, jobTitle: strin
       expectedSalary: 85000,
     },
     {
-      fullName: "Nusrat Jahan Chowdhury",
+      fullName: "Farhana Chowdhury",
       phone: "+880 1610-332211",
-      email: "nusrat.du.iba@gmail.com",
+      email: "farhana.du.iba@gmail.com",
       fatherName: "Jahangir Chowdhury",
-      motherName: "Kamrun Nahar",
+      motherName: "Salma Begum",
       nidNumber: "19972694455667744",
       address: "Dhanmondi, Dhaka",
       sscGpa: 5.0,

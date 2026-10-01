@@ -251,7 +251,7 @@ export const ProjectsTasksView: React.FC<ProjectsTasksViewProps> = ({
       description: newTaskDesc || "Project deliverable implementation",
       assignedToEmployeeId: assignee?.id || "emp-01",
       assignedToName: assignee?.fullName || "Staff Member",
-      assignedToAvatar: assignee?.avatarUrl || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150",
+      assignedToAvatar: assignee?.avatarUrl || "",
       priority: newTaskPriority,
       status: "TODO",
       estimatedHours: Number(newTaskEstHours),
