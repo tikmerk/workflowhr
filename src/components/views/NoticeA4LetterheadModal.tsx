@@ -116,9 +116,17 @@ export const NoticeA4LetterheadModal: React.FC<NoticeA4LetterheadModalProps> = (
       // Capture element as high-res image
       const imgData = await toJpeg(element, {
         quality: 0.96,
-        pixelRatio: 2.5,
+        pixelRatio: 2.2,
         backgroundColor: "#ffffff",
         cacheBust: true,
+        skipFonts: true,
+        fontEmbedCSS: "",
+        filter: (node) => {
+          if (node instanceof HTMLElement && node.classList.contains("print:hidden")) {
+            return false;
+          }
+          return true;
+        },
       });
 
       const pdf = new jsPDF({

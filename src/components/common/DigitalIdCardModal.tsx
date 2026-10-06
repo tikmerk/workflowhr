@@ -74,6 +74,8 @@ export const DigitalIdCardModal: React.FC<DigitalIdCardModalProps> = ({
         pixelRatio: 3.5, // Ultra HD Sharpness (3.5x scale)
         quality: 1.0,
         backgroundColor: "transparent",
+        skipFonts: true,
+        fontEmbedCSS: "",
       });
 
       const cleanName = employee.fullName.replace(/[^a-zA-Z0-9]/g, "_");
