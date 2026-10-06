@@ -2282,6 +2282,7 @@ export const EmployeeSelfServiceView: React.FC<EmployeeSelfServiceViewProps> = (
           onClose={() => setShowViewA4ResumeModal(false)}
           employee={currentEmployee}
           isBangla={true}
+          onUpdateEmployee={onUpdateEmployee}
           onOpenEdit={() => {
             setShowViewA4ResumeModal(false);
             setShowEditCVModal(true);

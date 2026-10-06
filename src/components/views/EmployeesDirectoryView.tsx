@@ -550,6 +550,13 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
       departmentName: dept?.name || editingEmployee.departmentName,
       designationId: desig?.id || editingEmployee.designationId,
       designationTitle: customDesignationTitle.trim() || desig?.title || editingEmployee.designationTitle,
+      cvData: editingEmployee.cvData
+        ? {
+            ...editingEmployee.cvData,
+            currentDesignation: customDesignationTitle.trim() || desig?.title || editingEmployee.designationTitle,
+            currentDepartment: dept?.name || editingEmployee.departmentName,
+          }
+        : undefined,
       additionalDesignations: [],
       additionalDepartments: [],
       role: editRole,
@@ -4336,6 +4343,10 @@ export const EmployeesDirectoryView: React.FC<EmployeesDirectoryViewProps> = ({
           employee={viewingResumeEmployee}
           isBangla={isBangla}
           onClose={() => setViewingResumeEmployee(null)}
+          onUpdateEmployee={(updatedEmp) => {
+            onUpdateEmployee(updatedEmp);
+            setViewingResumeEmployee(updatedEmp);
+          }}
           onEditCV={() => {
             const emp = viewingResumeEmployee;
             setViewingResumeEmployee(null);

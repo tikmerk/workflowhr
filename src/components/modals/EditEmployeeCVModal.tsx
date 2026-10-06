@@ -35,6 +35,7 @@ import {
   getStandardEducationsTemplate,
 } from "../../utils/cvDefaults";
 import { compressSignatureImage } from "../../utils/imageCompression";
+import { useCompanyBranding } from "../../context/CompanyBrandingContext";
 import { ViewNidCardModal } from "./ViewNidCardModal";
 
 interface EditEmployeeCVModalProps {
@@ -81,6 +82,7 @@ export const EditEmployeeCVModal: React.FC<EditEmployeeCVModalProps> = ({
   isBangla = true,
 }) => {
   if (isOpen === false) return null;
+  const { branding } = useCompanyBranding();
   const nidFrontInputRef = useRef<HTMLInputElement | null>(null);
   const nidBackInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -105,7 +107,7 @@ export const EditEmployeeCVModal: React.FC<EditEmployeeCVModalProps> = ({
     joiningDate: employee.joiningDate,
     currentDesignation: employee.designationTitle,
     currentDepartment: employee.departmentName,
-    currentOrganization: employee.branchName ? `${employee.branchName} Organization` : "Organization",
+    currentOrganization: branding.companyName || "Muslim Welfare Organization",
     educations: [],
     experiences: [],
     computerSkills: [],
@@ -147,9 +149,17 @@ export const EditEmployeeCVModal: React.FC<EditEmployeeCVModalProps> = ({
   );
   const [religion, setReligion] = useState(existingCV.religion || employee.religion || "Islam");
   const [joiningDate, setJoiningDate] = useState(existingCV.joiningDate || employee.joiningDate);
-  const [currentDesignation, setCurrentDesignation] = useState(existingCV.currentDesignation || employee.designationTitle);
-  const [currentDepartment, setCurrentDepartment] = useState(existingCV.currentDepartment || employee.departmentName);
-  const [currentOrganization, setCurrentOrganization] = useState(existingCV.currentOrganization || employee.branchName || "Corporate Head Office");
+  const [currentDesignation, setCurrentDesignation] = useState(
+    employee.designationTitle || existingCV.currentDesignation || ""
+  );
+  const [currentDepartment, setCurrentDepartment] = useState(
+    employee.departmentName || existingCV.currentDepartment || ""
+  );
+  const [currentOrganization, setCurrentOrganization] = useState(
+    (existingCV.currentOrganization && !existingCV.currentOrganization.includes("Baridhara") && existingCV.currentOrganization !== "Organization")
+      ? existingCV.currentOrganization
+      : (branding.companyName || "Muslim Welfare Organization")
+  );
   
   const defaultObjective = getDefaultCareerObjective(false);
   const initialSummary =
@@ -410,6 +420,8 @@ export const EditEmployeeCVModal: React.FC<EditEmployeeCVModalProps> = ({
     const updatedEmployee: Employee = {
       ...employee,
       fullName: fullName.trim() || employee.fullName,
+      designationTitle: currentDesignation.trim() || employee.designationTitle,
+      departmentName: currentDepartment.trim() || employee.departmentName,
       fatherName: fatherName.trim() || employee.fatherName,
       motherName: motherName.trim() || employee.motherName,
       phone: mobile.trim() || employee.phone,
@@ -430,7 +442,12 @@ export const EditEmployeeCVModal: React.FC<EditEmployeeCVModalProps> = ({
       savedSignatureUrl: signatureUrl || undefined,
       nidCardFrontUrl,
       nidCardBackUrl,
-      cvData: compiledCVData,
+      cvData: {
+        ...compiledCVData,
+        currentDesignation: currentDesignation.trim() || employee.designationTitle,
+        currentDepartment: currentDepartment.trim() || employee.departmentName,
+        currentOrganization: currentOrganization.trim() || branding.companyName || "Muslim Welfare Organization",
+      },
     };
 
     if (onSaveCV) onSaveCV(updatedEmployee);

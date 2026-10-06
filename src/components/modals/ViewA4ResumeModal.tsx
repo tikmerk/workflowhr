@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import React, { useRef, useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import {
   X,
@@ -14,16 +14,25 @@ import {
   Globe,
   User,
   FileText,
-  Building,
   CreditCard,
   Droplet,
   ExternalLink,
+  PenTool,
+  Edit3,
+  Maximize2,
+  Minimize2,
+  Check,
+  RotateCcw,
+  Upload,
+  Building,
 } from "lucide-react";
 import { toJpeg } from "html-to-image";
 import jsPDF from "jspdf";
 import { Employee, EmployeeCVData } from "../../types";
 import { useCompanyBranding } from "../../context/CompanyBrandingContext";
 import { getDefaultCareerObjective } from "../../utils/cvDefaults";
+import { compressSignatureImage } from "../../utils/imageCompression";
+import { saveEmployeeToFirestore } from "../../services/firestoreService";
 import { ViewNidCardModal } from "./ViewNidCardModal";
 
 interface ViewA4ResumeModalProps {
@@ -32,6 +41,7 @@ interface ViewA4ResumeModalProps {
   onClose: () => void;
   onEditCV?: () => void;
   onOpenEdit?: () => void;
+  onUpdateEmployee?: (updated: Employee) => void;
   isBangla?: boolean;
 }
 
@@ -41,40 +51,71 @@ export const ViewA4ResumeModal: React.FC<ViewA4ResumeModalProps> = ({
   onClose,
   onEditCV,
   onOpenEdit,
+  onUpdateEmployee,
   isBangla = true,
 }) => {
   const { branding } = useCompanyBranding();
   const printContentRef = useRef<HTMLDivElement>(null);
+  const signatureSectionRef = useRef<HTMLDivElement>(null);
+  const signatureCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const signatureFileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Active employee state for immediate responsiveness upon inline edits
+  const [currentEmp, setCurrentEmp] = useState<Employee>(employee);
+
+  // Keep local state in sync when parent employee prop changes
+  useEffect(() => {
+    setCurrentEmp(employee);
+  }, [employee]);
+
+  // View scale: "fit" (responsive width, 100% fits screen without horizontal scroll) vs "actual" (210mm locked)
+  const [viewScale, setViewScale] = useState<"fit" | "actual">("fit");
+
   const handleEdit = onEditCV || onOpenEdit;
   const [showNidModal, setShowNidModal] = useState(false);
   const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
   const [downloadSuccess, setDownloadSuccess] = useState(false);
 
+  // Quick Position Edit Modal states
+  const [showQuickEditModal, setShowQuickEditModal] = useState(false);
+  const [editDesigInput, setEditDesigInput] = useState("");
+  const [editDeptInput, setEditDeptInput] = useState("");
+  const [editOrgInput, setEditOrgInput] = useState("");
+  const [savingPosition, setSavingPosition] = useState(false);
+
+  // Signature Upload / Draw Modal states
+  const [showSignatureModal, setShowSignatureModal] = useState(false);
+  const [signatureTab, setSignatureTab] = useState<"upload" | "draw">("upload");
+  const [tempSignatureData, setTempSignatureData] = useState<string | null>(null);
+  const [isDrawing, setIsDrawing] = useState(false);
+  const [hasDrawnOnCanvas, setHasDrawnOnCanvas] = useState(false);
+  const [savingSignature, setSavingSignature] = useState(false);
+
   if (isOpen === false) return null;
 
   // Fallback or existing CV data
-  const cv: EmployeeCVData = employee.cvData || {
-    fullName: employee.fullName,
-    fatherName: employee.fatherName || "",
-    motherName: employee.motherName || "",
-    mobile: employee.phone,
-    email: employee.email,
-    presentAddress: employee.presentAddress || "",
-    permanentAddress: employee.permanentAddress || "",
-    socialLink: employee.socialLink || (employee as any).linkedinUrl || "",
-    linkedinUrl: employee.socialLink || (employee as any).linkedinUrl || "",
-    nidNumber: employee.nidNumber || "",
-    bloodGroup: employee.bloodGroup || "O+",
-    dateOfBirth: employee.dateOfBirth || "",
-    height: employee.height || "",
-    gender: employee.gender || "MALE",
-    nationality: employee.nationality || "Bangladeshi",
-    maritalStatus: employee.maritalStatus || "SINGLE",
-    religion: employee.religion || "Islam",
-    joiningDate: employee.joiningDate,
-    currentDesignation: employee.designationTitle,
-    currentDepartment: employee.departmentName,
-    currentOrganization: branding.companyName || "Organization",
+  const cv: EmployeeCVData = currentEmp.cvData || {
+    fullName: currentEmp.fullName,
+    fatherName: currentEmp.fatherName || "",
+    motherName: currentEmp.motherName || "",
+    mobile: currentEmp.phone,
+    email: currentEmp.email,
+    presentAddress: currentEmp.presentAddress || "",
+    permanentAddress: currentEmp.permanentAddress || "",
+    socialLink: currentEmp.socialLink || (currentEmp as any).linkedinUrl || "",
+    linkedinUrl: currentEmp.socialLink || (currentEmp as any).linkedinUrl || "",
+    nidNumber: currentEmp.nidNumber || "",
+    bloodGroup: currentEmp.bloodGroup || "O+",
+    dateOfBirth: currentEmp.dateOfBirth || "",
+    height: currentEmp.height || "",
+    gender: currentEmp.gender || "MALE",
+    nationality: currentEmp.nationality || "Bangladeshi",
+    maritalStatus: currentEmp.maritalStatus || "SINGLE",
+    religion: currentEmp.religion || "Islam",
+    joiningDate: currentEmp.joiningDate,
+    currentDesignation: currentEmp.designationTitle,
+    currentDepartment: currentEmp.departmentName,
+    currentOrganization: branding.companyName || "Muslim Welfare Organization",
     educations: [],
     experiences: [],
     computerSkills: [],
@@ -83,17 +124,46 @@ export const ViewA4ResumeModal: React.FC<ViewA4ResumeModalProps> = ({
       "Time Management & Punctuality",
       "Problem Solving & Adaptability",
       "Work Ethics & Patience",
-      "Effective Communication"
+      "Effective Communication",
     ],
     languages: [],
     summary: getDefaultCareerObjective(false),
-    signatureUrl: employee.savedSignatureUrl || employee.signatureUrl,
+    signatureUrl: currentEmp.savedSignatureUrl || currentEmp.signatureUrl,
   };
 
+  // Accurate Designation & Department resolution
+  const displayDesignation =
+    currentEmp.designationTitle ||
+    cv.currentDesignation ||
+    "Officer";
+  const displayDepartment =
+    currentEmp.departmentName ||
+    cv.currentDepartment ||
+    "Department";
+  const displayOrganization =
+    cv.currentOrganization &&
+    cv.currentOrganization !== "Organization" &&
+    !cv.currentOrganization.includes("Baridhara")
+      ? cv.currentOrganization
+      : (branding.companyName || "Muslim Welfare Organization");
+
+  // Effective Signature Image URL
+  const effectiveSignature =
+    currentEmp.savedSignatureUrl ||
+    currentEmp.signatureUrl ||
+    cv.signatureUrl;
+
   // Ensure summary always has high-quality professional text
-  const careerObjective = cv.summary && cv.summary.trim().length > 10
-    ? cv.summary
-    : getDefaultCareerObjective(false);
+  const careerObjective =
+    cv.summary && cv.summary.trim().length > 10
+      ? cv.summary
+      : getDefaultCareerObjective(false);
+
+  const scrollToSignature = () => {
+    if (signatureSectionRef.current) {
+      signatureSectionRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  };
 
   const handlePrint = () => {
     try {
@@ -116,7 +186,7 @@ export const ViewA4ResumeModal: React.FC<ViewA4ResumeModalProps> = ({
       const element = printContentRef.current;
 
       const imgData = await toJpeg(element, {
-        quality: 0.96,
+        quality: 0.98,
         pixelRatio: 2.5,
         backgroundColor: "#ffffff",
         cacheBust: true,
@@ -159,9 +229,9 @@ export const ViewA4ResumeModal: React.FC<ViewA4ResumeModalProps> = ({
         }
       }
 
-      const rawName = cv.fullName || employee.fullName || "Candidate";
+      const rawName = cv.fullName || currentEmp.fullName || "Candidate";
       const cleanName = rawName.trim().replace(/[^a-zA-Z0-9_\u0980-\u09FF]/g, "_");
-      const filename = `CV_${cleanName}_${employee.employeeCode || "A4"}.pdf`;
+      const filename = `CV_${cleanName}_${currentEmp.employeeCode || "A4"}.pdf`;
       pdf.save(filename);
 
       setDownloadSuccess(true);
@@ -175,6 +245,152 @@ export const ViewA4ResumeModal: React.FC<ViewA4ResumeModalProps> = ({
       }
     } finally {
       setIsDownloadingPdf(false);
+    }
+  };
+
+  // Save quick position updates (designation & department)
+  const handleSaveQuickPosition = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      setSavingPosition(true);
+      const newDesig = editDesigInput.trim() || currentEmp.designationTitle || "Officer";
+      const newDept = editDeptInput.trim() || currentEmp.departmentName || "Department";
+      const newOrg = editOrgInput.trim() || branding.companyName || "Muslim Welfare Organization";
+
+      const updatedEmp: Employee = {
+        ...currentEmp,
+        designationTitle: newDesig,
+        departmentName: newDept,
+        cvData: {
+          ...cv,
+          currentDesignation: newDesig,
+          currentDepartment: newDept,
+          currentOrganization: newOrg,
+        },
+      };
+
+      setCurrentEmp(updatedEmp);
+      if (onUpdateEmployee) {
+        onUpdateEmployee(updatedEmp);
+      }
+      await saveEmployeeToFirestore(updatedEmp);
+      setShowQuickEditModal(false);
+    } catch (err) {
+      console.error("Failed to save quick position:", err);
+    } finally {
+      setSavingPosition(false);
+    }
+  };
+
+  // Canvas drawing handlers for signature
+  const startDrawing = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+    const canvas = signatureCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    setIsDrawing(true);
+    setHasDrawnOnCanvas(true);
+    const rect = canvas.getBoundingClientRect();
+    const clientX = "touches" in e ? e.touches[0].clientX : e.clientX;
+    const clientY = "touches" in e ? e.touches[0].clientY : e.clientY;
+
+    ctx.beginPath();
+    ctx.moveTo(clientX - rect.left, clientY - rect.top);
+  };
+
+  const draw = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+    if (!isDrawing) return;
+    const canvas = signatureCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const clientX = "touches" in e ? e.touches[0].clientX : e.clientX;
+    const clientY = "touches" in e ? e.touches[0].clientY : e.clientY;
+
+    ctx.lineWidth = 2.5;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.strokeStyle = "#0f172a";
+    ctx.lineTo(clientX - rect.left, clientY - rect.top);
+    ctx.stroke();
+  };
+
+  const stopDrawing = () => {
+    setIsDrawing(false);
+  };
+
+  const clearCanvas = () => {
+    const canvas = signatureCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    setHasDrawnOnCanvas(false);
+  };
+
+  // File upload handler for signature
+  const handleSignatureFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (uploadEvt) => {
+      const rawDataUrl = uploadEvt.target?.result as string;
+      if (rawDataUrl) {
+        try {
+          const compressed = await compressSignatureImage(rawDataUrl);
+          setTempSignatureData(compressed);
+        } catch {
+          setTempSignatureData(rawDataUrl);
+        }
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // Save new signature to employee
+  const handleSaveSignature = async () => {
+    let finalSignatureUrl: string | null = null;
+
+    if (signatureTab === "upload" && tempSignatureData) {
+      finalSignatureUrl = tempSignatureData;
+    } else if (signatureTab === "draw" && signatureCanvasRef.current && hasDrawnOnCanvas) {
+      const canvasData = signatureCanvasRef.current.toDataURL("image/png");
+      try {
+        finalSignatureUrl = await compressSignatureImage(canvasData);
+      } catch {
+        finalSignatureUrl = canvasData;
+      }
+    }
+
+    if (!finalSignatureUrl) return;
+
+    try {
+      setSavingSignature(true);
+      const updatedEmp: Employee = {
+        ...currentEmp,
+        savedSignatureUrl: finalSignatureUrl,
+        signatureUrl: finalSignatureUrl,
+        cvData: {
+          ...cv,
+          signatureUrl: finalSignatureUrl,
+        },
+      };
+
+      setCurrentEmp(updatedEmp);
+      if (onUpdateEmployee) {
+        onUpdateEmployee(updatedEmp);
+      }
+      await saveEmployeeToFirestore(updatedEmp);
+      setShowSignatureModal(false);
+      setTempSignatureData(null);
+    } catch (err) {
+      console.error("Failed to save digital signature:", err);
+    } finally {
+      setSavingSignature(false);
     }
   };
 
@@ -196,44 +412,77 @@ export const ViewA4ResumeModal: React.FC<ViewA4ResumeModalProps> = ({
   return createPortal(
     <>
       <div className="fixed inset-0 z-[9999] flex items-center justify-center p-2 sm:p-4 bg-slate-950/80 backdrop-blur-xs overflow-y-auto animate-in fade-in duration-200">
-        {/* Container with print styles */}
+        {/* Modal Container */}
         <div className="relative w-full max-w-4xl bg-slate-100 dark:bg-slate-900 rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[96vh] my-auto border border-slate-300 dark:border-slate-800">
           
           {/* Top Control Bar (Hidden when printing) */}
-          <div className="print:hidden flex items-center justify-between px-5 py-3.5 bg-white dark:bg-slate-850 border-b border-slate-200 dark:border-slate-750 shrink-0">
-            <div className="flex items-center gap-2.5">
-              <div className="p-2 rounded-xl bg-teal-500/10 text-teal-600 dark:text-teal-400">
+          <div className="print:hidden flex items-center justify-between px-4 sm:px-5 py-3 bg-white dark:bg-slate-850 border-b border-slate-200 dark:border-slate-750 shrink-0 gap-2 flex-wrap">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="p-2 rounded-xl bg-teal-500/10 text-teal-600 dark:text-teal-400 shrink-0">
                 <FileText className="w-5 h-5" />
               </div>
-              <div>
-                <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white">
+              <div className="truncate">
+                <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white truncate">
                   {isBangla ? "অফিসিয়াল রিজিউমে / সিভি (A4 ফরম্যাট)" : "Official Resume / CV (A4 Format)"}
                 </h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  {employee.fullName} • {employee.employeeCode}
+                <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
+                  {currentEmp.fullName} • {currentEmp.employeeCode}
                 </p>
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+              {/* Quick Jump to Signature Button */}
+              <button
+                type="button"
+                onClick={scrollToSignature}
+                className="px-2.5 sm:px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+                title={isBangla ? "স্ক্রল করে নিচে সিগনেচার সেকশনে যান" : "Jump down to signature"}
+              >
+                <PenTool className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
+                <span className="hidden sm:inline">{isBangla ? "সিগনেচার দেখুন" : "View Signature"}</span>
+              </button>
+
+              {/* View Scale Toggle: Fit Width vs Actual 210mm */}
+              <button
+                type="button"
+                onClick={() => setViewScale(viewScale === "fit" ? "actual" : "fit")}
+                className="px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold flex items-center gap-1 transition-all cursor-pointer"
+                title={viewScale === "fit" ? (isBangla ? "১০০% A4 সাইজে দেখুন" : "View 100% A4 Size") : (isBangla ? "স্ক্রিনে ফিট করুন" : "Fit to Screen Width")}
+              >
+                {viewScale === "fit" ? <Maximize2 className="w-3.5 h-3.5" /> : <Minimize2 className="w-3.5 h-3.5" />}
+                <span className="hidden md:inline">{viewScale === "fit" ? (isBangla ? "১০০% সাইজ" : "100% Size") : (isBangla ? "স্ক্রিন ফিট" : "Fit Width")}</span>
+              </button>
+
+              {/* Digital Signature Upload/Draw Action */}
+              <button
+                type="button"
+                onClick={() => setShowSignatureModal(true)}
+                className="px-2.5 sm:px-3 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/60 dark:hover:bg-amber-900/60 text-amber-700 dark:text-amber-300 text-xs font-bold border border-amber-200 dark:border-amber-800 flex items-center gap-1.5 transition-all cursor-pointer"
+                title={isBangla ? "সিগনেচার ছবি আপলোড বা স্ক্রিনে ড্র করুন" : "Upload or draw signature"}
+              >
+                <PenTool className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">{isBangla ? "স্বাক্ষর দিন" : "Signature"}</span>
+              </button>
+
               {/* Separate NID Document View Button */}
               <button
                 type="button"
                 onClick={() => setShowNidModal(true)}
-                className="px-3 py-1.5 rounded-xl bg-teal-50 hover:bg-teal-100 dark:bg-teal-950/60 dark:hover:bg-teal-900/60 text-teal-700 dark:text-teal-300 text-xs font-bold border border-teal-200 dark:border-teal-800 flex items-center gap-1.5 transition-all cursor-pointer"
+                className="px-2.5 sm:px-3 py-1.5 rounded-xl bg-teal-50 hover:bg-teal-100 dark:bg-teal-950/60 dark:hover:bg-teal-900/60 text-teal-700 dark:text-teal-300 text-xs font-bold border border-teal-200 dark:border-teal-800 flex items-center gap-1.5 transition-all cursor-pointer"
                 title={isBangla ? "এনআইডি কার্ড আলাদা দেখুন ও ডাউনলোড করুন" : "View & Download NID separately"}
               >
                 <CreditCard className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">{isBangla ? "এনআইডি কার্ড দেখুন / ডাউনলোড" : "View NID Card"}</span>
+                <span className="hidden lg:inline">{isBangla ? "এনআইডি কার্ড" : "NID Card"}</span>
               </button>
 
               {handleEdit && (
                 <button
                   type="button"
                   onClick={handleEdit}
-                  className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold transition-all cursor-pointer"
+                  className="px-2.5 sm:px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold transition-all cursor-pointer"
                 >
-                  {isBangla ? "সিভি এডিট করুন" : "Edit CV"}
+                  {isBangla ? "সম্পূর্ণ সিভি এডিট" : "Edit All"}
                 </button>
               )}
 
@@ -242,23 +491,23 @@ export const ViewA4ResumeModal: React.FC<ViewA4ResumeModalProps> = ({
                 type="button"
                 onClick={handleDownloadPDF}
                 disabled={isDownloadingPdf}
-                className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 disabled:opacity-75 text-white text-xs font-bold shadow-md shadow-teal-500/20 flex items-center gap-1.5 transition-all cursor-pointer"
+                className="px-3 sm:px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 disabled:opacity-75 text-white text-xs font-bold shadow-md shadow-teal-500/20 flex items-center gap-1.5 transition-all cursor-pointer"
                 title={isBangla ? "এ৪ সাইজের পিডিএফ ফাইল সরাসরি ডাউনলোড করুন" : "Download high-quality A4 PDF"}
               >
                 {isDownloadingPdf ? (
                   <>
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    <span>{isBangla ? "পিডিএফ হচ্ছে..." : "Generating..."}</span>
+                    <span>{isBangla ? "পিডিএফ..." : "PDF..."}</span>
                   </>
                 ) : downloadSuccess ? (
                   <>
                     <CheckCircle2 className="w-3.5 h-3.5 text-white" />
-                    <span>{isBangla ? "ডাউনলোড সম্পন্ন!" : "Downloaded!"}</span>
+                    <span>{isBangla ? "ডাউনলোড সম্পন্ন!" : "Done!"}</span>
                   </>
                 ) : (
                   <>
                     <Download className="w-3.5 h-3.5" />
-                    <span>{isBangla ? "PDF ডাউনলোড" : "Download PDF"}</span>
+                    <span>{isBangla ? "PDF" : "PDF"}</span>
                   </>
                 )}
               </button>
@@ -267,11 +516,11 @@ export const ViewA4ResumeModal: React.FC<ViewA4ResumeModalProps> = ({
               <button
                 type="button"
                 onClick={handlePrint}
-                className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+                className="px-2.5 sm:px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
                 title={isBangla ? "প্রিন্ট করুন" : "Print directly"}
               >
                 <Printer className="w-3.5 h-3.5" />
-                <span>{isBangla ? "প্রিন্ট" : "Print"}</span>
+                <span className="hidden sm:inline">{isBangla ? "প্রিন্ট" : "Print"}</span>
               </button>
 
               <button
@@ -284,17 +533,17 @@ export const ViewA4ResumeModal: React.FC<ViewA4ResumeModalProps> = ({
             </div>
           </div>
 
-          {/* Scrollable Preview Area with A4 paper frame - Locked 210mm width */}
-          <div className="flex-1 overflow-x-auto overflow-y-auto p-2 sm:p-5 flex justify-start md:justify-center bg-slate-200/80 dark:bg-slate-950/70">
+          {/* Scrollable Preview Area with Responsive Sizing */}
+          <div className="flex-1 overflow-x-auto overflow-y-auto p-2 sm:p-5 flex justify-center bg-slate-200/80 dark:bg-slate-950/70">
             <div
               id="printable-a4-resume"
               ref={printContentRef}
-              className="bg-white text-slate-900 shadow-xl rounded-sm p-6 sm:p-8 font-sans border border-slate-300 print:border-0 print:shadow-none print:m-0 print:p-6"
+              className={`bg-white text-slate-900 shadow-xl rounded-sm font-sans border border-slate-300 print:border-0 print:shadow-none print:m-0 print:p-6 transition-all ${
+                viewScale === "fit"
+                  ? "w-full max-w-[210mm] mx-auto p-4 sm:p-6 md:p-8 min-h-[auto] sm:min-h-[297mm]"
+                  : "w-[210mm] min-w-[210mm] max-w-[210mm] min-h-[297mm] p-6 sm:p-8"
+              }`}
               style={{
-                width: "210mm",
-                minWidth: "210mm",
-                maxWidth: "210mm",
-                minHeight: "297mm",
                 boxSizing: "border-box",
               }}
             >
@@ -305,49 +554,67 @@ export const ViewA4ResumeModal: React.FC<ViewA4ResumeModalProps> = ({
                   <div className="text-[10px] font-bold tracking-widest text-teal-700 uppercase mb-0.5">
                     CURRICULUM VITAE
                   </div>
-                  <h1 className="text-2xl font-black text-slate-900 tracking-tight uppercase leading-tight">
-                    {cv.fullName || employee.fullName}
+                  <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight uppercase leading-tight truncate">
+                    {cv.fullName || currentEmp.fullName}
                   </h1>
-                  <div className="text-sm font-bold text-teal-800 mt-0.5 flex items-center gap-1.5 flex-wrap">
-                    <span>{cv.currentDesignation || employee.designationTitle}</span>
+                  
+                  {/* Position, Department & Organization Display with Quick Edit Action */}
+                  <div className="text-xs sm:text-sm font-bold text-teal-800 mt-1 flex items-center gap-1.5 flex-wrap">
+                    <span className="text-teal-900">{displayDesignation}</span>
                     <span className="text-slate-400">•</span>
-                    <span className="text-slate-700 font-semibold">{cv.currentDepartment || employee.departmentName}</span>
+                    <span className="text-slate-700 font-semibold">{displayDepartment}</span>
                     <span className="text-slate-400">•</span>
-                    <span className="text-slate-600">{cv.currentOrganization || branding.companyName}</span>
+                    <span className="text-slate-600">{displayOrganization}</span>
+
+                    {/* Quick Edit Position Button */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditDesigInput(displayDesignation);
+                        setEditDeptInput(displayDepartment);
+                        setEditOrgInput(displayOrganization);
+                        setShowQuickEditModal(true);
+                      }}
+                      className="print:hidden ml-1 px-2 py-0.5 rounded-lg bg-teal-50 hover:bg-teal-100 dark:bg-teal-900/40 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-700 text-[10px] font-bold inline-flex items-center gap-1 transition-all cursor-pointer shadow-2xs"
+                      title={isBangla ? "উপরে প্রদর্শিত পদবী ও বিভাগ সংশোধন করুন" : "Quick edit designation & department"}
+                    >
+                      <Edit3 className="w-2.5 h-2.5 text-teal-600 dark:text-teal-400" />
+                      <span>{isBangla ? "পদবী ও বিভাগ পরিবর্তন" : "Edit Position"}</span>
+                    </button>
                   </div>
 
-                  {/* Horizontal Compact Contact Bar (Top present address removed as requested) */}
+                  {/* Horizontal Compact Contact Bar */}
                   <div className="flex flex-wrap items-center gap-x-3.5 gap-y-1 text-[11px] text-slate-600 mt-2 font-medium">
                     <div className="flex items-center gap-1">
                       <Phone className="w-3 h-3 text-teal-700 shrink-0" />
-                      <span>{cv.mobile || employee.phone}</span>
+                      <span>{cv.mobile || currentEmp.phone}</span>
                     </div>
                     <div className="flex items-center gap-1">
                       <Mail className="w-3 h-3 text-teal-700 shrink-0" />
-                      <span>{cv.email || employee.email}</span>
+                      <span>{cv.email || currentEmp.email}</span>
                     </div>
                     <div className="flex items-center gap-1">
                       <CreditCard className="w-3 h-3 text-teal-700 shrink-0" />
-                      <span>NID: <strong className="text-slate-800">{cv.nidNumber || employee.nidNumber || "—"}</strong></span>
+                      <span>NID: <strong className="text-slate-800">{cv.nidNumber || currentEmp.nidNumber || "—"}</strong></span>
                     </div>
                     <div className="flex items-center gap-1">
                       <Droplet className="w-3 h-3 text-rose-600 shrink-0" />
-                      <span>Blood: <strong className="text-slate-800">{cv.bloodGroup || employee.bloodGroup || "—"}</strong></span>
+                      <span>Blood: <strong className="text-slate-800">{cv.bloodGroup || currentEmp.bloodGroup || "—"}</strong></span>
                     </div>
                   </div>
                 </div>
 
                 {/* Candidate Photo */}
                 <div className="flex flex-col items-center shrink-0">
-                  <div className="w-20 h-24 rounded border-2 border-teal-700 overflow-hidden shadow-xs bg-slate-100">
+                  <div className="w-18 sm:w-20 h-22 sm:h-24 rounded border-2 border-teal-700 overflow-hidden shadow-xs bg-slate-100">
                     <img
-                      src={employee.avatarUrl}
-                      alt={employee.fullName}
+                      src={currentEmp.avatarUrl}
+                      alt={currentEmp.fullName}
                       className="w-full h-full object-cover"
                     />
                   </div>
-                  <span className="text-[9.5px] font-mono font-bold text-slate-500 mt-1">
-                    ID: {employee.employeeCode}
+                  <span className="text-[9px] sm:text-[9.5px] font-mono font-bold text-slate-500 mt-1">
+                    ID: {currentEmp.employeeCode}
                   </span>
                 </div>
               </div>
@@ -453,64 +720,64 @@ export const ViewA4ResumeModal: React.FC<ViewA4ResumeModalProps> = ({
                   <div className="grid grid-cols-2 gap-x-2.5 gap-y-1.5 text-[10.5px]">
                     <div>
                       <span className="text-slate-500 text-[9px] block font-bold">Father's Name:</span>
-                      <span className="font-semibold text-slate-900 leading-tight block">{cv.fatherName || employee.fatherName || "—"}</span>
+                      <span className="font-semibold text-slate-900 leading-tight block">{cv.fatherName || currentEmp.fatherName || "—"}</span>
                     </div>
                     <div>
                       <span className="text-slate-500 text-[9px] block font-bold">Mother's Name:</span>
-                      <span className="font-semibold text-slate-900 leading-tight block">{cv.motherName || employee.motherName || "—"}</span>
+                      <span className="font-semibold text-slate-900 leading-tight block">{cv.motherName || currentEmp.motherName || "—"}</span>
                     </div>
                     <div>
                       <span className="text-slate-500 text-[9px] block font-bold">Date of Birth:</span>
-                      <span className="font-semibold text-slate-900">{cv.dateOfBirth || employee.dateOfBirth || "—"}</span>
+                      <span className="font-semibold text-slate-900">{cv.dateOfBirth || currentEmp.dateOfBirth || "—"}</span>
                     </div>
                     <div>
                       <span className="text-slate-500 text-[9px] block font-bold">Gender / Sex:</span>
-                      <span className="font-semibold text-slate-900">{cv.gender || employee.gender || "Male"}</span>
+                      <span className="font-semibold text-slate-900">{cv.gender || currentEmp.gender || "Male"}</span>
                     </div>
                     <div>
                       <span className="text-slate-500 text-[9px] block font-bold">Marital Status:</span>
-                      <span className="font-semibold text-slate-900">{cv.maritalStatus || employee.maritalStatus || "SINGLE"}</span>
+                      <span className="font-semibold text-slate-900">{cv.maritalStatus || currentEmp.maritalStatus || "SINGLE"}</span>
                     </div>
                     <div>
                       <span className="text-slate-500 text-[9px] block font-bold">Blood Group:</span>
-                      <span className="font-bold text-rose-700">{cv.bloodGroup || employee.bloodGroup || "—"}</span>
+                      <span className="font-bold text-rose-700">{cv.bloodGroup || currentEmp.bloodGroup || "—"}</span>
                     </div>
                     <div>
                       <span className="text-slate-500 text-[9px] block font-bold">Height (উচ্চতা):</span>
-                      <span className="font-semibold text-slate-900">{cv.height || employee.height || "—"}</span>
+                      <span className="font-semibold text-slate-900">{cv.height || currentEmp.height || "—"}</span>
                     </div>
                     <div>
                       <span className="text-slate-500 text-[9px] block font-bold">Religion:</span>
-                      <span className="font-semibold text-slate-900">{cv.religion || employee.religion || "Islam"}</span>
+                      <span className="font-semibold text-slate-900">{cv.religion || currentEmp.religion || "Islam"}</span>
                     </div>
                     <div>
                       <span className="text-slate-500 text-[9px] block font-bold">Nationality:</span>
-                      <span className="font-semibold text-slate-900">{cv.nationality || employee.nationality || "Bangladeshi (By Birth)"}</span>
+                      <span className="font-semibold text-slate-900">{cv.nationality || currentEmp.nationality || "Bangladeshi (By Birth)"}</span>
                     </div>
                     <div>
                       <span className="text-slate-500 text-[9px] block font-bold">National ID (NID):</span>
-                      <span className="font-mono font-bold text-slate-900">{cv.nidNumber || employee.nidNumber || "—"}</span>
+                      <span className="font-mono font-bold text-slate-900">{cv.nidNumber || currentEmp.nidNumber || "—"}</span>
                     </div>
                     <div className="col-span-2">
                       <span className="text-slate-500 text-[9px] block font-bold">Emergency Contact:</span>
-                      <span className="font-mono font-semibold text-slate-800">{employee.emergencyPhone || cv.mobile || employee.phone || "—"}</span>
+                      <span className="font-mono font-semibold text-slate-800">{currentEmp.emergencyPhone || cv.mobile || currentEmp.phone || "—"}</span>
                     </div>
                     <div className="col-span-2 pt-1 border-t border-slate-200">
                       <span className="text-slate-500 text-[9px] block font-bold">Present Address:</span>
-                      <span className="font-normal text-slate-800 leading-tight block">{cv.presentAddress || employee.presentAddress || "—"}</span>
+                      <span className="font-normal text-slate-800 leading-tight block">{cv.presentAddress || currentEmp.presentAddress || "—"}</span>
                     </div>
                     <div className="col-span-2 pt-0.5 border-t border-slate-200">
                       <span className="text-slate-500 text-[9px] block font-bold">Permanent Address:</span>
-                      <span className="font-normal text-slate-800 leading-tight block">{cv.permanentAddress || employee.permanentAddress || "—"}</span>
+                      <span className="font-normal text-slate-800 leading-tight block">{cv.permanentAddress || currentEmp.permanentAddress || "—"}</span>
                     </div>
-                    {(cv.socialLink || cv.linkedinUrl || employee.socialLink || (employee as any).linkedinUrl) && (
+                    {(cv.socialLink || cv.linkedinUrl || currentEmp.socialLink || (currentEmp as any).linkedinUrl) && (
                       <div className="col-span-2 pt-0.5 border-t border-slate-200">
                         <span className="text-slate-500 text-[9px] block font-bold">LinkedIn / Social Profile:</span>
                         <a
                           href={
-                            (cv.socialLink || cv.linkedinUrl || employee.socialLink || (employee as any).linkedinUrl).startsWith("http")
-                              ? (cv.socialLink || cv.linkedinUrl || employee.socialLink || (employee as any).linkedinUrl)
-                              : `https://${cv.socialLink || cv.linkedinUrl || employee.socialLink || (employee as any).linkedinUrl}`
+                            (cv.socialLink || cv.linkedinUrl || currentEmp.socialLink || (currentEmp as any).linkedinUrl).startsWith("http")
+                              ? (cv.socialLink || cv.linkedinUrl || currentEmp.socialLink || (currentEmp as any).linkedinUrl)
+                              : `https://${cv.socialLink || cv.linkedinUrl || currentEmp.socialLink || (currentEmp as any).linkedinUrl}`
                           }
                           target="_blank"
                           rel="noopener noreferrer"
@@ -518,7 +785,7 @@ export const ViewA4ResumeModal: React.FC<ViewA4ResumeModalProps> = ({
                         >
                           <Globe className="w-3 h-3 text-teal-600 shrink-0" />
                           <span className="truncate max-w-[320px]">
-                            {cv.socialLink || cv.linkedinUrl || employee.socialLink || (employee as any).linkedinUrl}
+                            {cv.socialLink || cv.linkedinUrl || currentEmp.socialLink || (currentEmp as any).linkedinUrl}
                           </span>
                           <ExternalLink className="w-2.5 h-2.5 text-slate-400 shrink-0" />
                         </a>
@@ -529,7 +796,7 @@ export const ViewA4ResumeModal: React.FC<ViewA4ResumeModalProps> = ({
 
                 {/* Right: Professional & Management Skills, Computer Skills & Languages */}
                 <div className="md:col-span-5 flex flex-col justify-between space-y-2">
-                  {/* Professional & Management Skills (Official Competencies) */}
+                  {/* Professional & Management Skills */}
                   <div className="bg-slate-50/90 p-2 rounded border border-slate-200">
                     <h4 className="text-[10px] font-black uppercase tracking-wider text-teal-900 border-b border-teal-200 pb-0.5 mb-1 flex items-center gap-1">
                       <Briefcase className="w-3 h-3 text-teal-700" />
@@ -611,14 +878,17 @@ export const ViewA4ResumeModal: React.FC<ViewA4ResumeModalProps> = ({
 
               </div>
 
-              {/* 6. Declaration & Candidate Signature Footer */}
-              <div className="pt-2.5 border-t border-slate-300 mt-2">
+              {/* 6. Declaration & Candidate Signature Footer (Guaranteed in-screen visibility) */}
+              <div
+                ref={signatureSectionRef}
+                className="pt-2.5 border-t border-slate-300 mt-2"
+              >
                 <p className="text-[10px] text-slate-600 text-justify leading-tight">
                   I solemnly declare that the particulars and information given above are true, complete and correct to the best of my knowledge and belief.
                 </p>
 
-                <div className="flex items-end justify-between mt-3 pt-1">
-                  <div className="text-[10px] text-slate-600 space-y-0.5">
+                <div className="flex flex-col sm:flex-row items-center sm:items-end justify-between gap-3 mt-3 pt-1">
+                  <div className="text-[10px] text-slate-600 space-y-0.5 text-left w-full sm:w-auto">
                     <div>
                       <span className="font-semibold">Date: </span>
                       <span>
@@ -629,30 +899,50 @@ export const ViewA4ResumeModal: React.FC<ViewA4ResumeModalProps> = ({
                         })}
                       </span>
                     </div>
+                    <div>
+                      <span className="font-semibold">Place: </span>
+                      <span>Dhaka, Bangladesh</span>
+                    </div>
                   </div>
 
-                  <div className="text-center flex flex-col items-center">
-                    <div className="w-44 border-b border-slate-400 pb-0.5 mb-1 flex flex-col items-center justify-end min-h-[42px]">
-                      {(employee.savedSignatureUrl || employee.signatureUrl || cv.signatureUrl) ? (
-                        <>
+                  {/* Candidate Signature Block - Always cleanly bounded & inside viewport */}
+                  <div className="text-center flex flex-col items-center shrink-0 w-full sm:w-auto">
+                    <div className="w-48 sm:w-52 border-b-2 border-slate-700 pb-1 mb-1 flex flex-col items-center justify-end min-h-[50px]">
+                      {effectiveSignature ? (
+                        <div className="flex flex-col items-center">
                           <img
-                            src={employee.savedSignatureUrl || employee.signatureUrl || cv.signatureUrl}
+                            src={effectiveSignature}
                             alt="Candidate Signature"
-                            className="h-7 max-h-8 max-w-[140px] object-contain mb-0.5"
+                            className="h-9 sm:h-10 max-h-12 max-w-[170px] object-contain mb-0.5 filter contrast-125"
                           />
-                          <span className="text-[9.5px] text-slate-800 font-semibold tracking-wide">
-                            {cv.fullName || employee.fullName}
+                          <span className="text-[9.5px] text-slate-900 font-bold tracking-wide">
+                            {cv.fullName || currentEmp.fullName}
                           </span>
-                        </>
+                        </div>
                       ) : (
-                        <span className="font-serif italic text-slate-800 text-xs font-semibold pb-0.5">
-                          {cv.fullName || employee.fullName}
-                        </span>
+                        <div className="flex flex-col items-center py-1">
+                          <span className="font-serif italic text-teal-900 text-base font-bold tracking-wider select-none leading-tight">
+                            {cv.fullName || currentEmp.fullName}
+                          </span>
+                          <span className="text-[9px] text-slate-500 font-semibold">
+                            (Digital Signature)
+                          </span>
+                        </div>
                       )}
                     </div>
-                    <span className="text-[10px] font-bold text-slate-800 block">
-                      Candidate Signature
-                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] font-black uppercase text-slate-900 tracking-wider">
+                        Candidate Signature
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setShowSignatureModal(true)}
+                        className="print:hidden text-[9px] sm:text-[9.5px] px-2 py-0.5 rounded-lg bg-teal-50 hover:bg-teal-100 dark:bg-teal-950 text-teal-700 dark:text-teal-300 border border-teal-300 font-bold cursor-pointer transition-colors shadow-2xs"
+                        title={isBangla ? "স্বাক্ষর আপলোড বা পরিবর্তন করুন" : "Upload or update digital signature"}
+                      >
+                        {effectiveSignature ? (isBangla ? "পরিবর্তন" : "Change") : (isBangla ? "+ স্বাক্ষর দিন" : "+ Add Signature")}
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -663,10 +953,244 @@ export const ViewA4ResumeModal: React.FC<ViewA4ResumeModalProps> = ({
         </div>
       </div>
 
+      {/* Quick Edit Designation & Department Modal */}
+      {showQuickEditModal && (
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center p-3 bg-slate-950/80 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="relative w-full max-w-md bg-white dark:bg-slate-900 rounded-3xl shadow-2xl p-5 border border-slate-200 dark:border-slate-800">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800 mb-4">
+              <div className="flex items-center gap-2 text-teal-700 dark:text-teal-400 font-bold text-sm">
+                <Edit3 className="w-4 h-4" />
+                <span>{isBangla ? "সিভিতে পদবী ও বিভাগ সংশোধন করুন" : "Update Designation & Department"}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowQuickEditModal(false)}
+                className="p-1 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveQuickPosition} className="space-y-3.5 text-xs">
+              <div>
+                <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
+                  {isBangla ? "বর্তমান পদবী (Designation):" : "Current Designation:"}
+                </label>
+                <input
+                  type="text"
+                  value={editDesigInput}
+                  onChange={(e) => setEditDesigInput(e.target.value)}
+                  placeholder="e.g. IT & MIS Officer (আইটি ও এমআইএস কর্মকর্তা)"
+                  className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white font-medium focus:ring-2 focus:ring-teal-500"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
+                  {isBangla ? "বিভাগ (Department):" : "Current Department:"}
+                </label>
+                <input
+                  type="text"
+                  value={editDeptInput}
+                  onChange={(e) => setEditDeptInput(e.target.value)}
+                  placeholder="e.g. আইটি, এমআইএস ও টেকনিক্যাল সাপোর্ট"
+                  className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white font-medium focus:ring-2 focus:ring-teal-500"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
+                  {isBangla ? "প্রতিষ্ঠানের নাম (Organization):" : "Organization Name:"}
+                </label>
+                <input
+                  type="text"
+                  value={editOrgInput}
+                  onChange={(e) => setEditOrgInput(e.target.value)}
+                  placeholder="e.g. Muslim Welfare Organization"
+                  className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white font-medium focus:ring-2 focus:ring-teal-500"
+                />
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowQuickEditModal(false)}
+                  className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold"
+                >
+                  {isBangla ? "বাতিল" : "Cancel"}
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingPosition}
+                  className="px-4 py-2 rounded-xl bg-teal-600 hover:bg-teal-500 text-white font-bold flex items-center gap-1.5 shadow-md shadow-teal-500/20 disabled:opacity-50"
+                >
+                  {savingPosition ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                  <span>{isBangla ? "সংরক্ষণ করুন" : "Save Changes"}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Signature Upload & Draw Modal */}
+      {showSignatureModal && (
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center p-3 bg-slate-950/80 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="relative w-full max-w-md bg-white dark:bg-slate-900 rounded-3xl shadow-2xl p-5 border border-slate-200 dark:border-slate-800">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800 mb-4">
+              <div className="flex items-center gap-2 text-teal-700 dark:text-teal-400 font-bold text-sm">
+                <PenTool className="w-4 h-4" />
+                <span>{isBangla ? "ডিজিটাল স্বাক্ষর যুক্ত বা পরিবর্তন করুন" : "Update Digital Signature"}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowSignatureModal(false);
+                  setTempSignatureData(null);
+                }}
+                className="p-1 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Mode selection tabs */}
+            <div className="flex items-center gap-2 mb-4 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl text-xs font-bold">
+              <button
+                type="button"
+                onClick={() => setSignatureTab("upload")}
+                className={`flex-1 py-1.5 rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+                  signatureTab === "upload"
+                    ? "bg-white dark:bg-slate-700 text-teal-700 dark:text-teal-300 shadow-xs"
+                    : "text-slate-600 dark:text-slate-400"
+                }`}
+              >
+                <Upload className="w-3.5 h-3.5" />
+                <span>{isBangla ? "ছবি আপলোড" : "Upload File"}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setSignatureTab("draw")}
+                className={`flex-1 py-1.5 rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+                  signatureTab === "draw"
+                    ? "bg-white dark:bg-slate-700 text-teal-700 dark:text-teal-300 shadow-xs"
+                    : "text-slate-600 dark:text-slate-400"
+                }`}
+              >
+                <PenTool className="w-3.5 h-3.5" />
+                <span>{isBangla ? "স্ক্রিনে স্বাক্ষর আঁকুন" : "Draw Online"}</span>
+              </button>
+            </div>
+
+            {/* Tab 1: Upload Image */}
+            {signatureTab === "upload" && (
+              <div className="space-y-4 text-xs">
+                <input
+                  type="file"
+                  ref={signatureFileInputRef}
+                  onChange={handleSignatureFileUpload}
+                  accept="image/png,image/jpeg,image/jpg,image/webp"
+                  className="hidden"
+                />
+
+                <div
+                  onClick={() => signatureFileInputRef.current?.click()}
+                  className="border-2 border-dashed border-teal-500/50 hover:border-teal-500 rounded-2xl p-6 text-center cursor-pointer bg-slate-50 dark:bg-slate-850 transition-colors flex flex-col items-center justify-center min-h-[140px]"
+                >
+                  {tempSignatureData ? (
+                    <div className="flex flex-col items-center gap-2">
+                      <img
+                        src={tempSignatureData}
+                        alt="Signature Preview"
+                        className="max-h-20 max-w-[200px] object-contain filter contrast-125"
+                      />
+                      <span className="text-[11px] font-bold text-teal-600 dark:text-teal-400">
+                        {isBangla ? "ছবি নির্বাচিত হয়েছে (পরিবর্তন করতে ক্লিক করুন)" : "Image selected (Click to change)"}
+                      </span>
+                    </div>
+                  ) : (
+                    <>
+                      <Upload className="w-8 h-8 text-teal-600 dark:text-teal-400 mb-2" />
+                      <span className="font-bold text-slate-800 dark:text-slate-200">
+                        {isBangla ? "স্বাক্ষরের স্পষ্ট ছবি নির্বাচন করুন" : "Select signature image"}
+                      </span>
+                      <span className="text-[10px] text-slate-500 mt-1">PNG, JPG বা WEBP ফরম্যাট</span>
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Tab 2: Interactive Draw Pad */}
+            {signatureTab === "draw" && (
+              <div className="space-y-2 text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] text-slate-500 font-medium">
+                    {isBangla ? "মাউস বা আঙুল দিয়ে নিচের সাদা বক্সে স্বাক্ষর করুন:" : "Draw your signature below:"}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={clearCanvas}
+                    className="text-[11px] font-bold text-rose-600 hover:text-rose-700 flex items-center gap-1 cursor-pointer"
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                    <span>{isBangla ? "মুছে আবার আঁকুন" : "Clear"}</span>
+                  </button>
+                </div>
+
+                <div className="border border-slate-300 dark:border-slate-700 rounded-2xl overflow-hidden bg-white shadow-inner">
+                  <canvas
+                    ref={signatureCanvasRef}
+                    width={380}
+                    height={140}
+                    onMouseDown={startDrawing}
+                    onMouseMove={draw}
+                    onMouseUp={stopDrawing}
+                    onMouseLeave={stopDrawing}
+                    onTouchStart={startDrawing}
+                    onTouchMove={draw}
+                    onTouchEnd={stopDrawing}
+                    className="w-full h-[140px] cursor-crosshair touch-none"
+                  />
+                </div>
+              </div>
+            )}
+
+            <div className="pt-4 flex items-center justify-end gap-2 border-t border-slate-200 dark:border-slate-800 mt-4 text-xs">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowSignatureModal(false);
+                  setTempSignatureData(null);
+                }}
+                className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold"
+              >
+                {isBangla ? "বাতিল" : "Cancel"}
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveSignature}
+                disabled={
+                  savingSignature ||
+                  (signatureTab === "upload" && !tempSignatureData) ||
+                  (signatureTab === "draw" && !hasDrawnOnCanvas)
+                }
+                className="px-4 py-2 rounded-xl bg-teal-600 hover:bg-teal-500 text-white font-bold flex items-center gap-1.5 shadow-md shadow-teal-500/20 disabled:opacity-50 cursor-pointer"
+              >
+                {savingSignature ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                <span>{isBangla ? "স্বাক্ষর সংরক্ষণ করুন" : "Save Signature"}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Standalone NID Document Modal */}
       {showNidModal && (
         <ViewNidCardModal
-          employee={employee}
+          employee={currentEmp}
           isOpen={showNidModal}
           onClose={() => setShowNidModal(false)}
           onOpenEditCV={handleEdit}

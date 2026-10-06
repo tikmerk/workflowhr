@@ -62,6 +62,8 @@ import {
 import { compressAndOptimizeImage } from "./utils/imageCompression";
 import { invalidateEmployeeFaceCache, loadFaceApiModels } from "./utils/faceRecognitionEngine";
 
+import { DEFAULT_SUPER_ADMIN_SIGNATURE } from "./data/defaultSignature";
+
 // Views
 import { LoginView } from "./components/views/LoginView";
 import { DashboardView } from "./components/views/DashboardView";
@@ -238,6 +240,8 @@ function AppContent() {
                   fullName: "Md. Ibrahim Hossain",
                   designationTitle: "IT & MIS Officer (আইটি ও এমআইএস কর্মকর্তা)",
                   departmentName: "আইটি, এমআইএস ও টেকনিক্যাল সাপোর্ট (IT, MIS & Database Support)",
+                  savedSignatureUrl: e.savedSignatureUrl || DEFAULT_SUPER_ADMIN_SIGNATURE,
+                  signatureUrl: e.signatureUrl || DEFAULT_SUPER_ADMIN_SIGNATURE,
                   role: "SUPER_ADMIN",
                   isSuperAdmin: true,
                   isCeoOrOwner: true,

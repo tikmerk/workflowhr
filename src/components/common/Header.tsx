@@ -1208,6 +1208,7 @@ export const Header: React.FC<HeaderProps> = ({
           onClose={() => setShowViewA4ResumeModal(false)}
           employee={currentEmployee}
           isBangla={isBangla}
+          onUpdateEmployee={onUpdateEmployee}
           onOpenEdit={() => {
             setShowViewA4ResumeModal(false);
             setShowEditCVModal(true);
