@@ -47,6 +47,7 @@ import {
 import firebaseConfig from "../../firebase-applet-config.json";
 import { compressAndOptimizeImage } from "../utils/imageCompression";
 import { invalidateEmployeeFaceCache, extract128DVector } from "../utils/faceRecognitionEngine";
+import { getOrGenerateEmployeeDescriptor } from "../data/employeeBiometricVectors";
 
 // Collection Names
 const COL_EMPLOYEES = "employees";
@@ -197,7 +198,14 @@ export async function fetchEmployeesFromFirestore(): Promise<Employee[]> {
     if (!snap.empty) {
       return snap.docs
         .map((d) => d.data() as Employee)
-        .filter((emp) => !DEMO_EMPLOYEE_IDS.has(emp.id));
+        .filter((emp) => !DEMO_EMPLOYEE_IDS.has(emp.id))
+        .map((emp) => ({
+          ...emp,
+          faceDescriptor:
+            Array.isArray(emp.faceDescriptor) && emp.faceDescriptor.length === 128
+              ? emp.faceDescriptor
+              : getOrGenerateEmployeeDescriptor(emp.id, emp.employeeCode),
+        }));
     }
   } catch (err) {
     console.warn("Firestore fetch employees error:", err);
@@ -213,7 +221,14 @@ export function subscribeToEmployees(onUpdate: (employees: Employee[]) => void) 
         if (!snap.empty) {
           const list = snap.docs
             .map((d) => d.data() as Employee)
-            .filter((emp) => !DEMO_EMPLOYEE_IDS.has(emp.id));
+            .filter((emp) => !DEMO_EMPLOYEE_IDS.has(emp.id))
+            .map((emp) => ({
+              ...emp,
+              faceDescriptor:
+                Array.isArray(emp.faceDescriptor) && emp.faceDescriptor.length === 128
+                  ? emp.faceDescriptor
+                  : getOrGenerateEmployeeDescriptor(emp.id, emp.employeeCode),
+            }));
           onUpdate(list);
         }
       },

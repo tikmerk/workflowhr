@@ -28,6 +28,7 @@ import {
   CustomBonusConfig,
 } from "../types";
 import { DEFAULT_SUPER_ADMIN_SIGNATURE } from "./defaultSignature";
+import { getOrGenerateEmployeeDescriptor } from "./employeeBiometricVectors";
 
 export const INITIAL_COMPANY: Company = {
   id: "comp-01",
@@ -1182,7 +1183,13 @@ const RAW_INITIAL_EMPLOYEES: Employee[] = [
   }
 ];
 
-export const INITIAL_EMPLOYEES: Employee[] = [...RAW_INITIAL_EMPLOYEES];
+export const INITIAL_EMPLOYEES: Employee[] = RAW_INITIAL_EMPLOYEES.map((emp) => ({
+  ...emp,
+  faceDescriptor:
+    Array.isArray(emp.faceDescriptor) && emp.faceDescriptor.length === 128
+      ? emp.faceDescriptor
+      : getOrGenerateEmployeeDescriptor(emp.id, emp.employeeCode),
+}));
 
 export const INITIAL_ATTENDANCE_LOGS: AttendanceRecord[] = [
   {

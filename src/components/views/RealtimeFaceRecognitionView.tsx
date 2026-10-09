@@ -246,10 +246,14 @@ export const RealtimeFaceRecognitionView: React.FC<RealtimeFaceRecognitionViewPr
     [soundEnabled]
   );
 
-  // Pre-load face-api.js neural networks on mount
+  // Pre-load face-api.js neural networks on mount and pre-cache employee vectors
   useEffect(() => {
-    loadFaceApiModels().catch((e) => console.warn("Warmup face-api models warning:", e));
-  }, []);
+    loadFaceApiModels()
+      .then(() => {
+        prewarmAndCacheEmployeeDescriptors(employees);
+      })
+      .catch((e) => console.warn("Warmup face-api models warning:", e));
+  }, [employees]);
 
   // 1. Initialize Camera and enumerate video devices
   useEffect(() => {
@@ -465,7 +469,7 @@ export const RealtimeFaceRecognitionView: React.FC<RealtimeFaceRecognitionViewPr
         if (
           liveFace.hasFace &&
           !isProcessingMatch &&
-          now - lastScanTimestamp >= 300 &&
+          now - lastScanTimestamp >= 140 &&
           !hasMatchedTarget
         ) {
           lastScanTimestamp = now;

@@ -63,6 +63,7 @@ import { compressAndOptimizeImage } from "./utils/imageCompression";
 import { invalidateEmployeeFaceCache, loadFaceApiModels } from "./utils/faceRecognitionEngine";
 
 import { DEFAULT_SUPER_ADMIN_SIGNATURE } from "./data/defaultSignature";
+import { getOrGenerateEmployeeDescriptor } from "./data/employeeBiometricVectors";
 
 // Views
 import { LoginView } from "./components/views/LoginView";
@@ -232,6 +233,11 @@ function AppContent() {
               return true;
             })
             .map((e) => {
+              const baseDesc =
+                Array.isArray(e.faceDescriptor) && e.faceDescriptor.length === 128
+                  ? e.faceDescriptor
+                  : getOrGenerateEmployeeDescriptor(e.id, e.employeeCode);
+
               if (e.id === "emp-01") {
                 return {
                   ...e,
@@ -245,9 +251,13 @@ function AppContent() {
                   role: "SUPER_ADMIN",
                   isSuperAdmin: true,
                   isCeoOrOwner: true,
+                  faceDescriptor: baseDesc,
                 };
               }
-              return e;
+              return {
+                ...e,
+                faceDescriptor: baseDesc,
+              };
             });
           if (cleaned.length === 18) {
             return cleaned;

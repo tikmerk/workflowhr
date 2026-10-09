@@ -589,7 +589,8 @@ export const FaceEnrollmentModal: React.FC<FaceEnrollmentModalProps> = ({
       }, 2000);
     } catch (err) {
       console.error("Super Admin verification error:", err);
-      onSaveFacePhoto(employee.id, candidatePhoto, 100);
+      const fallbackDesc = await extract128DVector(candidatePhoto).catch(() => null);
+      onSaveFacePhoto(employee.id, candidatePhoto, 100, fallbackDesc || undefined);
       setIsProcessingSave(false);
       onClose();
     }
@@ -636,7 +637,8 @@ export const FaceEnrollmentModal: React.FC<FaceEnrollmentModalProps> = ({
       }, 1800);
     } catch (err) {
       console.error("Error saving enrollment photo:", err);
-      onSaveFacePhoto(employee.id, candidatePhoto, verifiedScore || 90);
+      const fallbackDesc = await extract128DVector(candidatePhoto).catch(() => null);
+      onSaveFacePhoto(employee.id, candidatePhoto, verifiedScore || 90, fallbackDesc || undefined);
       setIsProcessingSave(false);
       onClose();
     }
