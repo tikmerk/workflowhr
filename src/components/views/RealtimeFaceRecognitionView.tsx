@@ -147,6 +147,7 @@ export const RealtimeFaceRecognitionView: React.FC<RealtimeFaceRecognitionViewPr
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const isStartingCameraRef = useRef<boolean>(false);
   const [isCameraActive, setIsCameraActive] = useState<boolean>(true);
   const [cameraLoading, setCameraLoading] = useState<boolean>(true);
   const [cameraError, setCameraError] = useState<string | null>(null);
@@ -255,7 +256,7 @@ export const RealtimeFaceRecognitionView: React.FC<RealtimeFaceRecognitionViewPr
       .catch((e) => console.warn("Warmup face-api models warning:", e));
   }, [employees]);
 
-  // 1. Initialize Camera and enumerate video devices
+  // 1. Enumerate video devices once on mount for optional camera selection
   useEffect(() => {
     let mounted = true;
 
@@ -266,9 +267,6 @@ export const RealtimeFaceRecognitionView: React.FC<RealtimeFaceRecognitionViewPr
         const videoDevs = devices.filter((d) => d.kind === "videoinput");
         if (mounted) {
           setAvailableDevices(videoDevs);
-          if (videoDevs.length > 0 && !selectedDeviceId) {
-            setSelectedDeviceId(videoDevs[0].deviceId);
-          }
         }
       } catch (err) {
         console.warn("Could not enumerate camera devices:", err);
@@ -279,21 +277,44 @@ export const RealtimeFaceRecognitionView: React.FC<RealtimeFaceRecognitionViewPr
     return () => {
       mounted = false;
     };
-  }, [selectedDeviceId]);
+  }, []);
 
-  // Start Camera Stream
-  const startCamera = useCallback(async () => {
+  // Start Camera Stream with fast-path reuse & concurrent startup lock
+  const startCamera = useCallback(async (forcedDeviceId?: string) => {
+    if (isStartingCameraRef.current) return;
+    isStartingCameraRef.current = true;
+
+    const targetDeviceId = forcedDeviceId !== undefined ? forcedDeviceId : selectedDeviceId;
+
+    // Fast check: if stream is already active and healthy, attach and return immediately
+    if (streamRef.current && streamRef.current.active) {
+      const activeVideoTrack = streamRef.current.getVideoTracks().find((t) => t.readyState === "live");
+      if (activeVideoTrack) {
+        if (videoRef.current && videoRef.current.srcObject !== streamRef.current) {
+          videoRef.current.srcObject = streamRef.current;
+        }
+        setCameraLoading(false);
+        setIsCameraActive(true);
+        isStartingCameraRef.current = false;
+        return;
+      }
+    }
+
     setCameraLoading(true);
     setCameraError(null);
 
-    // Stop existing stream
+    // Stop previous stream cleanly
     if (streamRef.current) {
-      streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current.getTracks().forEach((track) => {
+        try {
+          track.stop();
+        } catch {}
+      });
       streamRef.current = null;
     }
 
     try {
-      const stream = await requestUserMediaStream("user", selectedDeviceId);
+      const stream = await requestUserMediaStream("user", targetDeviceId);
       streamRef.current = stream;
 
       if (videoRef.current) {
@@ -316,8 +337,8 @@ export const RealtimeFaceRecognitionView: React.FC<RealtimeFaceRecognitionViewPr
           markReady();
         } catch (playErr) {
           console.warn("Autoplay notice:", playErr);
-          // Safety timeout for mobile autoplay policies: guarantee spinner dismisses
-          setTimeout(markReady, 700);
+          // Instant fallback so UI doesn't hang
+          setTimeout(markReady, 250);
         }
       } else {
         setCameraLoading(false);
@@ -332,13 +353,19 @@ export const RealtimeFaceRecognitionView: React.FC<RealtimeFaceRecognitionViewPr
             : "ক্যামেরা লোড করা যায়নি। অন্য ক্যামেরা সিলেক্ট করুন বা পেজ রিফ্রেশ করুন।")
       );
       setCameraLoading(false);
+    } finally {
+      isStartingCameraRef.current = false;
     }
   }, [selectedDeviceId]);
 
-  // Stop Camera Stream
+  // Stop Camera Stream cleanly
   const stopCamera = useCallback(() => {
     if (streamRef.current) {
-      streamRef.current.getTracks().forEach((t) => t.stop());
+      streamRef.current.getTracks().forEach((t) => {
+        try {
+          t.stop();
+        } catch {}
+      });
       streamRef.current = null;
     }
     if (videoRef.current) {
@@ -362,10 +389,14 @@ export const RealtimeFaceRecognitionView: React.FC<RealtimeFaceRecognitionViewPr
 
     return () => {
       if (streamRef.current) {
-        streamRef.current.getTracks().forEach((t) => t.stop());
+        streamRef.current.getTracks().forEach((t) => {
+          try {
+            t.stop();
+          } catch {}
+        });
       }
     };
-  }, [isPaused, activeMode, isCameraActive, selectedDeviceId, startCamera, stopCamera]);
+  }, [isPaused, activeMode, isCameraActive, startCamera, stopCamera]);
 
   // Global listener to pause camera if another modal (like FaceEnrollmentModal) needs exclusive hardware
   useEffect(() => {
@@ -1127,7 +1158,7 @@ export const RealtimeFaceRecognitionView: React.FC<RealtimeFaceRecognitionViewPr
                       {cameraError || (isBangla ? "ক্যামেরা বন্ধ রয়েছে" : "Camera stream is inactive")}
                     </p>
                     <button
-                      onClick={startCamera}
+                      onClick={() => startCamera()}
                       className="px-4 py-2 bg-teal-600 text-white text-xs font-bold rounded-xl hover:bg-teal-500 cursor-pointer"
                     >
                       {isBangla ? "ক্যামেরা চালু করুন" : "Start Camera"}

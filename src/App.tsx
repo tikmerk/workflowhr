@@ -60,7 +60,7 @@ import {
   subscribeToDeletedEmployees,
 } from "./services/firestoreService";
 import { compressAndOptimizeImage } from "./utils/imageCompression";
-import { invalidateEmployeeFaceCache, loadFaceApiModels } from "./utils/faceRecognitionEngine";
+import { invalidateEmployeeFaceCache, loadFaceApiModels, warmupFaceEngine } from "./utils/faceRecognitionEngine";
 
 import { DEFAULT_SUPER_ADMIN_SIGNATURE } from "./data/defaultSignature";
 import { getOrGenerateEmployeeDescriptor } from "./data/employeeBiometricVectors";
@@ -555,6 +555,8 @@ function AppContent() {
       } catch (e) {
         console.warn("Could not save employees locally:", e);
       }
+      // Instant background warmup of employee 128D vectors into memory cache
+      warmupFaceEngine(employees).catch(() => {});
     }
   }, [employees]);
 
@@ -566,9 +568,7 @@ function AppContent() {
     });
 
     // 2. Pre-warm AI face recognition models in background immediately for instant camera startup
-    setTimeout(() => {
-      loadFaceApiModels().catch(() => {});
-    }, 400);
+    warmupFaceEngine(employees).catch(() => {});
 
     // 2. Realtime Subscriptions
     const unsubEmployees = subscribeToEmployees((updatedEmps) => {

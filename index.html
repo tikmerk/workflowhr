@@ -13,6 +13,15 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" crossorigin="anonymous">
+
+    <!-- Preload Face Recognition AI Models for Instant Camera Activation -->
+    <link rel="preload" as="fetch" crossorigin="anonymous" href="/models/tiny_face_detector_model-weights_manifest.json" />
+    <link rel="preload" as="fetch" crossorigin="anonymous" href="/models/tiny_face_detector_model-shard1" />
+    <link rel="preload" as="fetch" crossorigin="anonymous" href="/models/face_landmark_68_model-weights_manifest.json" />
+    <link rel="preload" as="fetch" crossorigin="anonymous" href="/models/face_landmark_68_model-shard1" />
+    <link rel="preload" as="fetch" crossorigin="anonymous" href="/models/face_recognition_model-weights_manifest.json" />
+    <link rel="preload" as="fetch" crossorigin="anonymous" href="/models/face_recognition_model-shard1" />
+    <link rel="preload" as="fetch" crossorigin="anonymous" href="/models/face_recognition_model-shard2" />
   </head>
   <body class="bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 antialiased selection:bg-teal-500 selection:text-white transition-colors duration-150">
     <div id="root"></div>

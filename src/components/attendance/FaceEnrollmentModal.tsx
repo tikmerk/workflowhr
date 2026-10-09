@@ -128,11 +128,24 @@ export const FaceEnrollmentModal: React.FC<FaceEnrollmentModalProps> = ({
 
   // Start / restart camera stream with error recovery
   const startCameraStream = useCallback(async (preferredFacing: "user" | "environment" = facingMode) => {
+    // If stream is already active and healthy, reuse immediately
+    if (streamRef.current && streamRef.current.active) {
+      const activeTrack = streamRef.current.getVideoTracks().find((t) => t.readyState === "live");
+      if (activeTrack) {
+        if (videoRef.current && videoRef.current.srcObject !== streamRef.current) {
+          videoRef.current.srcObject = streamRef.current;
+        }
+        setCameraLoading(false);
+        setIsAutoplayBlocked(false);
+        return streamRef.current;
+      }
+    }
+
     setCameraLoading(true);
     setCameraError(null);
     setIsAutoplayBlocked(false);
 
-    // Stop current stream if running
+    // Stop current stream cleanly
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((t) => {
         try {
@@ -140,14 +153,6 @@ export const FaceEnrollmentModal: React.FC<FaceEnrollmentModalProps> = ({
         } catch {}
       });
       streamRef.current = null;
-    }
-    if (stream) {
-      stream.getTracks().forEach((t) => {
-        try {
-          t.stop();
-        } catch {}
-      });
-      setStream(null);
     }
 
     try {
@@ -180,12 +185,12 @@ export const FaceEnrollmentModal: React.FC<FaceEnrollmentModalProps> = ({
         }
       }
 
-      // Hard safety timer: if stream has active video track, dismiss spinner within 750ms
+      // Hard safety timer: if stream has active video track, dismiss spinner within 300ms
       setTimeout(() => {
         if (streamRef.current?.getVideoTracks().some((t) => t.readyState === "live")) {
           setCameraLoading(false);
         }
-      }, 750);
+      }, 300);
 
       return s;
     } catch (err: any) {
@@ -196,7 +201,7 @@ export const FaceEnrollmentModal: React.FC<FaceEnrollmentModalProps> = ({
       setCameraLoading(false);
       return null;
     }
-  }, [facingMode, stream]);
+  }, [facingMode]);
 
   // Manual click to unblock autoplay on mobile
   const handleManualPlay = async () => {
