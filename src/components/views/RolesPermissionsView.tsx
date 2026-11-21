@@ -511,6 +511,8 @@ export const RolesPermissionsView: React.FC<RolesPermissionsViewProps> = ({
     { id: "loans", labelBn: "ঋণ ও প্রভিডেন্ট ফান্ড", labelEn: "Loans & Advance" },
     { id: "recruitment", labelBn: "নিয়োগ ও এআই বাছাই", labelEn: "Recruitment & ATS" },
     { id: "projects-tasks", labelBn: "প্রকল্প ও টাস্ক অগ্রগতি", labelEn: "Projects & Tasks" },
+    { id: "work-logs", labelBn: "দৈনিক কাজের লগ ও রিপোর্ট", labelEn: "Daily Work Logs" },
+    { id: "feedback-surveys", labelBn: "ফিডব্যাক, সার্ভে ও টিম পয়েন্ট", labelEn: "Feedback & Surveys" },
     { id: "assets", labelBn: "কোম্পানি সম্পদ ও হ্যান্ডওভার", labelEn: "Assets Handover" },
     { id: "certificates", labelBn: "অফিসিয়াল সনদ ও প্রত্যয়ন", labelEn: "Official Certificates" },
     { id: "exit-management", labelBn: "পদত্যাগ ও ক্লিয়ারেন্স", labelEn: "Exit & Resignation" },

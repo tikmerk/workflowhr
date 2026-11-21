@@ -41,7 +41,7 @@ import {
   FileText,
   PenTool,
 } from "lucide-react";
-import { Employee, Branch, UserRole } from "../../types";
+import { Employee, Branch, UserRole, SystemNotification, NavigationTab } from "../../types";
 import { useThemeLanguage } from "../../context/ThemeLanguageContext";
 import { useCompanyBranding } from "../../context/CompanyBrandingContext";
 import { checkFirestoreConnection } from "../../services/firestoreService";
@@ -68,6 +68,10 @@ interface HeaderProps {
   onOpenFaceEnrollModal?: (emp?: Employee) => void;
   onOpenOrganizationReset?: () => void;
   onUpdateEmployee?: (updated: Employee) => void;
+  notifications?: SystemNotification[];
+  onMarkNotificationRead?: (id: string) => void;
+  onMarkAllNotificationsRead?: () => void;
+  onNavigateTab?: (tab: NavigationTab) => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -88,6 +92,10 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenFaceEnrollModal,
   onOpenOrganizationReset,
   onUpdateEmployee,
+  notifications = [],
+  onMarkNotificationRead,
+  onMarkAllNotificationsRead,
+  onNavigateTab,
 }) => {
   const { language, toggleLanguage, theme, toggleTheme, t, isBangla } = useThemeLanguage();
   const { setIsBrandingModalOpen } = useCompanyBranding();
@@ -193,7 +201,22 @@ export const Header: React.FC<HeaderProps> = ({
     currentEmployee.faceVerificationScore > 0
   );
   const isFaceVerificationRequired = !isFaceVerified;
-  const totalNotificationBadge = pendingLeavesCount + (isFaceVerificationRequired ? 1 : 0);
+  const myNotifications = React.useMemo(() => {
+    return (notifications || []).filter((n) => {
+      if (!n.targetEmployeeId && !n.targetRole) return true;
+      if (n.targetEmployeeId && n.targetEmployeeId === currentEmployee.id) return true;
+      if (n.targetRole && n.targetRole === currentEmployee.role) return true;
+      return false;
+    });
+  }, [notifications, currentEmployee.id, currentEmployee.role]);
+
+  const unreadPortalNotifications = React.useMemo(
+    () => myNotifications.filter((n) => !n.read),
+    [myNotifications]
+  );
+
+  const totalNotificationBadge =
+    unreadPortalNotifications.length + pendingLeavesCount + (isFaceVerificationRequired ? 1 : 0);
 
   const selectedBranch =
     branches.find((b) => b.id === selectedBranchId) || {
@@ -837,12 +860,30 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
 
             {showNotifications && (
-              <div className="absolute right-0 mt-2 w-80 max-w-[90vw] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700/90 rounded-2xl shadow-2xl p-3 z-50 animate-in fade-in slide-in-from-top-2 duration-150 text-xs">
-                <div className="font-bold text-slate-900 dark:text-slate-200 pb-2 border-b border-slate-100 dark:border-slate-800 mb-2 flex justify-between items-center">
-                  <span>{t("ওয়ার্কফোর্স নোটিফিকেশন", "Workforce Notifications")}</span>
-                  <span className="text-[10px] text-teal-600 dark:text-teal-400 font-mono font-bold">{t("লাইভ", "Live")}</span>
+              <div className="absolute right-0 mt-2 w-88 max-w-[92vw] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700/90 rounded-2xl shadow-2xl p-3 z-50 animate-in fade-in slide-in-from-top-2 duration-150 text-xs">
+                <div className="font-bold text-slate-900 dark:text-slate-200 pb-2 border-b border-slate-100 dark:border-slate-800 mb-2 flex justify-between items-center gap-2">
+                  <div className="flex items-center gap-1.5">
+                    <span>{t("ওয়ার্কফোর্স নোটিফিকেশন", "Workforce Notifications")}</span>
+                    {unreadPortalNotifications.length > 0 && (
+                      <span className="px-1.5 py-0.5 rounded-full bg-teal-500/15 text-teal-700 dark:text-teal-300 text-[10px] font-black">
+                        {unreadPortalNotifications.length}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {unreadPortalNotifications.length > 0 && onMarkAllNotificationsRead && (
+                      <button
+                        type="button"
+                        onClick={onMarkAllNotificationsRead}
+                        className="text-[10px] font-bold text-teal-600 dark:text-teal-400 hover:underline cursor-pointer"
+                      >
+                        {t("সব পঠিত", "Mark all read")}
+                      </button>
+                    )}
+                    <span className="text-[10px] text-teal-600 dark:text-teal-400 font-mono font-bold">{t("লাইভ", "Live")}</span>
+                  </div>
                 </div>
-                <div className="space-y-2">
+                <div className="space-y-2 max-h-[65vh] overflow-y-auto pr-0.5">
                   {/* Face Verification Required Alert Card */}
                   {isFaceVerificationRequired ? (
                     <div className="p-3 rounded-xl bg-gradient-to-r from-amber-500/20 via-amber-500/15 to-orange-500/20 border border-amber-500/40 shadow-xs animate-in fade-in">
@@ -901,23 +942,84 @@ export const Header: React.FC<HeaderProps> = ({
                     </div>
                   )}
 
-                  <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/50">
-                    <span className="text-[10px] font-bold text-teal-600 dark:text-teal-400 uppercase block">
-                      {t("উপস্থিতি পর্যবেক্ষণ", "Attendance Telemetry")}
-                    </span>
-                    <p className="text-slate-600 dark:text-slate-300 text-[11px] mt-0.5">
-                      {t("আজকের দিনশেষে ৯৬.৪% সঠিক সময়ে উপস্থিতি ও অ্যান্টি-স্পুফিং নিশ্চিত করা হয়েছে।", "96.4% on-time check-in recorded today with anti-spoofing verification.")}
-                    </p>
-                  </div>
+                  {/* Real-time Task, Survey & Portal Notifications */}
+                  {myNotifications.length > 0 && (
+                    <div className="space-y-1.5 pt-1">
+                      <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 px-1">
+                        {t("সাম্প্রতিক টাস্ক ও পোর্টাল বার্তা", "Recent Tasks & Alerts")}
+                      </div>
+                      {myNotifications.slice(0, 12).map((notif) => {
+                        const typeBadgeClass =
+                          notif.type === "SUCCESS"
+                            ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
+                            : notif.type === "WARNING" || notif.type === "ALERT"
+                            ? "bg-amber-500/15 text-amber-700 dark:text-amber-300"
+                            : "bg-teal-500/15 text-teal-700 dark:text-teal-300";
+
+                        return (
+                          <button
+                            key={notif.id}
+                            type="button"
+                            onClick={() => {
+                              if (!notif.read && onMarkNotificationRead) {
+                                onMarkNotificationRead(notif.id);
+                              }
+                              const targetTab = (notif.link || notif.module) as NavigationTab | undefined;
+                              if (targetTab && onNavigateTab) {
+                                onNavigateTab(targetTab);
+                              }
+                              setShowNotifications(false);
+                            }}
+                            className={`w-full text-left p-2.5 rounded-xl border transition-all cursor-pointer ${
+                              notif.read
+                                ? "bg-slate-50/70 dark:bg-slate-800/40 border-slate-200/70 dark:border-slate-800 opacity-80 hover:opacity-100"
+                                : "bg-teal-50/70 dark:bg-teal-950/30 border-teal-500/35 hover:border-teal-500/60 shadow-2xs"
+                            }`}
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                {!notif.read && (
+                                  <span className="w-2 h-2 rounded-full bg-teal-500 shrink-0" />
+                                )}
+                                <span className="font-bold text-[11px] text-slate-900 dark:text-white truncate">
+                                  {notif.title}
+                                </span>
+                              </div>
+                              <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase shrink-0 ${typeBadgeClass}`}>
+                                {notif.type}
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-slate-600 dark:text-slate-300 mt-1 leading-snug line-clamp-2">
+                              {notif.message}
+                            </p>
+                            <div className="flex items-center justify-between mt-1.5 text-[9.5px] text-slate-400">
+                              <span>{notif.timestamp ? new Date(notif.timestamp).toLocaleString() : ""}</span>
+                              <span className="text-teal-600 dark:text-teal-400 font-semibold">
+                                {t("দেখুন →", "Open →")}
+                              </span>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+
                   {pendingLeavesCount > 0 && (
-                    <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onNavigateTab?.("leaves");
+                        setShowNotifications(false);
+                      }}
+                      className="w-full text-left p-2.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/15 border border-amber-500/30 transition-colors cursor-pointer"
+                    >
                       <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase block">
                         {t("পেন্ডিং ছুটির আবেদন", "Pending Approvals")}
                       </span>
                       <p className="text-slate-600 dark:text-slate-300 text-[11px] mt-0.5">
                         {t(`${pendingLeavesCount} টি ছুটির আবেদন অনুমোদনের অপেক্ষায় রয়েছে।`, `${pendingLeavesCount} leave application(s) awaiting managerial review.`)}
                       </p>
-                    </div>
+                    </button>
                   )}
                 </div>
               </div>

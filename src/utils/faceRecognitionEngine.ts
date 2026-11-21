@@ -364,7 +364,7 @@ export async function extractFaceDescriptor(
       detectionScore: detection.detection.score,
     };
   } catch (err) {
-    console.error("[face-api] Descriptor extraction error:", err);
+    console.warn("[face-api] Descriptor extraction notice:", err);
     return { descriptor: null };
   }
 }
@@ -612,6 +612,75 @@ export async function autoIdentifyLiveFaceFromAllEmployees(
     banglaStatusMessage: "তালিকাভুক্ত কোনো কর্মীর সাথে মুখমণ্ডল মেলেনি (অপরিচিত ব্যক্তি)",
     confidenceTier: "MISMATCH",
     boundingBox,
+  };
+}
+
+/**
+ * 1:N Identification directly from an uploaded photo or snapshot
+ */
+export async function identifyEmployeeFromPhoto(
+  input: HTMLImageElement | HTMLCanvasElement | string,
+  employees: Employee[]
+): Promise<FaceMatchResult> {
+  await loadFaceApiModels();
+  const res = await extractFaceDescriptor(input);
+  if (!res.descriptor) {
+    return {
+      matched: false,
+      matchScore: 0,
+      reason: "NO_FACE_IN_FRAME",
+      statusMessage: "No face detected in photo",
+      banglaStatusMessage: "ছবিতে কোনো মুখ শনাক্ত করা যায়নি। স্পষ্ট ও আলোকিত সেলফি আপলোড করুন।",
+      confidenceTier: "NO_FACE",
+    };
+  }
+
+  let bestEmployee: Employee | null = null;
+  let minDistance = 999;
+
+  for (const emp of employees) {
+    let desc = employeeDescriptorCache.get(emp.id);
+    if (!desc && Array.isArray(emp.faceDescriptor) && emp.faceDescriptor.length === 128) {
+      desc = new Float32Array(emp.faceDescriptor);
+      employeeDescriptorCache.set(emp.id, desc);
+    }
+    if (!desc) {
+      desc = await getOrExtractEmployeeDescriptor(emp);
+    }
+    if (desc && desc.length === 128) {
+      const d = faceapi.euclideanDistance(res.descriptor, desc);
+      if (d < minDistance) {
+        minDistance = d;
+        bestEmployee = emp;
+      }
+    }
+  }
+
+  if (bestEmployee && minDistance <= MAX_DESCRIPTOR_DISTANCE) {
+    const score = Math.max(0, Math.min(100, Math.round((1 - minDistance) * 100)));
+    return {
+      matched: true,
+      matchScore: score,
+      matchedEmployee: bestEmployee,
+      reason: "SUCCESS",
+      distance: minDistance,
+      statusMessage: `Matched ${bestEmployee.fullName}`,
+      banglaStatusMessage: `${bestEmployee.fullName} সফলভাবে শনাক্ত হয়েছেন (${score}%)`,
+      confidenceTier: score >= 80 ? "HIGH" : "MEDIUM",
+      boundingBox: res.box,
+    };
+  }
+
+  const simScore = Math.max(0, Math.round((1 - (minDistance > 1 ? 0.65 : minDistance)) * 100));
+  return {
+    matched: false,
+    matchScore: simScore,
+    reason: "MISMATCH_LOW_CONFIDENCE",
+    distance: minDistance,
+    statusMessage: "Face does not match any enrolled employee",
+    banglaStatusMessage: "এই চেহারার সাথে তালিকাভুক্ত কোনো কর্মীর বায়োমেট্রিক রেকর্ডের মিল পাওয়া যায়নি।",
+    confidenceTier: "MISMATCH",
+    boundingBox: res.box,
   };
 }
 

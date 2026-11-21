@@ -58,6 +58,36 @@ import {
   subscribeToBiometricSettings,
   saveDeletedEmployeesToFirestore,
   subscribeToDeletedEmployees,
+  DEFAULT_FEEDBACK_SURVEYS,
+  DEFAULT_SURVEY_QUESTIONS_TEMPLATE,
+  subscribeToProjects,
+  saveProjectToFirestore,
+  deleteProjectFromFirestore,
+  subscribeToTasks,
+  saveTaskToFirestore,
+  deleteTaskFromFirestore,
+  subscribeToNotifications,
+  saveNotificationToFirestore,
+  markNotificationReadInFirestore,
+  subscribeToWorkLogs,
+  saveWorkLogToFirestore,
+  deleteWorkLogFromFirestore,
+  subscribeToFeedbackSurveys,
+  saveFeedbackSurveyToFirestore,
+  deleteFeedbackSurveyFromFirestore,
+  subscribeToSurveyResponses,
+  saveSurveyResponseToFirestore,
+  subscribeToAnonymousFeedback,
+  saveAnonymousFeedbackToFirestore,
+  deleteAnonymousFeedbackFromFirestore,
+  subscribeToTeamRatings,
+  saveTeamRatingToFirestore,
+  deleteTeamRatingFromFirestore,
+  subscribeToManagerRatings,
+  saveManagerRatingToFirestore,
+  deleteManagerRatingFromFirestore,
+  saveRolePermissionsToFirestore,
+  subscribeToRolePermissions,
 } from "./services/firestoreService";
 import { compressAndOptimizeImage } from "./utils/imageCompression";
 import { invalidateEmployeeFaceCache, loadFaceApiModels, warmupFaceEngine } from "./utils/faceRecognitionEngine";
@@ -88,6 +118,8 @@ import { NoticesChatView } from "./components/views/NoticesChatView";
 import { AuditReportsView } from "./components/views/AuditReportsView";
 import { MeetingsConferencesView } from "./components/views/MeetingsConferencesView";
 import { RolesPermissionsView } from "./components/views/RolesPermissionsView";
+import { WorkLogsView } from "./components/views/WorkLogsView";
+import { FeedbackSurveysView } from "./components/views/FeedbackSurveysView";
 
 // Initial Mock Dataset & Engines
 import {
@@ -146,6 +178,13 @@ import {
   PayrollPolicyConfig,
   BiometricKioskSettings,
   TreasuryAccount,
+  SystemNotification,
+  DailyWorkLog,
+  FeedbackSurvey,
+  SurveyResponse,
+  AnonymousFeedback,
+  TeamMemberRating,
+  ManagerRating,
 } from "./types";
 import { normalizeTabList, getEffectiveTabsForEmployee } from "./utils/permissions";
 import { CheckCircle2, Info, X } from "lucide-react";
@@ -284,8 +323,90 @@ function AppContent() {
   const [loans, setLoans] = useState<EmployeeLoan[]>(mockLoans);
   const [jobs, setJobs] = useState<JobPosting[]>(mockJobPostings);
   const [candidates, setCandidates] = useState<Candidate[]>(mockCandidates);
-  const [projects, setProjects] = useState<Project[]>(mockProjects);
-  const [tasks, setTasks] = useState<ProjectTask[]>(mockTasks);
+  const [projects, setProjects] = useState<Project[]>(() => {
+    try {
+      const local = localStorage.getItem("wf_projects");
+      if (local) {
+        const parsed = JSON.parse(local);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return mockProjects;
+  });
+  const [tasks, setTasks] = useState<ProjectTask[]>(() => {
+    try {
+      const local = localStorage.getItem("wf_tasks");
+      if (local) {
+        const parsed = JSON.parse(local);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return mockTasks;
+  });
+  const [notifications, setNotifications] = useState<SystemNotification[]>(() => {
+    try {
+      const local = localStorage.getItem("wf_notifications");
+      return local ? JSON.parse(local) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [workLogs, setWorkLogs] = useState<DailyWorkLog[]>(() => {
+    try {
+      const local = localStorage.getItem("wf_work_logs");
+      return local ? JSON.parse(local) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [feedbackSurveys, setFeedbackSurveys] = useState<FeedbackSurvey[]>(() => {
+    try {
+      const local = localStorage.getItem("wf_feedback_surveys");
+      if (local) {
+        const parsed: FeedbackSurvey[] = JSON.parse(local);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.map((s) =>
+            s.id === "survey-default-monthly" && (!s.questions || s.questions.length < 10)
+              ? { ...s, questions: DEFAULT_SURVEY_QUESTIONS_TEMPLATE }
+              : s
+          );
+        }
+      }
+    } catch {}
+    return DEFAULT_FEEDBACK_SURVEYS;
+  });
+  const [surveyResponses, setSurveyResponses] = useState<SurveyResponse[]>(() => {
+    try {
+      const local = localStorage.getItem("wf_survey_responses");
+      return local ? JSON.parse(local) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [anonymousFeedback, setAnonymousFeedback] = useState<AnonymousFeedback[]>(() => {
+    try {
+      const local = localStorage.getItem("wf_anonymous_feedback");
+      return local ? JSON.parse(local) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [teamRatings, setTeamRatings] = useState<TeamMemberRating[]>(() => {
+    try {
+      const local = localStorage.getItem("wf_team_ratings");
+      return local ? JSON.parse(local) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [managerRatings, setManagerRatings] = useState<ManagerRating[]>(() => {
+    try {
+      const local = localStorage.getItem("wf_manager_ratings");
+      return local ? JSON.parse(local) : [];
+    } catch {
+      return [];
+    }
+  });
   const [assets, setAssets] = useState<CompanyAsset[]>(mockAssets);
   const [certificates, setCertificates] = useState<CertificateRecord[]>(mockCertificates);
   const [exitRecords, setExitRecords] = useState<ExitRecord[]>(() => {
@@ -308,8 +429,25 @@ function AppContent() {
     try {
       const local = localStorage.getItem("wf_role_permissions");
       if (local) {
-        const parsed = JSON.parse(local);
-        return parsed.filter((r: RolePermissionConfig) => r.role !== "DEPARTMENT_HEAD" && r.role !== "DEPT_HEAD");
+        const parsed: RolePermissionConfig[] = JSON.parse(local);
+        const alreadyMigrated = localStorage.getItem("wf_role_perms_v2_migrated") === "true";
+        const cleaned = parsed
+          .filter((r: RolePermissionConfig) => r.role !== "DEPARTMENT_HEAD" && r.role !== "DEPT_HEAD")
+          .map((r: RolePermissionConfig) => {
+            if (!alreadyMigrated) {
+              const tabs = new Set<string>(r.allowedNavTabs || []);
+              tabs.add("work-logs");
+              tabs.add("feedback-surveys");
+              return { ...r, allowedNavTabs: Array.from(tabs) as NavigationTab[] };
+            }
+            return r;
+          });
+        if (!alreadyMigrated) {
+          try {
+            localStorage.setItem("wf_role_perms_v2_migrated", "true");
+          } catch {}
+        }
+        return cleaned;
       }
       return INITIAL_ROLE_PERMISSIONS;
     } catch {
@@ -408,6 +546,60 @@ function AppContent() {
   useEffect(() => {
     localStorage.setItem("wf_org_weekend_days", JSON.stringify(orgWeekendDays));
   }, [orgWeekendDays]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("wf_projects", JSON.stringify(projects));
+    } catch {}
+  }, [projects]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("wf_tasks", JSON.stringify(tasks));
+    } catch {}
+  }, [tasks]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("wf_notifications", JSON.stringify(notifications.slice(0, 100)));
+    } catch {}
+  }, [notifications]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("wf_work_logs", JSON.stringify(workLogs));
+    } catch {}
+  }, [workLogs]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("wf_feedback_surveys", JSON.stringify(feedbackSurveys));
+    } catch {}
+  }, [feedbackSurveys]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("wf_survey_responses", JSON.stringify(surveyResponses));
+    } catch {}
+  }, [surveyResponses]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("wf_anonymous_feedback", JSON.stringify(anonymousFeedback));
+    } catch {}
+  }, [anonymousFeedback]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("wf_team_ratings", JSON.stringify(teamRatings));
+    } catch {}
+  }, [teamRatings]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("wf_manager_ratings", JSON.stringify(managerRatings));
+    } catch {}
+  }, [managerRatings]);
 
   // Active Logged-in Persona & Auth state
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
@@ -795,6 +987,63 @@ function AppContent() {
       }
     });
 
+    const unsubProjects = subscribeToProjects((updatedProjects) => {
+      if (updatedProjects.length > 0) setProjects(updatedProjects);
+    });
+
+    const unsubTasks = subscribeToTasks((updatedTasks) => {
+      if (updatedTasks.length > 0) setTasks(updatedTasks);
+    });
+
+    const unsubNotifications = subscribeToNotifications((updatedNotifs) => {
+      setNotifications(updatedNotifs);
+    });
+
+    const unsubWorkLogs = subscribeToWorkLogs((updatedLogs) => {
+      setWorkLogs(updatedLogs);
+    });
+
+    const unsubSurveys = subscribeToFeedbackSurveys((updatedSurveys) => {
+      if (updatedSurveys.length > 0) {
+        const upgraded = updatedSurveys.map((s) => {
+          if (s.id === "survey-default-monthly" && (!s.questions || s.questions.length < 10)) {
+            const nextSurvey = { ...s, questions: DEFAULT_SURVEY_QUESTIONS_TEMPLATE };
+            saveFeedbackSurveyToFirestore(nextSurvey);
+            return nextSurvey;
+          }
+          return s;
+        });
+        setFeedbackSurveys(upgraded);
+      }
+    });
+
+    const unsubSurveyResponses = subscribeToSurveyResponses((updatedResponses) => {
+      setSurveyResponses(updatedResponses);
+    });
+
+    const unsubAnonymousFeedback = subscribeToAnonymousFeedback((updatedAnon) => {
+      setAnonymousFeedback(updatedAnon);
+    });
+
+    const unsubTeamRatings = subscribeToTeamRatings((updatedRatings) => {
+      setTeamRatings(updatedRatings);
+    });
+
+    const unsubManagerRatings = subscribeToManagerRatings((updatedMgrRatings) => {
+      setManagerRatings(updatedMgrRatings);
+    });
+
+    const unsubRolePermissions = subscribeToRolePermissions((updatedRoles) => {
+      if (Array.isArray(updatedRoles) && updatedRoles.length > 0) {
+        const cleaned = updatedRoles.filter(
+          (r) => r.role !== "DEPARTMENT_HEAD" && (r.role as string) !== "DEPT_HEAD"
+        );
+        setRolePermissions((prev) =>
+          JSON.stringify(prev) === JSON.stringify(cleaned) ? prev : cleaned
+        );
+      }
+    });
+
     return () => {
       unsubEmployees();
       unsubAttendance();
@@ -808,6 +1057,16 @@ function AppContent() {
       unsubCandidates();
       unsubPayrollPolicy();
       unsubDeletedEmployees();
+      unsubProjects();
+      unsubTasks();
+      unsubNotifications();
+      unsubWorkLogs();
+      unsubSurveys();
+      unsubSurveyResponses();
+      unsubAnonymousFeedback();
+      unsubTeamRatings();
+      unsubManagerRatings();
+      unsubRolePermissions();
     };
   }, []);
 
@@ -1422,16 +1681,203 @@ function AppContent() {
     notifyAndLog("CANDIDATE_REMOVED", `Removed candidate application record`, "RECRUITMENT");
   };
 
+  // Handlers for Portal Notifications
+  const handleSendNotification = (
+    payload: Omit<SystemNotification, "id" | "timestamp" | "read">
+  ) => {
+    const newNotif: SystemNotification = {
+      ...payload,
+      id: `notif-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      timestamp: new Date().toISOString(),
+      read: false,
+    };
+    setNotifications((prev) => [newNotif, ...prev]);
+    saveNotificationToFirestore(newNotif);
+  };
+
+  const handleMarkNotificationRead = (id: string) => {
+    setNotifications((prev) =>
+      prev.map((n) => (n.id === id ? { ...n, read: true } : n))
+    );
+    markNotificationReadInFirestore(id);
+  };
+
+  const handleMarkAllNotificationsRead = () => {
+    const idsToMark: string[] = [];
+    setNotifications((prev) =>
+      prev.map((n) => {
+        const isMine =
+          (!n.targetEmployeeId && !n.targetRole) ||
+          n.targetEmployeeId === currentEmployee.id ||
+          n.targetRole === currentEmployee.role;
+        if (isMine && !n.read) {
+          idsToMark.push(n.id);
+          return { ...n, read: true };
+        }
+        return n;
+      })
+    );
+    idsToMark.forEach((id) => markNotificationReadInFirestore(id));
+  };
+
   // Handlers for Projects & Tasks
   const handleAddTask = (task: ProjectTask) => {
     setTasks((prev) => [task, ...prev]);
-    notifyAndLog("TASK_CREATED", `Created deliverable: ${task.title}`, "PROJECTS");
+    saveTaskToFirestore(task);
+    notifyAndLog("TASK_CREATED", `Assigned task: ${task.title}`, "OPERATIONS");
+  };
+
+  const handleUpdateTask = (updatedTask: ProjectTask) => {
+    setTasks((prev) =>
+      prev.map((t) => (t.id === updatedTask.id ? updatedTask : t))
+    );
+    saveTaskToFirestore(updatedTask);
   };
 
   const handleUpdateTaskStatus = (taskId: string, status: ProjectTask["status"]) => {
     setTasks((prev) =>
-      prev.map((t) => (t.id === taskId ? { ...t, status } : t))
+      prev.map((t) => {
+        if (t.id === taskId) {
+          const next = { ...t, status };
+          saveTaskToFirestore(next);
+          return next;
+        }
+        return t;
+      })
     );
+  };
+
+  // Handlers for Daily Work Logs
+  const handleSaveWorkLog = (log: DailyWorkLog) => {
+    setWorkLogs((prev) => {
+      const exists = prev.some((w) => w.id === log.id);
+      return exists ? prev.map((w) => (w.id === log.id ? log : w)) : [log, ...prev];
+    });
+    saveWorkLogToFirestore(log);
+    setToastMessage(
+      isBangla ? "দৈনিক কাজের লগ সফলভাবে সংরক্ষিত হয়েছে!" : "Daily work log saved successfully!"
+    );
+    setTimeout(() => setToastMessage(null), 3500);
+  };
+
+  const handleDeleteWorkLog = (logId: string) => {
+    setWorkLogs((prev) => prev.filter((w) => w.id !== logId));
+    deleteWorkLogFromFirestore(logId);
+    setToastMessage(isBangla ? "কাজের লগ মুছে ফেলা হয়েছে" : "Work log deleted");
+    setTimeout(() => setToastMessage(null), 3000);
+  };
+
+  // Handlers for Feedback Surveys, Anonymous Box (Zero-PII) & Manager Team Points
+  const handleSaveSurvey = (survey: FeedbackSurvey) => {
+    setFeedbackSurveys((prev) => {
+      const exists = prev.some((s) => s.id === survey.id);
+      return exists ? prev.map((s) => (s.id === survey.id ? survey : s)) : [survey, ...prev];
+    });
+    saveFeedbackSurveyToFirestore(survey);
+    setToastMessage(isBangla ? "সার্ভে সফলভাবে সংরক্ষিত হয়েছে!" : "Survey saved successfully!");
+    setTimeout(() => setToastMessage(null), 3500);
+  };
+
+  const handleDeleteSurvey = (surveyId: string) => {
+    setFeedbackSurveys((prev) => prev.filter((s) => s.id !== surveyId));
+    deleteFeedbackSurveyFromFirestore(surveyId);
+    setToastMessage(isBangla ? "সার্ভে মুছে ফেলা হয়েছে" : "Survey deleted");
+    setTimeout(() => setToastMessage(null), 3000);
+  };
+
+  const handleSubmitSurveyResponse = (response: SurveyResponse) => {
+    setSurveyResponses((prev) => [response, ...prev]);
+    saveSurveyResponseToFirestore(response);
+    setToastMessage(
+      isBangla ? "আপনার সার্ভে মতামত সফলভাবে জমা দেওয়া হয়েছে!" : "Survey response submitted!"
+    );
+    setTimeout(() => setToastMessage(null), 3500);
+  };
+
+  const handleSubmitAnonymousFeedback = (item: AnonymousFeedback) => {
+    // Strictly enforce zero-PII and NEVER write to actor-attributed audit logs
+    const zeroPiiItem: AnonymousFeedback = {
+      id: item.id,
+      category: item.category,
+      subject: item.subject,
+      message: item.message,
+      urgency: item.urgency,
+      submittedAt: item.submittedAt,
+      status: "NEW",
+    };
+    setAnonymousFeedback((prev) => [zeroPiiItem, ...prev]);
+    saveAnonymousFeedbackToFirestore(zeroPiiItem);
+    setToastMessage(
+      isBangla
+        ? "আপনার গোপন ফিডব্যাক সম্পূর্ণ পরিচয়বিহীনভাবে পাঠানো হয়েছে!"
+        : "Your anonymous feedback has been submitted with zero identity tracking!"
+    );
+    setTimeout(() => setToastMessage(null), 4000);
+  };
+
+  const handleUpdateAnonymousFeedback = (item: AnonymousFeedback) => {
+    const zeroPiiItem: AnonymousFeedback = {
+      id: item.id,
+      category: item.category,
+      subject: item.subject,
+      message: item.message,
+      urgency: item.urgency,
+      submittedAt: item.submittedAt,
+      status: item.status,
+      ...(item.adminActionNote !== undefined ? { adminActionNote: item.adminActionNote } : {}),
+      updatedAt: item.updatedAt || new Date().toISOString(),
+    };
+    setAnonymousFeedback((prev) =>
+      prev.map((a) => (a.id === zeroPiiItem.id ? zeroPiiItem : a))
+    );
+    saveAnonymousFeedbackToFirestore(zeroPiiItem);
+    setToastMessage(isBangla ? "ফিডব্যাক স্ট্যাটাস আপডেট করা হয়েছে" : "Anonymous feedback status updated");
+    setTimeout(() => setToastMessage(null), 3000);
+  };
+
+  const handleDeleteAnonymousFeedback = (id: string) => {
+    setAnonymousFeedback((prev) => prev.filter((a) => a.id !== id));
+    deleteAnonymousFeedbackFromFirestore(id);
+    setToastMessage(isBangla ? "ফিডব্যাক রেকর্ড মুছে ফেলা হয়েছে" : "Feedback record deleted");
+    setTimeout(() => setToastMessage(null), 3000);
+  };
+
+  const handleSaveTeamRating = (rating: TeamMemberRating) => {
+    setTeamRatings((prev) => {
+      const exists = prev.some((r) => r.id === rating.id);
+      return exists ? prev.map((r) => (r.id === rating.id ? rating : r)) : [rating, ...prev];
+    });
+    saveTeamRatingToFirestore(rating);
+    setToastMessage(
+      isBangla ? "টিম মেম্বার পারফরম্যান্স পয়েন্ট সংরক্ষিত হয়েছে!" : "Team member points saved!"
+    );
+    setTimeout(() => setToastMessage(null), 3500);
+  };
+
+  const handleDeleteTeamRating = (ratingId: string) => {
+    setTeamRatings((prev) => prev.filter((r) => r.id !== ratingId));
+    deleteTeamRatingFromFirestore(ratingId);
+    setToastMessage(isBangla ? "রেটিং মুছে ফেলা হয়েছে" : "Rating deleted");
+    setTimeout(() => setToastMessage(null), 3000);
+  };
+
+  const handleSaveManagerRating = (rating: ManagerRating) => {
+    setManagerRatings((prev) => {
+      const exists = prev.some((r) => r.id === rating.id);
+      return exists ? prev.map((r) => (r.id === rating.id ? rating : r)) : [rating, ...prev];
+    });
+    saveManagerRatingToFirestore(rating);
+    setToastMessage(
+      isBangla ? "লাইন ম্যানেজার রেটিং সফলভাবে সংরক্ষিত হয়েছে!" : "Line manager rating saved!"
+    );
+    setTimeout(() => setToastMessage(null), 3500);
+  };
+
+  const handleDeleteManagerRating = (ratingId: string) => {
+    setManagerRatings((prev) => prev.filter((r) => r.id !== ratingId));
+    deleteManagerRatingFromFirestore(ratingId);
+    setToastMessage(isBangla ? "ম্যানেজার রেটিং মুছে ফেলা হয়েছে" : "Manager rating deleted");
+    setTimeout(() => setToastMessage(null), 3000);
   };
 
   // Handlers for Exit Clearance
@@ -1560,6 +2006,10 @@ function AppContent() {
           sidebarCollapsed={sidebarCollapsed}
           onToggleSidebar={() => setSidebarCollapsed(!sidebarCollapsed)}
           pendingLeavesCount={pendingLeavesCount}
+          notifications={notifications}
+          onMarkNotificationRead={handleMarkNotificationRead}
+          onMarkAllNotificationsRead={handleMarkAllNotificationsRead}
+          onNavigateTab={(tab) => setActiveTab(tab)}
           onLogout={handleLogout}
           onOpenDigitalIdCard={handleOpenIdCardModal}
           onOpenFaceEnrollModal={handleOpenFaceEnrollModal}
@@ -2178,18 +2628,65 @@ function AppContent() {
               currentUser={currentEmployee}
               onAddProject={(p) => {
                 setProjects((prev) => [p, ...prev]);
+                saveProjectToFirestore(p);
                 notifyAndLog("PROJECT_CREATED", `Created project: ${p.name}`, "OPERATIONS");
               }}
               onDeleteProject={(pId) => {
                 setProjects((prev) => prev.filter((p) => p.id !== pId));
+                deleteProjectFromFirestore(pId);
                 notifyAndLog("PROJECT_DELETED", `Deleted project ${pId}`, "OPERATIONS");
               }}
               onAddTask={handleAddTask}
+              onUpdateTask={handleUpdateTask}
               onUpdateTaskStatus={handleUpdateTaskStatus}
               onDeleteTask={(tId) => {
                 setTasks((prev) => prev.filter((t) => t.id !== tId));
+                deleteTaskFromFirestore(tId);
                 notifyAndLog("TASK_DELETED", `Deleted task ${tId}`, "OPERATIONS");
               }}
+              onSendNotification={handleSendNotification}
+            />
+          )}
+
+          {activeTab === "work-logs" && (
+            <WorkLogsView
+              workLogs={workLogs}
+              employees={employees}
+              attendanceLogs={attendanceLogs}
+              projects={projects}
+              tasks={tasks}
+              branches={branches}
+              departments={departments}
+              currentUser={currentEmployee}
+              onSaveWorkLog={handleSaveWorkLog}
+              onDeleteWorkLog={handleDeleteWorkLog}
+            />
+          )}
+
+          {activeTab === "feedback-surveys" && (
+            <FeedbackSurveysView
+              employees={employees}
+              currentUser={currentEmployee}
+              surveys={feedbackSurveys}
+              surveyResponses={surveyResponses}
+              anonymousFeedback={anonymousFeedback}
+              teamRatings={teamRatings}
+              managerRatings={managerRatings}
+              tasks={tasks}
+              workLogs={workLogs}
+              attendanceLogs={attendanceLogs}
+              onSaveSurvey={handleSaveSurvey}
+              onDeleteSurvey={handleDeleteSurvey}
+              onSubmitSurveyResponse={handleSubmitSurveyResponse}
+              onSubmitAnonymousFeedback={handleSubmitAnonymousFeedback}
+              onUpdateAnonymousFeedback={handleUpdateAnonymousFeedback}
+              onDeleteAnonymousFeedback={handleDeleteAnonymousFeedback}
+              onSaveTeamRating={handleSaveTeamRating}
+              onDeleteTeamRating={handleDeleteTeamRating}
+              onSaveManagerRating={handleSaveManagerRating}
+              onDeleteManagerRating={handleDeleteManagerRating}
+              onUpdateEmployee={handleUpdateEmployee}
+              onSendNotification={handleSendNotification}
             />
           )}
 
@@ -2315,9 +2812,11 @@ function AppContent() {
                 setRolePermissions(updatedRoles);
                 try {
                   localStorage.setItem("wf_role_permissions", JSON.stringify(updatedRoles));
+                  localStorage.setItem("wf_role_perms_v2_migrated", "true");
                 } catch (e) {
                   console.error(e);
                 }
+                saveRolePermissionsToFirestore(updatedRoles);
 
                 // Automatically synchronize dashboard menus for all staff assigned to updated roles
                 setEmployees((prev) =>

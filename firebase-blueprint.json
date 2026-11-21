@@ -119,6 +119,120 @@
         "isDemoModeEnabled": { "type": "boolean" },
         "updatedAt": { "type": "string" }
       }
+    },
+    "Project": {
+      "title": "Project",
+      "description": "Organizational project entity",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "status": { "type": "string" }
+      },
+      "required": ["id", "name"]
+    },
+    "Task": {
+      "title": "Task",
+      "description": "Assigned task with deadline, check-in timer, submission, and review thread",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "assignedToEmployeeId": { "type": "string" },
+        "status": { "type": "string" },
+        "dueDate": { "type": "string" }
+      },
+      "required": ["id", "title", "assignedToEmployeeId", "status"]
+    },
+    "SystemNotification": {
+      "title": "SystemNotification",
+      "description": "Targeted portal notifications for task updates, reviews, and surveys",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "targetEmployeeId": { "type": "string" },
+        "read": { "type": "boolean" }
+      },
+      "required": ["id", "title", "message"]
+    },
+    "DailyWorkLog": {
+      "title": "DailyWorkLog",
+      "description": "Employee daily work log entry for office, remote, or field work",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "employeeId": { "type": "string" },
+        "date": { "type": "string" },
+        "workMode": { "type": "string" },
+        "title": { "type": "string" },
+        "durationMinutes": { "type": "number" }
+      },
+      "required": ["id", "employeeId", "date", "title"]
+    },
+    "FeedbackSurvey": {
+      "title": "FeedbackSurvey",
+      "description": "Scheduled monthly, semi-annual, annual, or custom employee satisfaction survey",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "cycleType": { "type": "string" },
+        "isActive": { "type": "boolean" }
+      },
+      "required": ["id", "title", "cycleType"]
+    },
+    "SurveyResponse": {
+      "title": "SurveyResponse",
+      "description": "Employee survey submission with structured ratings and comments",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "surveyId": { "type": "string" },
+        "employeeId": { "type": "string" },
+        "overallScore": { "type": "number" }
+      },
+      "required": ["id", "surveyId", "employeeId"]
+    },
+    "AnonymousFeedback": {
+      "title": "AnonymousFeedback",
+      "description": "Zero-PII anonymous employee feedback submission",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "category": { "type": "string" },
+        "subject": { "type": "string" },
+        "message": { "type": "string" },
+        "status": { "type": "string" }
+      },
+      "required": ["id", "category", "subject", "message"]
+    },
+    "TeamMemberRating": {
+      "title": "TeamMemberRating",
+      "description": "Monthly structured performance points awarded by managers to team members",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "employeeId": { "type": "string" },
+        "ratedByEmployeeId": { "type": "string" },
+        "month": { "type": "string" },
+        "totalPoints": { "type": "number" }
+      },
+      "required": ["id", "employeeId", "ratedByEmployeeId", "month"]
+    },
+    "ManagerRating": {
+      "title": "ManagerRating",
+      "description": "Monthly evaluation of a direct reporting line manager submitted by their team members",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "managerId": { "type": "string" },
+        "ratedByEmployeeId": { "type": "string" },
+        "month": { "type": "string" },
+        "totalScore": { "type": "number" }
+      },
+      "required": ["id", "managerId", "ratedByEmployeeId", "month"]
     }
   },
   "firestore": {
@@ -153,6 +267,42 @@
     "/settings/{settingId}": {
       "schema": "CompanyBranding",
       "description": "Organization branding and configuration"
+    },
+    "/projects/{projectId}": {
+      "schema": "Project",
+      "description": "Organizational projects"
+    },
+    "/tasks/{taskId}": {
+      "schema": "Task",
+      "description": "Assigned team tasks and review workflows"
+    },
+    "/notifications/{notificationId}": {
+      "schema": "SystemNotification",
+      "description": "Targeted user portal notifications"
+    },
+    "/work_logs/{logId}": {
+      "schema": "DailyWorkLog",
+      "description": "Employee daily work logs"
+    },
+    "/feedback_surveys/{surveyId}": {
+      "schema": "FeedbackSurvey",
+      "description": "Periodic employee surveys"
+    },
+    "/survey_responses/{responseId}": {
+      "schema": "SurveyResponse",
+      "description": "Employee survey responses"
+    },
+    "/anonymous_feedback/{feedbackId}": {
+      "schema": "AnonymousFeedback",
+      "description": "Zero-PII anonymous feedback box submissions"
+    },
+    "/performance_points/{ratingId}": {
+      "schema": "TeamMemberRating",
+      "description": "Monthly manager-awarded team performance points"
+    },
+    "/manager_ratings/{ratingId}": {
+      "schema": "ManagerRating",
+      "description": "Monthly employee-submitted ratings for their direct reporting line manager"
     }
   }
 }

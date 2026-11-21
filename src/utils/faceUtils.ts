@@ -170,9 +170,15 @@ export async function requestUserMediaStream(
       audio: false,
     });
   } catch (err3: any) {
-    console.error("[Camera] All media stream attempts failed:", err3);
-    if (err3?.name === "NotAllowedError" || err3?.name === "PermissionDeniedError") {
-      throw new Error("ক্যামেরা ব্যবহারের অনুমতি বাতিল বা ব্লক করা হয়েছে। ব্রাউজারের সেটিংস বা এড্রেস বার থেকে ক্যামেরা পারমিশন 'Allow' করুন।");
+    console.warn("[Camera] Media stream request denied or unavailable:", err3?.message || err3);
+    if (
+      err3?.name === "NotAllowedError" ||
+      err3?.name === "PermissionDeniedError" ||
+      String(err3?.message || "").includes("Permission denied")
+    ) {
+      const pErr = new Error("ক্যামেরা ব্যবহারের অনুমতি বাতিল বা ব্লক করা হয়েছে। ব্রাউজারের সেটিংস বা এড্রেস বার থেকে ক্যামেরা পারমিশন 'Allow' করুন।");
+      (pErr as any).isPermissionDenied = true;
+      throw pErr;
     }
     if (err3?.name === "NotFoundError" || err3?.name === "DevicesNotFoundError") {
       throw new Error("আপনার ডিভাইসে কোনো সক্রিয় ক্যামেরা পাওয়া যায়নি। ক্যামেরা সংযুক্ত আছে কিনা পরীক্ষা করুন।");

@@ -27,6 +27,17 @@ import {
   Candidate,
   PayrollPolicyConfig,
   BiometricKioskSettings,
+  Project,
+  ProjectTask,
+  SystemNotification,
+  DailyWorkLog,
+  FeedbackSurvey,
+  SurveyQuestion,
+  SurveyResponse,
+  AnonymousFeedback,
+  TeamMemberRating,
+  ManagerRating,
+  RolePermissionConfig,
 } from "../types";
 import {
   INITIAL_EMPLOYEES,
@@ -66,6 +77,146 @@ const COL_DESIGNATIONS = "designations";
 const COL_SHIFTS = "shifts";
 const COL_RECRUITMENT_JOBS = "recruitment_jobs";
 const COL_RECRUITMENT_CANDIDATES = "recruitment_candidates";
+const COL_PROJECTS = "projects";
+const COL_TASKS = "tasks";
+const COL_NOTIFICATIONS = "notifications";
+const COL_WORK_LOGS = "work_logs";
+const COL_FEEDBACK_SURVEYS = "feedback_surveys";
+const COL_SURVEY_RESPONSES = "survey_responses";
+const COL_ANONYMOUS_FEEDBACK = "anonymous_feedback";
+const COL_PERFORMANCE_POINTS = "performance_points";
+const COL_MANAGER_RATINGS = "manager_ratings";
+
+export const DEFAULT_SURVEY_QUESTIONS_TEMPLATE: SurveyQuestion[] = [
+  // 1. WORKPLACE (কর্মক্ষেত্র ও কাজের মান)
+  {
+    id: "q-wp-1",
+    category: "WORKPLACE",
+    questionEn: "Are your job responsibilities, expectations, and daily goals clear and realistic?",
+    questionBn: "আপনার পদের দায়িত্ব, লক্ষ্য এবং প্রতিদিনের কাজের পরিধি কি স্পষ্ট ও বাস্তবসম্মত?",
+    type: "RATING",
+  },
+  {
+    id: "q-wp-2",
+    category: "WORKPLACE",
+    questionEn: "How satisfied are you with your current workload balance and opportunities to learn and grow?",
+    questionBn: "বর্তমান কাজের চাপ, ভারসাম্য এবং পেশাগত দক্ষতা বৃদ্ধির সুযোগ নিয়ে আপনি কতটা সন্তুষ্ট?",
+    type: "RATING",
+  },
+  {
+    id: "q-wp-3",
+    category: "WORKPLACE",
+    questionEn: "Do you feel your work is meaningful and properly recognized by the organization?",
+    questionBn: "আপনি কি মনে করেন আপনার কাজ গুরুত্বপূর্ণ এবং প্রতিষ্ঠানে এর সঠিক মূল্যায়ন হচ্ছে?",
+    type: "RATING",
+  },
+  // 2. MANAGER (লাইন ম্যানেজার ও নেতৃত্ব)
+  {
+    id: "q-mgr-1",
+    category: "MANAGER",
+    questionEn: "How clearly does your Line Manager communicate tasks, priorities, and deadlines?",
+    questionBn: "আপনার লাইন ম্যানেজার কি কাজের নির্দেশনা, অগ্রাধিকার ও ডেডলাইন স্পষ্টভাবে বুঝিয়ে দেন?",
+    type: "RATING",
+  },
+  {
+    id: "q-mgr-2",
+    category: "MANAGER",
+    questionEn: "How fair, unbiased, and respectful is your Line Manager in evaluating your performance?",
+    questionBn: "আপনার লাইন ম্যানেজারের আচরণ, মূল্যায়ন এবং সিদ্ধান্ত গ্রহণ কতটা নিরপেক্ষ ও সম্মানজনক?",
+    type: "RATING",
+  },
+  {
+    id: "q-mgr-3",
+    category: "MANAGER",
+    questionEn: "Does your Line Manager provide timely help, constructive feedback, and support when you face blockers?",
+    questionBn: "কাজে কোনো সমস্যায় পড়লে আপনার লাইন ম্যানেজার কি সময়মতো সহায়তা ও গঠনমূলক পরামর্শ দেন?",
+    type: "RATING",
+  },
+  // 3. COWORKERS (সহকর্মী ও টিমওয়ার্ক)
+  {
+    id: "q-cw-1",
+    category: "COWORKERS",
+    questionEn: "How helpful and cooperative are your co-workers when collaborating on shared deliverables?",
+    questionBn: "যৌথ কাজে আপনার সহকর্মীরা একে অপরকে কতটা আন্তরিকভাবে সহযোগিতা করেন?",
+    type: "RATING",
+  },
+  {
+    id: "q-cw-2",
+    category: "COWORKERS",
+    questionEn: "Is communication among your teammates open, respectful, and free of workplace friction?",
+    questionBn: "টিমের সহকর্মীদের মধ্যে যোগাযোগ ও সম্পর্ক কি সৌহার্দ্যপূর্ণ ও সম্মানজনক?",
+    type: "RATING",
+  },
+  {
+    id: "q-cw-3",
+    category: "COWORKERS",
+    questionEn: "Do teammates share knowledge and take collective accountability for team goals?",
+    questionBn: "টিমের সবাই কি তথ্য শেয়ার করেন এবং সম্মিলিতভাবে টিমের লক্ষ্য অর্জনে দায়িত্বশীল?",
+    type: "RATING",
+  },
+  // 4. ENVIRONMENT (কাজের পরিবেশ ও সংস্কৃতি)
+  {
+    id: "q-env-1",
+    category: "ENVIRONMENT",
+    questionEn: "How safe, comfortable, and conducive to focused work is your physical or remote workspace?",
+    questionBn: "অফিস বা রিমোট কাজের পরিবেশ কি নিরাপদ, আরামদায়ক এবং মনোযোগ দিয়ে কাজ করার উপযোগী?",
+    type: "RATING",
+  },
+  {
+    id: "q-env-2",
+    category: "ENVIRONMENT",
+    questionEn: "Do you feel psychologically safe to voice ideas, feedback, or concerns openly?",
+    questionBn: "আপনি কি নির্ভয়ে আপনার মতামত, পরামর্শ বা কোনো সমস্যা তুলে ধরতে স্বাচ্ছন্দ্যবোধ করেন?",
+    type: "RATING",
+  },
+  {
+    id: "q-env-3",
+    category: "ENVIRONMENT",
+    questionEn: "How well does the workplace culture support healthy work-life balance and mutual respect?",
+    questionBn: "প্রতিষ্ঠানের সংস্কৃতি কি স্বাস্থ্যকর কর্ম-জীবন ভারসাম্য ও পারস্পরিক শ্রদ্ধা বজায় রাখে?",
+    type: "RATING",
+  },
+  // 5. SERVICES (অফিস সার্ভিস, এইচআর ও সুবিধা)
+  {
+    id: "q-srv-1",
+    category: "SERVICES",
+    questionEn: "How satisfied are you with HR support (attendance, leave approvals, payroll accuracy, and queries)?",
+    questionBn: "এইচআর সার্ভিস (হাজিরা, ছুটি অনুমোদন, বেতন-ভাতা ও জিজ্ঞাসার সমাধান) নিয়ে আপনি কতটা সন্তুষ্ট?",
+    type: "RATING",
+  },
+  {
+    id: "q-srv-2",
+    category: "SERVICES",
+    questionEn: "How reliable are office IT tools, internet, software systems, and equipment support?",
+    questionBn: "অফিসের আইটি সাপোর্ট, সফটওয়্যার, ইন্টারনেট এবং প্রয়োজনীয় সরঞ্জামের সেবা কেমন?",
+    type: "RATING",
+  },
+  {
+    id: "q-srv-3",
+    category: "SERVICES",
+    questionEn: "How satisfied are you with general admin facilities, logistics, and employee welfare services?",
+    questionBn: "অ্যাডমিন সুবিধা, লজিস্টিকস এবং কর্মী কল্যাণমূলক সার্বিক সার্ভিস নিয়ে আপনি কতটা সন্তুষ্ট?",
+    type: "RATING",
+  },
+];
+
+export const DEFAULT_FEEDBACK_SURVEYS: FeedbackSurvey[] = [
+  {
+    id: "survey-default-monthly",
+    title: "Comprehensive Workplace, Manager, Co-workers, Environment & Services Survey",
+    titleBn: "কর্মক্ষেত্র, ম্যানেজার, সহকর্মী, পরিবেশ ও অফিস সার্ভিস মূল্যায়ন সার্ভে",
+    cycleType: "MONTHLY",
+    periodLabel: new Date().toISOString().slice(0, 7),
+    startDate: new Date().toISOString().slice(0, 10),
+    endDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
+    isActive: true,
+    createdBy: "HR & Super Admin",
+    createdAt: new Date().toISOString(),
+    description:
+      "কর্মক্ষেত্র, লাইন ম্যানেজার, সহকর্মী, কাজের পরিবেশ ও অফিস সার্ভিস—এই ৫টি বিষয়ে বিস্তারিত সার্ভে | Multi-question structured survey across 5 core areas: Workplace, Line Manager, Co-workers, Work Environment, and Office/HR Services.",
+    questions: DEFAULT_SURVEY_QUESTIONS_TEMPLATE,
+  },
+];
 
 /**
  * Sanitizes object by removing all undefined keys for Firestore compatibility
@@ -169,6 +320,18 @@ export async function initializeFirestoreDatabase() {
           await setDoc(doc(db, COL_RECRUITMENT_CANDIDATES, cand.id), cleanForFirestore(cand));
         }
       }
+    }
+
+    // Ensure the default 5-category bilingual feedback survey is seeded in Firestore
+    try {
+      const surveySnap = await getDocs(collection(db, COL_FEEDBACK_SURVEYS));
+      if (surveySnap.empty) {
+        for (const survey of DEFAULT_FEEDBACK_SURVEYS) {
+          await setDoc(doc(db, COL_FEEDBACK_SURVEYS, survey.id), cleanForFirestore(survey));
+        }
+      }
+    } catch (surveySeedErr) {
+      console.warn("Firestore feedback survey seed notice:", surveySeedErr);
     }
   } catch (err) {
     console.error("Firestore seeding error (will use offline fallback):", err);
@@ -1267,6 +1430,377 @@ export async function resetOrganizationDataInFirestore(
 }
 
 /* ============================================================
+   PROJECTS, TASKS & NOTIFICATIONS FIRESTORE APIS
+   ============================================================ */
+
+export function subscribeToProjects(onUpdate: (projects: Project[]) => void) {
+  try {
+    return onSnapshot(
+      collection(db, COL_PROJECTS),
+      (snap) => {
+        if (!snap.empty) {
+          onUpdate(snap.docs.map((d) => d.data() as Project));
+        }
+      },
+      (err) => console.warn("Firestore projects listener error:", err)
+    );
+  } catch (e) {
+    console.warn(e);
+    return () => {};
+  }
+}
+
+export async function saveProjectToFirestore(project: Project) {
+  try {
+    await setDoc(doc(db, COL_PROJECTS, project.id), cleanForFirestore(project), { merge: true });
+  } catch (err) {
+    console.error("Failed to save project in Firestore:", err);
+  }
+}
+
+export async function deleteProjectFromFirestore(projectId: string) {
+  try {
+    await deleteDoc(doc(db, COL_PROJECTS, projectId));
+  } catch (err) {
+    console.error("Failed to delete project from Firestore:", err);
+  }
+}
+
+export function subscribeToTasks(onUpdate: (tasks: ProjectTask[]) => void) {
+  try {
+    return onSnapshot(
+      collection(db, COL_TASKS),
+      (snap) => {
+        if (!snap.empty) {
+          const list = snap.docs.map((d) => d.data() as ProjectTask);
+          list.sort((a, b) => (b.createdAt || b.id).localeCompare(a.createdAt || a.id));
+          onUpdate(list);
+        }
+      },
+      (err) => console.warn("Firestore tasks listener error:", err)
+    );
+  } catch (e) {
+    console.warn(e);
+    return () => {};
+  }
+}
+
+export async function saveTaskToFirestore(task: ProjectTask) {
+  try {
+    await setDoc(doc(db, COL_TASKS, task.id), cleanForFirestore(task), { merge: true });
+  } catch (err) {
+    console.error("Failed to save task in Firestore:", err);
+  }
+}
+
+export async function deleteTaskFromFirestore(taskId: string) {
+  try {
+    await deleteDoc(doc(db, COL_TASKS, taskId));
+  } catch (err) {
+    console.error("Failed to delete task from Firestore:", err);
+  }
+}
+
+export function subscribeToNotifications(onUpdate: (items: SystemNotification[]) => void) {
+  try {
+    return onSnapshot(
+      collection(db, COL_NOTIFICATIONS),
+      (snap) => {
+        const list = snap.docs.map((d) => d.data() as SystemNotification);
+        list.sort((a, b) => (b.timestamp || b.id).localeCompare(a.timestamp || a.id));
+        onUpdate(list);
+      },
+      (err) => console.warn("Firestore notifications listener error:", err)
+    );
+  } catch (e) {
+    console.warn(e);
+    return () => {};
+  }
+}
+
+export async function saveNotificationToFirestore(notification: SystemNotification) {
+  try {
+    await setDoc(doc(db, COL_NOTIFICATIONS, notification.id), cleanForFirestore(notification), { merge: true });
+  } catch (err) {
+    console.error("Failed to save notification in Firestore:", err);
+  }
+}
+
+export async function markNotificationReadInFirestore(notificationId: string) {
+  try {
+    await setDoc(doc(db, COL_NOTIFICATIONS, notificationId), { read: true }, { merge: true });
+  } catch (err) {
+    console.error("Failed to mark notification read in Firestore:", err);
+  }
+}
+
+/* ============================================================
+   DAILY WORK LOGS FIRESTORE APIS
+   ============================================================ */
+
+export function subscribeToWorkLogs(onUpdate: (logs: DailyWorkLog[]) => void) {
+  try {
+    return onSnapshot(
+      collection(db, COL_WORK_LOGS),
+      (snap) => {
+        const list = snap.docs.map((d) => d.data() as DailyWorkLog);
+        list.sort((a, b) =>
+          ((b.date || "") + (b.startTime || "")).localeCompare((a.date || "") + (a.startTime || ""))
+        );
+        onUpdate(list);
+      },
+      (err) => console.warn("Firestore work logs listener error:", err)
+    );
+  } catch (e) {
+    console.warn(e);
+    return () => {};
+  }
+}
+
+export async function saveWorkLogToFirestore(log: DailyWorkLog) {
+  try {
+    await setDoc(doc(db, COL_WORK_LOGS, log.id), cleanForFirestore(log), { merge: true });
+  } catch (err) {
+    console.error("Failed to save work log in Firestore:", err);
+  }
+}
+
+export async function deleteWorkLogFromFirestore(logId: string) {
+  try {
+    await deleteDoc(doc(db, COL_WORK_LOGS, logId));
+  } catch (err) {
+    console.error("Failed to delete work log from Firestore:", err);
+  }
+}
+
+/* ============================================================
+   FEEDBACK SURVEYS, ANONYMOUS BOX & PERFORMANCE POINTS APIS
+   ============================================================ */
+
+export function subscribeToFeedbackSurveys(onUpdate: (surveys: FeedbackSurvey[]) => void) {
+  try {
+    return onSnapshot(
+      collection(db, COL_FEEDBACK_SURVEYS),
+      (snap) => {
+        if (!snap.empty) {
+          const list = snap.docs.map((d) => d.data() as FeedbackSurvey);
+          list.sort((a, b) => (b.createdAt || b.id).localeCompare(a.createdAt || a.id));
+          onUpdate(list);
+        }
+      },
+      (err) => console.warn("Firestore feedback surveys listener error:", err)
+    );
+  } catch (e) {
+    console.warn(e);
+    return () => {};
+  }
+}
+
+export async function saveFeedbackSurveyToFirestore(survey: FeedbackSurvey) {
+  try {
+    await setDoc(doc(db, COL_FEEDBACK_SURVEYS, survey.id), cleanForFirestore(survey), { merge: true });
+  } catch (err) {
+    console.error("Failed to save feedback survey in Firestore:", err);
+  }
+}
+
+export async function deleteFeedbackSurveyFromFirestore(surveyId: string) {
+  try {
+    await deleteDoc(doc(db, COL_FEEDBACK_SURVEYS, surveyId));
+  } catch (err) {
+    console.error("Failed to delete feedback survey from Firestore:", err);
+  }
+}
+
+export function subscribeToSurveyResponses(onUpdate: (responses: SurveyResponse[]) => void) {
+  try {
+    return onSnapshot(
+      collection(db, COL_SURVEY_RESPONSES),
+      (snap) => {
+        const list = snap.docs.map((d) => d.data() as SurveyResponse);
+        list.sort((a, b) => (b.submittedAt || b.id).localeCompare(a.submittedAt || a.id));
+        onUpdate(list);
+      },
+      (err) => console.warn("Firestore survey responses listener error:", err)
+    );
+  } catch (e) {
+    console.warn(e);
+    return () => {};
+  }
+}
+
+export async function saveSurveyResponseToFirestore(response: SurveyResponse) {
+  try {
+    await setDoc(doc(db, COL_SURVEY_RESPONSES, response.id), cleanForFirestore(response), { merge: true });
+  } catch (err) {
+    console.error("Failed to save survey response in Firestore:", err);
+  }
+}
+
+export function subscribeToAnonymousFeedback(onUpdate: (items: AnonymousFeedback[]) => void) {
+  try {
+    return onSnapshot(
+      collection(db, COL_ANONYMOUS_FEEDBACK),
+      (snap) => {
+        const list = snap.docs.map((d) => {
+          const raw = d.data() as Record<string, any>;
+          // Guarantee zero-PII shape when reading as well
+          return {
+            id: raw.id || d.id,
+            category: raw.category || "OTHER",
+            subject: raw.subject || "",
+            message: raw.message || "",
+            urgency: raw.urgency || "MEDIUM",
+            submittedAt: raw.submittedAt || "",
+            status: raw.status || "NEW",
+            adminActionNote: raw.adminActionNote,
+            updatedAt: raw.updatedAt,
+          } as AnonymousFeedback;
+        });
+        list.sort((a, b) => (b.submittedAt || b.id).localeCompare(a.submittedAt || a.id));
+        onUpdate(list);
+      },
+      (err) => console.warn("Firestore anonymous feedback listener error:", err)
+    );
+  } catch (e) {
+    console.warn(e);
+    return () => {};
+  }
+}
+
+export async function saveAnonymousFeedbackToFirestore(item: AnonymousFeedback) {
+  try {
+    // Strictly allowlist ONLY non-identifying fields so zero PII is ever persisted
+    const strictZeroPiiDoc: AnonymousFeedback = {
+      id: item.id,
+      category: item.category,
+      subject: item.subject,
+      message: item.message,
+      urgency: item.urgency,
+      submittedAt: item.submittedAt,
+      status: item.status,
+      ...(item.adminActionNote !== undefined ? { adminActionNote: item.adminActionNote } : {}),
+      ...(item.updatedAt !== undefined ? { updatedAt: item.updatedAt } : {}),
+    };
+    await setDoc(doc(db, COL_ANONYMOUS_FEEDBACK, strictZeroPiiDoc.id), cleanForFirestore(strictZeroPiiDoc), {
+      merge: true,
+    });
+  } catch (err) {
+    console.error("Failed to save anonymous feedback in Firestore:", err);
+  }
+}
+
+export async function deleteAnonymousFeedbackFromFirestore(feedbackId: string) {
+  try {
+    await deleteDoc(doc(db, COL_ANONYMOUS_FEEDBACK, feedbackId));
+  } catch (err) {
+    console.error("Failed to delete anonymous feedback from Firestore:", err);
+  }
+}
+
+export function subscribeToTeamRatings(onUpdate: (ratings: TeamMemberRating[]) => void) {
+  try {
+    return onSnapshot(
+      collection(db, COL_PERFORMANCE_POINTS),
+      (snap) => {
+        const list = snap.docs.map((d) => d.data() as TeamMemberRating);
+        list.sort((a, b) => (b.month + b.createdAt).localeCompare(a.month + a.createdAt));
+        onUpdate(list);
+      },
+      (err) => console.warn("Firestore team ratings listener error:", err)
+    );
+  } catch (e) {
+    console.warn(e);
+    return () => {};
+  }
+}
+
+export async function saveTeamRatingToFirestore(rating: TeamMemberRating) {
+  try {
+    await setDoc(doc(db, COL_PERFORMANCE_POINTS, rating.id), cleanForFirestore(rating), { merge: true });
+  } catch (err) {
+    console.error("Failed to save team rating in Firestore:", err);
+  }
+}
+
+export async function deleteTeamRatingFromFirestore(ratingId: string) {
+  try {
+    await deleteDoc(doc(db, COL_PERFORMANCE_POINTS, ratingId));
+  } catch (err) {
+    console.error("Failed to delete team rating from Firestore:", err);
+  }
+}
+
+export function subscribeToManagerRatings(onUpdate: (ratings: ManagerRating[]) => void) {
+  try {
+    return onSnapshot(
+      collection(db, COL_MANAGER_RATINGS),
+      (snap) => {
+        const list = snap.docs.map((d) => d.data() as ManagerRating);
+        list.sort((a, b) => (b.month + b.createdAt).localeCompare(a.month + a.createdAt));
+        onUpdate(list);
+      },
+      (err) => console.warn("Firestore manager ratings listener error:", err)
+    );
+  } catch (e) {
+    console.warn(e);
+    return () => {};
+  }
+}
+
+export async function saveManagerRatingToFirestore(rating: ManagerRating) {
+  try {
+    await setDoc(doc(db, COL_MANAGER_RATINGS, rating.id), cleanForFirestore(rating), { merge: true });
+  } catch (err) {
+    console.error("Failed to save manager rating in Firestore:", err);
+  }
+}
+
+export async function deleteManagerRatingFromFirestore(ratingId: string) {
+  try {
+    await deleteDoc(doc(db, COL_MANAGER_RATINGS, ratingId));
+  } catch (err) {
+    console.error("Failed to delete manager rating from Firestore:", err);
+  }
+}
+
+export async function saveRolePermissionsToFirestore(rolePermissions: RolePermissionConfig[]) {
+  try {
+    await setDoc(
+      doc(db, COL_SETTINGS, "role_permissions"),
+      cleanForFirestore({
+        rolePermissions,
+        updatedAt: new Date().toISOString(),
+      }),
+      { merge: true }
+    );
+  } catch (err) {
+    console.error("Failed to save role permissions in Firestore:", err);
+  }
+}
+
+export function subscribeToRolePermissions(onUpdate: (roles: RolePermissionConfig[]) => void) {
+  try {
+    return onSnapshot(
+      doc(db, COL_SETTINGS, "role_permissions"),
+      (snap) => {
+        if (snap.metadata.hasPendingWrites) return;
+        if (snap.exists()) {
+          const data = snap.data();
+          if (Array.isArray(data.rolePermissions) && data.rolePermissions.length > 0) {
+            onUpdate(data.rolePermissions as RolePermissionConfig[]);
+          }
+        }
+      },
+      (err) => console.warn("Firestore role permissions listener error:", err)
+    );
+  } catch (e) {
+    console.warn(e);
+    return () => {};
+  }
+}
+
+/* ============================================================
    FIRESTORE HEALTH & STATUS CHECK
    ============================================================ */
 export async function checkFirestoreConnection(): Promise<{
@@ -1293,4 +1827,5 @@ export async function checkFirestoreConnection(): Promise<{
     };
   }
 }
+
 

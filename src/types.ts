@@ -32,6 +32,8 @@ export type NavigationTab =
   | "loans"
   | "recruitment"
   | "projects-tasks"
+  | "work-logs"
+  | "feedback-surveys"
   | "assets"
   | "certificates"
   | "exit-management"
@@ -685,24 +687,65 @@ export interface Project {
   description?: string;
 }
 
+export interface TaskAttachment {
+  id: string;
+  name: string;
+  url: string;
+  type: "FILE" | "LINK";
+  uploadedBy?: string;
+  uploadedAt?: string;
+}
+
+export interface TaskComment {
+  id: string;
+  authorId: string;
+  authorName: string;
+  authorRole?: string;
+  authorAvatar?: string;
+  message: string;
+  timestamp: string;
+  type?: "COMMENT" | "SUBMISSION" | "REVISION_REQUEST" | "APPROVAL" | "SYSTEM";
+}
+
 export interface Task {
   id: string;
   projectId: string;
   projectName: string;
   title: string;
   description?: string;
+  taskType?: "ONLINE" | "PHYSICAL" | "HYBRID";
   assignedToEmployeeId: string;
   assignedToName?: string;
   assignedToEmployeeName?: string;
   assignedToAvatar?: string;
   assigneeAvatarUrl?: string;
+  assignedByEmployeeId?: string;
+  assignedByName?: string;
+  assignedByRole?: string;
+  batchGroupId?: string;
   priority: "LOW" | "MEDIUM" | "HIGH" | "URGENT";
-  status: "TODO" | "IN_PROGRESS" | "REVIEW" | "COMPLETED" | "DONE" | "DELAYED";
+  status: "TODO" | "IN_PROGRESS" | "REVIEW" | "REVISION_REQUESTED" | "COMPLETED" | "DONE" | "DELAYED";
   deadline?: string;
   dueDate?: string;
+  deadlineTime?: string; // e.g. "17:00"
   estimatedHours: number;
   loggedHours: number;
+  attachments?: TaskAttachment[];
+  startedAt?: string; // Task check-in ISO timestamp
+  submittedAt?: string; // Submitted for review ISO timestamp
+  completedAt?: string; // Approved & completed ISO timestamp
+  timeSpentMinutes?: number; // Computed elapsed minutes from check-in to submission
+  isLateSubmission?: boolean;
+  lateByMinutes?: number;
+  submissionComment?: string;
+  submissionLink?: string;
+  submissionAttachmentUrl?: string;
+  submissionAttachmentName?: string;
+  revisionCount?: number;
+  lastManagerFeedback?: string;
+  comments?: TaskComment[];
   createdAt?: string;
+  updatedAt?: string;
 }
 export type ProjectTask = Task;
 
@@ -1129,4 +1172,165 @@ export interface BiometricKioskSettings {
   updatedAt?: string;
   updatedBy?: string;
 }
+
+// Daily Employee Work Log & Productivity Tracking
+export interface DailyWorkLog {
+  id: string;
+  employeeId: string;
+  employeeCode: string;
+  employeeName: string;
+  avatarUrl?: string;
+  branchId: string;
+  branchName: string;
+  departmentName: string;
+  date: string; // YYYY-MM-DD
+  workMode: "OFFICE" | "WORK_FROM_HOME" | "FIELD";
+  startTime: string; // HH:mm
+  endTime: string; // HH:mm
+  durationMinutes: number;
+  taskCategory: string;
+  projectId?: string;
+  projectName?: string;
+  title: string;
+  description: string;
+  deliverableLink?: string;
+  status: "COMPLETED" | "IN_PROGRESS" | "BLOCKED";
+  createdAt: string;
+  updatedAt?: string;
+}
+
+// Employee Feedback Surveys (Monthly / 6-Month / Annual / Special)
+export type SurveyCategory =
+  | "WORKPLACE"
+  | "MANAGER"
+  | "COWORKERS"
+  | "ENVIRONMENT"
+  | "SERVICES"
+  | "WORK"
+  | "TEAM";
+
+export interface SurveyQuestion {
+  id: string;
+  category: SurveyCategory;
+  questionEn: string;
+  questionBn: string;
+  type: "RATING" | "TEXT";
+}
+
+export interface FeedbackSurvey {
+  id: string;
+  title: string;
+  titleBn?: string;
+  cycleType: "MONTHLY" | "SEMI_ANNUAL" | "ANNUAL" | "SPECIAL";
+  periodLabel: string; // e.g., "2026-11", "H2 2026", "2026"
+  startDate: string;
+  endDate: string;
+  isActive: boolean;
+  createdBy: string;
+  createdAt: string;
+  description?: string;
+  questions: SurveyQuestion[];
+}
+
+export interface SurveyResponse {
+  id: string;
+  surveyId: string;
+  employeeId: string;
+  employeeName: string;
+  employeeCode: string;
+  departmentName: string;
+  branchName: string;
+  reportingManagerId?: string;
+  submittedAt: string;
+  answers: Array<{
+    questionId: string;
+    category: SurveyCategory;
+    rating?: number; // 1 to 5
+    comment?: string;
+  }>;
+  overallScore: number; // 1.0 - 5.0
+  generalComment?: string;
+}
+
+// 100% Anonymous Feedback Box (ZERO employee PII stored)
+export interface AnonymousFeedback {
+  id: string;
+  category:
+    | "WORK_ENVIRONMENT"
+    | "MANAGEMENT"
+    | "POLICY"
+    | "HARASSMENT_SAFETY"
+    | "PAYROLL_BENEFITS"
+    | "SUGGESTION"
+    | "OTHER";
+  subject: string;
+  message: string;
+  urgency: "LOW" | "MEDIUM" | "HIGH";
+  submittedAt: string;
+  status: "NEW" | "REVIEWING" | "ACTION_TAKEN";
+  adminActionNote?: string;
+  updatedAt?: string;
+}
+
+// Manager / Senior Team Member Monthly Performance Points (with Anti-Bias Objective Snapshot)
+export interface TeamMemberRating {
+  id: string;
+  employeeId: string;
+  employeeCode: string;
+  employeeName: string;
+  avatarUrl?: string;
+  departmentName: string;
+  branchName: string;
+  ratedByEmployeeId: string;
+  ratedByName: string;
+  ratedByRole: string;
+  month: string; // YYYY-MM
+  criteria: {
+    taskDelivery: number; // 1-20
+    workQuality: number; // 1-20
+    teamwork: number; // 1-20
+    initiative: number; // 1-20
+    punctuality: number; // 1-20
+  };
+  totalPoints: number; // 0-100
+  remarks: string;
+  objectiveSnapshot?: {
+    tasksCompleted: number;
+    onTimeRate: number;
+    loggedWorkHours: number;
+    attendanceDays: number;
+  };
+  createdAt: string;
+  updatedAt?: string;
+}
+
+// Employee -> Direct Reporting Manager Rating (Only employees under a manager can rate their own manager)
+export interface ManagerRating {
+  id: string;
+  managerId: string;
+  managerCode: string;
+  managerName: string;
+  managerAvatarUrl?: string;
+  managerDepartmentName: string;
+  managerBranchName?: string;
+  ratedByEmployeeId: string;
+  ratedByEmployeeName: string;
+  ratedByEmployeeCode: string;
+  ratedByDepartmentName: string;
+  isIdentityHiddenFromManager?: boolean;
+  month: string; // YYYY-MM
+  criteria: {
+    leadershipClarity: number; // 1-20
+    fairnessNonBias: number; // 1-20
+    supportMentoring: number; // 1-20
+    communication: number; // 1-20
+    taskManagement: number; // 1-20
+  };
+  totalScore: number; // 0-100
+  remarks: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+
 

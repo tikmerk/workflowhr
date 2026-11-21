@@ -1,3 +1,38 @@
+import * as XLSX from "xlsx";
+
+export function exportMultiSheetExcel(
+  filename: string,
+  sheets: Array<{ name: string; rows: Record<string, any>[] }>
+): void {
+  if (!sheets || sheets.length === 0) return;
+
+  const workbook = XLSX.utils.book_new();
+  sheets.forEach((sheet, idx) => {
+    const safeRows = sheet.rows && sheet.rows.length > 0 ? sheet.rows : [{ Info: "No records found" }];
+    const worksheet = XLSX.utils.json_to_sheet(safeRows);
+
+    // Auto-calculate clean column widths
+    const keys = Object.keys(safeRows[0] || {});
+    worksheet["!cols"] = keys.map((key) => {
+      const maxLen = Math.max(
+        key.length + 2,
+        ...safeRows.map((r) => String(r[key] ?? "").length)
+      );
+      return { wch: Math.min(Math.max(maxLen + 2, 12), 55) };
+    });
+
+    const cleanSheetName = (sheet.name || `Sheet${idx + 1}`)
+      .replace(/[\\/?*[\]:]/g, " ")
+      .trim()
+      .slice(0, 31) || `Sheet${idx + 1}`;
+
+    XLSX.utils.book_append_sheet(workbook, worksheet, cleanSheetName);
+  });
+
+  const safeFile = filename.replace(/[^a-zA-Z0-9_\-\u0980-\u09FF]/g, "_");
+  XLSX.writeFile(workbook, `${safeFile}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+}
+
 export function exportToCSV(filename: string, rows: Record<string, any>[]): void {
   if (!rows || !rows.length) {
     return;

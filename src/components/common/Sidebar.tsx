@@ -27,6 +27,8 @@ import {
   KeyRound,
   RotateCcw,
   ScanFace,
+  ClipboardList,
+  MessageSquareHeart,
 } from "lucide-react";
 import { Logo } from "./Logo";
 import { UserRole, Employee, RolePermissionConfig } from "../../types";
@@ -52,6 +54,8 @@ export type NavTabId =
   | "loans"
   | "recruitment"
   | "projects-tasks"
+  | "work-logs"
+  | "feedback-surveys"
   | "assets"
   | "certificates"
   | "exit-management"
@@ -245,8 +249,24 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {
           id: "projects-tasks",
           labelEn: "Projects & Tasks",
-          labelBn: "প্রকল্প ও টাস্ক অগ্রগতি",
+          labelBn: "প্রকল্প ও টাস্ক ম্যানেজমেন্ট",
           icon: KanbanSquare,
+        },
+        {
+          id: "work-logs",
+          labelEn: "Daily Work Log",
+          labelBn: "দৈনিক কাজের লগ ও রিপোর্ট",
+          icon: ClipboardList,
+          badgeEn: "Excel",
+          badgeBn: "রিপোর্ট",
+        },
+        {
+          id: "feedback-surveys",
+          labelEn: "Feedback & Surveys",
+          labelBn: "ফিডব্যাক, সার্ভে ও টিম পয়েন্ট",
+          icon: MessageSquareHeart,
+          badgeEn: "Anonymous",
+          badgeBn: "গোপন বক্স",
         },
         {
           id: "assets",

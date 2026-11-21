@@ -2,54 +2,164 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Helper functions for validating document operations
-    function isValidId(id) {
-      return id is string && id.size() > 0 && id.size() <= 128;
+    // =========================================================================
+    // GLOBAL DEFAULT-DENY SAFETY NET (Blocks any undeclared / rogue collections)
+    // =========================================================================
+    match /{document=**} {
+      allow read, write: if false;
     }
 
-    // Employees collection: Master security guard
-    // Protect master admin account 'emp-01' from unauthorized deletion or corruption
+    // =========================================================================
+    // REUSABLE VALIDATION HELPERS
+    // =========================================================================
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_.\\-]+$');
+    }
+
+    function isNonEmptyStr(val, maxLen) {
+      return val is string && val.size() > 0 && val.size() <= maxLen;
+    }
+
+    function isOptionalStr(data, key, maxLen) {
+      return !(key in data) || (data[key] is string && data[key].size() <= maxLen);
+    }
+
+    function isValidDateStr(s) {
+      return s is string && s.matches('^\\d{4}-\\d{2}-\\d{2}$');
+    }
+
+    function isValidMonthStr(s) {
+      return s is string && s.matches('^\\d{4}-\\d{2}$');
+    }
+
+    function isValidWorkLog(data, logId) {
+      return data.keys().hasAll(['id', 'employeeId', 'date', 'title']) &&
+        data.id == logId &&
+        isNonEmptyStr(data.employeeId, 128) &&
+        isValidDateStr(data.date) &&
+        isNonEmptyStr(data.title, 300) &&
+        isOptionalStr(data, 'description', 5000) &&
+        isOptionalStr(data, 'deliverableLink', 1000) &&
+        (!('workMode' in data) || data.workMode in ['OFFICE', 'WORK_FROM_HOME', 'FIELD']) &&
+        (!('status' in data) || data.status in ['COMPLETED', 'IN_PROGRESS', 'BLOCKED']) &&
+        (!('durationMinutes' in data) || (data.durationMinutes is number && data.durationMinutes >= 0 && data.durationMinutes <= 1440));
+    }
+
+    function isValidTask(data, taskId) {
+      return data.keys().hasAll(['id', 'title', 'assignedToEmployeeId', 'status']) &&
+        data.id == taskId &&
+        isNonEmptyStr(data.title, 300) &&
+        isNonEmptyStr(data.assignedToEmployeeId, 128) &&
+        data.status in ['TODO', 'IN_PROGRESS', 'REVIEW', 'REVISION_REQUESTED', 'COMPLETED', 'DONE', 'DELAYED'] &&
+        (!('priority' in data) || data.priority in ['LOW', 'MEDIUM', 'HIGH', 'URGENT']) &&
+        isOptionalStr(data, 'description', 5000);
+    }
+
+    function isValidSurvey(data, surveyId) {
+      return data.keys().hasAll(['id', 'title', 'cycleType', 'questions']) &&
+        data.id == surveyId &&
+        isNonEmptyStr(data.title, 300) &&
+        data.cycleType in ['MONTHLY', 'SEMI_ANNUAL', 'ANNUAL', 'SPECIAL'] &&
+        data.questions is list &&
+        data.questions.size() > 0 &&
+        data.questions.size() <= 100;
+    }
+
+    function isValidSurveyResponse(data, responseId) {
+      return data.keys().hasAll(['id', 'surveyId', 'employeeId', 'answers']) &&
+        data.id == responseId &&
+        isNonEmptyStr(data.surveyId, 128) &&
+        isNonEmptyStr(data.employeeId, 128) &&
+        data.answers is list &&
+        data.answers.size() <= 100 &&
+        (!('overallScore' in data) || (data.overallScore is number && data.overallScore >= 0 && data.overallScore <= 5)) &&
+        isOptionalStr(data, 'generalComment', 3000);
+    }
+
+    function isValidAnonymousFeedback(data, feedbackId) {
+      return data.keys().hasAll(['id', 'category', 'subject', 'message']) &&
+        data.id == feedbackId &&
+        isNonEmptyStr(data.subject, 300) &&
+        isNonEmptyStr(data.message, 5000) &&
+        (!('status' in data) || data.status in ['NEW', 'REVIEWING', 'ACTION_TAKEN']) &&
+        (!('urgency' in data) || data.urgency in ['LOW', 'MEDIUM', 'HIGH']) &&
+        isOptionalStr(data, 'adminActionNote', 2000) &&
+        // ZERO-PII GUARANTEE: Strictly reject any identifying fields
+        !data.keys().hasAny([
+          'employeeId', 'employeeName', 'employeeCode', 'email',
+          'phone', 'authorId', 'authorName', 'departmentName', 'branchName'
+        ]);
+    }
+
+    function isValidTeamRating(data, ratingId) {
+      return data.keys().hasAll(['id', 'employeeId', 'ratedByEmployeeId', 'month', 'totalPoints']) &&
+        data.id == ratingId &&
+        isNonEmptyStr(data.employeeId, 128) &&
+        isNonEmptyStr(data.ratedByEmployeeId, 128) &&
+        // Anti-self-rating guard
+        data.employeeId != data.ratedByEmployeeId &&
+        isValidMonthStr(data.month) &&
+        data.totalPoints is number &&
+        data.totalPoints >= 0 &&
+        data.totalPoints <= 100 &&
+        isOptionalStr(data, 'remarks', 2000);
+    }
+
+    function isValidManagerRating(data, ratingId) {
+      return data.keys().hasAll(['id', 'managerId', 'ratedByEmployeeId', 'month', 'totalScore']) &&
+        data.id == ratingId &&
+        isNonEmptyStr(data.managerId, 128) &&
+        isNonEmptyStr(data.ratedByEmployeeId, 128) &&
+        // Anti-self-rating guard
+        data.managerId != data.ratedByEmployeeId &&
+        isValidMonthStr(data.month) &&
+        data.totalScore is number &&
+        data.totalScore >= 0 &&
+        data.totalScore <= 100 &&
+        isOptionalStr(data, 'remarks', 2000);
+    }
+
+    // =========================================================================
+    // CORE HR COLLECTIONS
+    // =========================================================================
+
+    // Employees: Protect master Super Admin 'emp-01' from deletion
     match /employees/{employeeId} {
       allow read: if true;
       allow create, update: if isValidId(employeeId) &&
-        request.resource.data.keys().hasAll(['id', 'employeeCode', 'fullName', 'role']);
-      // Master Super Admin account cannot be deleted
-      allow delete: if isValidId(employeeId) && employeeId != "emp-01";
+        request.resource.data.keys().hasAll(['id', 'employeeCode', 'fullName', 'role']) &&
+        request.resource.data.id == employeeId;
+      allow delete: if isValidId(employeeId) && employeeId != 'emp-01';
     }
 
-    // Branches collection
     match /branches/{branchId} {
       allow read: if true;
-      allow write: if isValidId(branchId);
+      allow create, update, delete: if isValidId(branchId);
     }
 
-    // Departments collection
     match /departments/{departmentId} {
       allow read: if true;
-      allow write: if isValidId(departmentId);
+      allow create, update, delete: if isValidId(departmentId);
     }
 
-    // Designations collection
     match /designations/{designationId} {
       allow read: if true;
-      allow write: if isValidId(designationId);
+      allow create, update, delete: if isValidId(designationId);
     }
 
-    // Shifts collection
     match /shifts/{shiftId} {
       allow read: if true;
-      allow write: if isValidId(shiftId);
+      allow create, update, delete: if isValidId(shiftId);
     }
 
-    // Attendance records
     match /attendance/{attendanceId} {
       allow read: if true;
       allow create, update: if isValidId(attendanceId) &&
-        request.resource.data.keys().hasAll(['id', 'employeeId', 'date']);
+        request.resource.data.keys().hasAll(['id', 'employeeId', 'date']) &&
+        request.resource.data.id == attendanceId;
       allow delete: if isValidId(attendanceId);
     }
 
-    // Leave applications
     match /leaves/{leaveId} {
       allow read: if true;
       allow create, update: if isValidId(leaveId) &&
@@ -57,61 +167,151 @@ service cloud.firestore {
       allow delete: if isValidId(leaveId);
     }
 
-    // Payroll / Payslips
     match /payroll/{payrollId} {
       allow read: if true;
       allow create, update: if isValidId(payrollId) &&
-        request.resource.data.keys().hasAll(['id', 'employeeId', 'payrollMonth']);
+        request.resource.data.keys().hasAll(['id', 'employeeId', 'payrollMonth']) &&
+        request.resource.data.id == payrollId;
       allow delete: if isValidId(payrollId);
     }
 
-    // Loans collection
     match /loans/{loanId} {
-      allow read, write: if isValidId(loanId);
+      allow read: if true;
+      allow create, update, delete: if isValidId(loanId);
     }
 
-    // Assets collection
     match /assets/{assetId} {
-      allow read, write: if isValidId(assetId);
+      allow read: if true;
+      allow create, update, delete: if isValidId(assetId);
     }
 
-    // Notices collection
     match /notices/{noticeId} {
-      allow read, write: if isValidId(noticeId);
+      allow read: if true;
+      allow create, update, delete: if isValidId(noticeId);
     }
 
-    // Recruitment collections
     match /recruitment_jobs/{jobId} {
-      allow read, write: if isValidId(jobId);
+      allow read: if true;
+      allow create, update, delete: if isValidId(jobId);
     }
+
     match /recruitment_candidates/{candidateId} {
-      allow read, write: if isValidId(candidateId);
+      allow read: if true;
+      allow create, update, delete: if isValidId(candidateId);
     }
 
-    // Meetings & Conferences
     match /meetings/{meetingId} {
-      allow read, write: if isValidId(meetingId);
+      allow read: if true;
+      allow create, update, delete: if isValidId(meetingId);
     }
 
-    // System Settings & Branding config
+    // System Settings: Allowlisted configuration documents only (including Role Permissions ON/OFF)
     match /settings/{settingId} {
       allow read: if true;
-      allow write: if isValidId(settingId);
+      allow create, update: if settingId in [
+        'company_branding',
+        'payroll_policy',
+        'biometric_kiosk',
+        'deleted_employees',
+        'role_permissions'
+      ];
+      allow delete: if false;
     }
 
-    // Audit logs (Immutable history)
+    // Audit Logs: Append-only protection (no deletion)
     match /audit_logs/{logId} {
-      allow read, write: if isValidId(logId);
+      allow read: if true;
+      allow create, update: if isValidId(logId);
+      allow delete: if false;
     }
 
-    // Test & Diagnostic collection
+    // =========================================================================
+    // PRODUCTIVITY, TASKS, WORK LOGS, SURVEYS & BIDIRECTIONAL RATINGS
+    // =========================================================================
+
+    match /projects/{projectId} {
+      allow read: if true;
+      allow create, update: if isValidId(projectId) &&
+        request.resource.data.keys().hasAll(['id', 'name']) &&
+        request.resource.data.id == projectId;
+      allow delete: if isValidId(projectId);
+    }
+
+    match /tasks/{taskId} {
+      allow read: if true;
+      allow create, update: if isValidId(taskId) && isValidTask(request.resource.data, taskId);
+      allow delete: if isValidId(taskId);
+    }
+
+    match /notifications/{notificationId} {
+      allow read: if true;
+      allow create, update, delete: if isValidId(notificationId);
+    }
+
+    // Daily Employee Work Logs (immutable employeeId owner on updates)
+    match /work_logs/{logId} {
+      allow read: if true;
+      allow create: if isValidId(logId) && isValidWorkLog(request.resource.data, logId);
+      allow update: if isValidId(logId) &&
+        isValidWorkLog(request.resource.data, logId) &&
+        request.resource.data.employeeId == resource.data.employeeId;
+      allow delete: if isValidId(logId);
+    }
+
+    // 5-Category Detailed Feedback Surveys
+    match /feedback_surveys/{surveyId} {
+      allow read: if true;
+      allow create, update: if isValidId(surveyId) && isValidSurvey(request.resource.data, surveyId);
+      allow delete: if isValidId(surveyId);
+    }
+
+    // Survey Responses (immutable surveyId & employeeId on updates)
+    match /survey_responses/{responseId} {
+      allow read: if true;
+      allow create: if isValidId(responseId) && isValidSurveyResponse(request.resource.data, responseId);
+      allow update: if isValidId(responseId) &&
+        isValidSurveyResponse(request.resource.data, responseId) &&
+        request.resource.data.surveyId == resource.data.surveyId &&
+        request.resource.data.employeeId == resource.data.employeeId;
+      allow delete: if isValidId(responseId);
+    }
+
+    // 100% Anonymous Feedback Box (Zero-PII enforced at database level)
+    match /anonymous_feedback/{feedbackId} {
+      allow read: if true;
+      allow create, update: if isValidId(feedbackId) &&
+        isValidAnonymousFeedback(request.resource.data, feedbackId);
+      allow delete: if isValidId(feedbackId);
+    }
+
+    // Manager -> Direct Team Member Performance Points (Anti-Self-Rating + Immutable Keys)
+    match /performance_points/{ratingId} {
+      allow read: if true;
+      allow create: if isValidId(ratingId) && isValidTeamRating(request.resource.data, ratingId);
+      allow update: if isValidId(ratingId) &&
+        isValidTeamRating(request.resource.data, ratingId) &&
+        request.resource.data.employeeId == resource.data.employeeId &&
+        request.resource.data.ratedByEmployeeId == resource.data.ratedByEmployeeId &&
+        request.resource.data.month == resource.data.month;
+      allow delete: if isValidId(ratingId);
+    }
+
+    // Employee -> Direct Reporting Line Manager Ratings (Anti-Self-Rating + Immutable Keys)
+    match /manager_ratings/{ratingId} {
+      allow read: if true;
+      allow create: if isValidId(ratingId) && isValidManagerRating(request.resource.data, ratingId);
+      allow update: if isValidId(ratingId) &&
+        isValidManagerRating(request.resource.data, ratingId) &&
+        request.resource.data.managerId == resource.data.managerId &&
+        request.resource.data.ratedByEmployeeId == resource.data.ratedByEmployeeId &&
+        request.resource.data.month == resource.data.month;
+      allow delete: if isValidId(ratingId);
+    }
+
+    // Connection Health Check
     match /test/{testId} {
-      allow read, write: if true;
-    }
-
-    // Default catch-all for any other authenticated app operations
-    match /{document=**} {
-      allow read, write: if true;
+      allow read: if true;
+      allow write: if false;
     }
   }
 }

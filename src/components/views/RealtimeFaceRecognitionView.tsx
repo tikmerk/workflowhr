@@ -32,12 +32,14 @@ import {
   ChevronUp,
   Settings,
   ShieldAlert,
+  Upload,
 } from "lucide-react";
 import { Employee, Branch, AttendanceRecord, Shift, BiometricKioskSettings, BiometricModeConfig } from "../../types";
 import {
   detectLiveFaceInVideo,
   autoIdentifyLiveFaceFromAllEmployees,
   verifyLiveFaceWithEmployee,
+  identifyEmployeeFromPhoto,
   drawBiometricMeshOverlay,
   playBiometricSound,
   FaceMatchResult,
@@ -154,6 +156,9 @@ export const RealtimeFaceRecognitionView: React.FC<RealtimeFaceRecognitionViewPr
   const [availableDevices, setAvailableDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>("");
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [isAnalyzingPhoto, setIsAnalyzingPhoto] = useState<boolean>(false);
+  const [uploadedPhotoPreview, setUploadedPhotoPreview] = useState<string | null>(null);
 
   // 1:1 Verification Selected Employee
   const [selected1to1EmployeeId, setSelected1to1EmployeeId] = useState<string>(
@@ -345,11 +350,17 @@ export const RealtimeFaceRecognitionView: React.FC<RealtimeFaceRecognitionViewPr
         setIsCameraActive(true);
       }
     } catch (err: any) {
-      console.error("Camera startup error:", err);
+      console.warn("Camera startup notice:", err?.message || err);
+      const isDenied =
+        err?.isPermissionDenied ||
+        err?.name === "NotAllowedError" ||
+        err?.name === "PermissionDeniedError" ||
+        String(err?.message || "").includes("অনুমতি") ||
+        String(err?.message || "").includes("Permission denied");
       setCameraError(
         err?.message ||
-          (err.name === "NotAllowedError"
-            ? "ক্যামেরা অ্যাক্সেস ডিনাইড। ব্রাউজারে ক্যামেরার পারমিশন অন করুন।"
+          (isDenied
+            ? "ক্যামেরা অ্যাক্সেস ডিনাইড। ব্রাউজারের এড্রেস বার (🔒) থেকে ক্যামেরা পারমিশন 'Allow' করুন।"
             : "ক্যামেরা লোড করা যায়নি। অন্য ক্যামেরা সিলেক্ট করুন বা পেজ রিফ্রেশ করুন।")
       );
       setCameraLoading(false);
@@ -730,6 +741,68 @@ export const RealtimeFaceRecognitionView: React.FC<RealtimeFaceRecognitionViewPr
     isModal,
     onClose,
   ]);
+
+  // Handle Photo File Upload for Attendance Punch when Camera is unavailable or denied
+  const handlePhotoUploadAttendance = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setIsAnalyzingPhoto(true);
+      setCameraError(null);
+      const reader = new FileReader();
+      reader.onload = async (evt) => {
+        const dataUrl = evt.target?.result as string;
+        if (!dataUrl) {
+          setIsAnalyzingPhoto(false);
+          return;
+        }
+
+        setUploadedPhotoPreview(dataUrl);
+
+        try {
+          const res = await identifyEmployeeFromPhoto(dataUrl, employees);
+          if (res.matched && res.matchedEmployee) {
+            setMatchResult(res);
+            setLivenessStage("VERIFIED");
+            setBlinkCompleted(true);
+            playSound("match");
+
+            // Auto commit attendance punch
+            setTimeout(() => {
+              const curDate = new Date().toISOString().split("T")[0];
+              const existingToday = attendanceLogs.find(
+                (a) => a.employeeId === res.matchedEmployee!.id && a.date === curDate
+              );
+              const punchType =
+                existingToday && existingToday.checkInTime && !existingToday.checkOutTime
+                  ? "CHECK_OUT"
+                  : "CHECK_IN";
+              handleConfirmAttendance(punchType);
+            }, 700);
+          } else {
+            playSound("error");
+            setCameraError(
+              res.banglaStatusMessage ||
+                (isBangla
+                  ? "আপলোড করা ছবির সাথে তালিকাভুক্ত কোনো কর্মীর মিল পাওয়া যায়নি।"
+                  : "No enrolled employee matched this photo.")
+            );
+          }
+        } catch (err: any) {
+          console.warn("Photo identification notice:", err);
+          setCameraError(isBangla ? "ছবি বিশ্লেষণ করতে সমস্যা হয়েছে।" : "Failed to analyze photo.");
+        } finally {
+          setIsAnalyzingPhoto(false);
+          if (fileInputRef.current) fileInputRef.current.value = "";
+        }
+      };
+      reader.readAsDataURL(file);
+    } catch (err) {
+      console.warn("File read notice:", err);
+      setIsAnalyzingPhoto(false);
+    }
+  };
 
   // Filtered employees for 1:1 selection
   const filteredEmployees1to1 = employees.filter((e) => {
@@ -1151,20 +1224,87 @@ export const RealtimeFaceRecognitionView: React.FC<RealtimeFaceRecognitionViewPr
                     }}
                     className="w-full h-full object-cover scale-x-[-1]"
                   />
+                ) : uploadedPhotoPreview ? (
+                  <div className="relative w-full h-full flex items-center justify-center bg-black">
+                    <img
+                      src={uploadedPhotoPreview}
+                      alt="Uploaded face selfie"
+                      className="w-full h-full object-contain"
+                    />
+                    {isAnalyzingPhoto && (
+                      <div className="absolute inset-0 bg-black/70 flex flex-col items-center justify-center gap-2 text-white">
+                        <RefreshCw className="w-8 h-8 animate-spin text-teal-400" />
+                        <span className="text-xs font-bold">
+                          {isBangla ? "মুখমণ্ডল বিশ্লেষণ ও ম্যাচিং হচ্ছে..." : "Analyzing & matching face..."}
+                        </span>
+                      </div>
+                    )}
+                  </div>
                 ) : (
-                  <div className="p-8 text-center text-slate-400 space-y-3">
-                    <VideoOff className="w-12 h-12 mx-auto text-slate-600" />
-                    <p className="text-sm text-slate-300">
-                      {cameraError || (isBangla ? "ক্যামেরা বন্ধ রয়েছে" : "Camera stream is inactive")}
-                    </p>
-                    <button
-                      onClick={() => startCamera()}
-                      className="px-4 py-2 bg-teal-600 text-white text-xs font-bold rounded-xl hover:bg-teal-500 cursor-pointer"
-                    >
-                      {isBangla ? "ক্যামেরা চালু করুন" : "Start Camera"}
-                    </button>
+                  <div className="p-6 text-center text-slate-400 space-y-3 max-w-sm mx-auto">
+                    <div className="w-12 h-12 mx-auto rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 shadow-inner">
+                      {cameraError?.includes("অনুমতি") || cameraError?.includes("ডিনাইড") ? (
+                        <ShieldAlert className="w-6 h-6 text-amber-400" />
+                      ) : (
+                        <VideoOff className="w-6 h-6 text-slate-400" />
+                      )}
+                    </div>
+                    <div className="space-y-1">
+                      <h4 className="text-xs sm:text-sm font-bold text-white">
+                        {cameraError?.includes("অনুমতি") || cameraError?.includes("ডিনাইড")
+                          ? (isBangla ? "ক্যামেরা পারমিশন ডিনাইড বা ব্লক রয়েছে" : "Camera Permission Blocked or Denied")
+                          : (isBangla ? "ক্যামেরা সক্রিয় নয়" : "Camera Stream Inactive")}
+                      </h4>
+                      <p className="text-[11px] sm:text-xs text-slate-300 leading-relaxed">
+                        {cameraError || (isBangla ? "ক্যামেরা চালু করা সম্ভব হয়নি" : "Camera stream is inactive")}
+                      </p>
+                    </div>
+
+                    {(cameraError?.includes("অনুমতি") || cameraError?.includes("ডিনাইড")) && (
+                      <div className="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 text-[11px] text-slate-300 text-left space-y-1">
+                        <p className="font-semibold text-amber-300 flex items-center gap-1.5">
+                          <Info className="w-3.5 h-3.5 shrink-0" />
+                          {isBangla ? "পারমিশন অন করার নিয়ম:" : "How to enable permission:"}
+                        </p>
+                        <p className="text-slate-400 leading-tight">
+                          {isBangla
+                            ? "ব্রাউজারের এড্রেস বারে বাম পাশে তালা (🔒) বা ক্যামেরা আইকনে চাপুন এবং Camera অপশন 'Allow' করুন।"
+                            : "Click the lock (🔒) in your address bar and set Camera to 'Allow'."}
+                        </p>
+                      </div>
+                    )}
+
+                    <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => startCamera()}
+                        className="px-4 py-2 bg-teal-600 hover:bg-teal-500 text-white text-xs font-bold rounded-xl transition-all shadow cursor-pointer flex items-center gap-1.5"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5" />
+                        {isBangla ? "পুনরায় চেষ্টা করুন" : "Retry Camera"}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center gap-1.5"
+                      >
+                        <Upload className="w-3.5 h-3.5 text-teal-400" />
+                        {isBangla ? "ছবি আপলোড করুন" : "Upload Photo"}
+                      </button>
+                    </div>
                   </div>
                 )}
+
+                {/* Hidden File Input for fallback photo punch */}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  capture="user"
+                  className="hidden"
+                  onChange={handlePhotoUploadAttendance}
+                />
 
                 {/* Biometric Mesh Canvas Overlay */}
                 <canvas

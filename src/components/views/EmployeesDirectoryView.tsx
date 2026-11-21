@@ -82,6 +82,8 @@ export const APP_TAB_OPTIONS = [
   { id: "loans", labelBn: "ঋণ ও প্রভিডেন্ট ফান্ড", labelEn: "Loans & Provident Fund", icon: Banknote },
   { id: "notices-chat", labelBn: "নোটিশ বোর্ড ও সার্কুলার", labelEn: "Notice Board & Comms", icon: FileText },
   { id: "projects-tasks", labelBn: "প্রকল্প ও টাস্ক অগ্রগতি", labelEn: "Projects & Tasks", icon: Layers },
+  { id: "work-logs", labelBn: "দৈনিক কাজের লগ ও রিপোর্ট", labelEn: "Daily Work Logs", icon: FileText },
+  { id: "feedback-surveys", labelBn: "ফিডব্যাক, সার্ভে ও টিম পয়েন্ট", labelEn: "Feedback & Surveys", icon: Award },
   { id: "assets", labelBn: "কোম্পানি সম্পদ ও হ্যান্ডওভার", labelEn: "Asset Management", icon: Smartphone },
   { id: "certificates", labelBn: "অফিসিয়াল সনদ ও প্রত্যয়ন", labelEn: "Official Letters", icon: ShieldCheck },
   { id: "recruitment", labelBn: "নিয়োগ ও এআই বাছাই", labelEn: "Recruitment & ATS", icon: Briefcase },
@@ -105,6 +107,8 @@ export const DEFAULT_EMPLOYEE_ALLOWED_TABS = [
   "loans",
   "notices-chat",
   "projects-tasks",
+  "work-logs",
+  "feedback-surveys",
   "assets",
   "certificates",
 ];
@@ -161,6 +165,8 @@ export const getDefaultTabsForRole = (
       "recruitment",
       "notices-chat",
       "projects-tasks",
+      "work-logs",
+      "feedback-surveys",
       "certificates",
       "meetings-conferences",
       "exit-management",
@@ -176,6 +182,8 @@ export const getDefaultTabsForRole = (
       "employees",
       "attendance-logs",
       "leaves",
+      "work-logs",
+      "feedback-surveys",
       "notices-chat",
       "assets",
     ]);
@@ -194,6 +202,8 @@ export const getDefaultTabsForRole = (
       "shifts-holidays",
       "notices-chat",
       "projects-tasks",
+      "work-logs",
+      "feedback-surveys",
       "meetings-conferences",
     ]);
   }
@@ -203,6 +213,8 @@ export const getDefaultTabsForRole = (
       "self-service",
       "my-portal",
       "projects-tasks",
+      "work-logs",
+      "feedback-surveys",
       "attendance-logs",
       "leaves",
       "notices-chat",
